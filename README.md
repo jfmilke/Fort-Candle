@@ -5,6 +5,8 @@ Features a small strategy game which only aims to demonstrate the capabilities o
 
 **Note:** This is a reupload to GitHub from another inaccessible Git repository, now initially reflecting the code state at submission.
 
+![Cover Image](images/FC01_Start.jpg)
+
 ## Gameplay
 
 The gameplay mechanics consist of resource management (gold, wood, people), base building, economy and combat.
@@ -16,6 +18,8 @@ The goal is to survive against waves of enemies until the victory condition is m
 > A darkness which must not under any circumstances reach the inner camp - keep the lights on!
 > Therefore, your duties will encompass not only the construction of said passage but also the concentration of soldiers to defend your position.
 > A steady supply of fresh pioneers is brought down the road from the core cities, in case some go.. missing.
+
+See below for example images.
 
 ## Engine
 
@@ -111,6 +115,13 @@ cmake ..
 make
 ../bin/RelWithDebugInfo/GameDevSS21
 ```
+
+## Images
+
+[ ![](images/thumbnails/FC02_Intro_thumb.jpg) ](images/FC02_Intro.jpg)
+[ ![](images/thumbnails/FC03_Highlighted_thumb.jpg) ](images/FC03_Highlighted.jpg)
+[ ![](images/thumbnails/FC04_Combat_thumb.jpg) ](images/FC04_Combat.jpg)
+[ ![](images/thumbnails/FC05_Progress_thumb.jpg) ](images/FC05_Progress.jpg)
 
 <!-- 
 ## Building the project (with QtCreator on Linux)
