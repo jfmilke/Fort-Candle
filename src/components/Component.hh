@@ -1,5 +1,6 @@
 #pragma once
 #include <glow/fwd.hh>
+#include <cstdint>
 
 namespace gamedev
 {
@@ -17,7 +18,7 @@ struct Component
 {
     // Backreference from Component to Entity
     Instance* instance = nullptr;
-    std::uint32_t handle_value = std::uint32_t(-1);
+    uint32_t handle_value = uint32_t(-1);
 
     Component() = default;
     // A component can only be created for a given entity
