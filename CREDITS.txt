@@ -1,0 +1,26 @@
+Skybox:
+https://assetstore.unity.com/packages/2d/textures-materials/sky/starfield-skybox-92717
+
+Models (extern folder):
+https://hypnosys.itch.io/hypnos-low-poly-fantasy-village-pack
+https://free-game-assets.itch.io/free-stone-3d-low-poly-pack
+https://free-game-assets.itch.io/free-medieval-3d-people-low-poly-pack
+https://free-game-assets.itch.io/free-environment-props-3d-low-poly-pack
+https://theteaguns.itch.io/
+https://jhan-gutierrez.itch.io/low-poly-nature-pack
+https://free-game-assets.itch.io/free-shrubs-flowers-and-mushrooms-3d-low-poly-pack
+https://free-game-assets.itch.io/free-medieval-props-3d-low-poly-models
+https://brokenvector.itch.io/
+https://realsketchyguy.itch.io/low-poly-black-smiths-workshop
+
+Sounds:
+https://freesound.org/people/Stereo%20Surgeon/sounds/264425/
+https://freesound.org/people/InspectorJ/sounds/352110/
+https://freesound.org/people/kyles/sounds/452554/
+https://freesound.org/people/MattRuthSound/sounds/561574/
+https://freesound.org/people/humanoide9000/sounds/466133/
+https://freesound.org/people/Syna-Max/sounds/64940/
+https://freesound.org/people/Albasty/sounds/559621/
+https://freesound.org/people/dominictreis/sounds/488963/
+https://freesound.org/people/Artmasterrich/sounds/345451/
+https://freesound.org/people/SoundFXMania/sounds/569864/
