@@ -1,6 +1,8 @@
 #include "Utility.hh"
 
 #include <cassert>
+#include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 

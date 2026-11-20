@@ -8,7 +8,7 @@
 
 namespace gamedev
 {
-GLOW_SHARED(class, Instance);
+GLOW_SHARED(struct, Instance);
 
 // refers to an instance
 struct InstanceHandle
