@@ -144,3 +144,13 @@ else()
         target_link_libraries(${PROJECT_NAME} PRIVATE stdc++fs)
     endif()
 endif()
+
+if(UNIX AND NOT APPLE)
+    # Keep libGL loaded for the whole process (like opengl32.dll on Windows).
+    # All GL calls go through glad function pointers, so with the distro default --as-needed
+    # libGL never becomes a DT_NEEDED dependency and is only loaded via GLFW's dlopen.
+    # glfwTerminate() then unloads it while ~Game() still deletes GL objects -> SIGSEGV on exit.
+    find_package(OpenGL REQUIRED)
+    target_link_options(${PROJECT_NAME} PRIVATE "LINKER:--no-as-needed")
+    target_link_libraries(${PROJECT_NAME} PRIVATE OpenGL::GL)
+endif()

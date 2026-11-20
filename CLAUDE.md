@@ -24,6 +24,7 @@ cmake --build build --config RelWithDebInfo --parallel
   - Packages: `libgl-dev`, `libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev`, and `libpulse-dev` and/or `libasound2-dev` (without one of them OpenAL has no audio backend). GLFW is built X11-only; Wayland sessions use XWayland.
   - **`extern/` does not compile unpatched with GCC ≥ 14 / libstdc++ ≥ 13**: missing `#include <cstdint>` in `glow/common/log.hh` and `glow-extras/colors/color.hh`, `always_false<D>` with an `int` parameter in typed-geometry (7 places), `this->mValue` in OpenAL's `common/aloptional.h`, and hard-coded `-fuse-ld=gold` in `clean-core/cmake/CompileOptions.cmake` and `polymesh/CMakeLists.txt` (gold is gone from binutils ≥ 2.44).
   - The top-level `CMakeLists.txt` sets `GLOW_USE_GOLD_LINKER=OFF` and `GLOW_ENABLE_MARCH_NATIVE=OFF` (portable binaries; `-march=native` also enabled a broken AVX-512 path in glow's bundled xxHash).
+  - The game links `OpenGL::GL` with `--no-as-needed`. Without that, libGL is only loaded by GLFW's `dlopen`, `glfwTerminate()` unloads it, and `~Game()` then crashes (SIGSEGV) while deleting GL objects.
   - `glow`, `glow-extras` and `glad` are shared libraries on Linux; they land next to the executable in `bin/<Config>/` and are found via RPATH.
   - The OpenAL JACK backend is off by default (`ALSOFT_BACKEND_JACK=OFF`) because it failed to link with `undefined symbol: jack_error_callback`.
 
