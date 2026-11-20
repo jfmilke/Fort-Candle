@@ -105,12 +105,13 @@ int gamedev::GamelogicSystem::Update(float dt)
     ConsumeWood(dt);
     UpdateOutlines(dt);
 
-    for (const auto& h : mInjuredPioneers)
+    // forget injured pioneers that died (erase via the iterator: erasing inside a range-for is UB)
+    for (auto it = mInjuredPioneers.begin(); it != mInjuredPioneers.end();)
     {
-        if (!mECS->IsLiveHandle(h))
-        {
-            mInjuredPioneers.erase(h);
-        }
+        if (!mECS->IsLiveHandle(*it))
+            it = mInjuredPioneers.erase(it);
+        else
+            ++it;
     }
 
     for (const auto& handle : mEntities)
@@ -2504,15 +2505,12 @@ void gamedev::GamelogicSystem::Heal()
     for (const auto& h : mInjuredPioneers)
     {
         if (!mECS->IsLiveHandle(h))
-        {
-            mInjuredPioneers.erase(h);
             continue;
-        }
 
         auto mortal = mECS->TryGetComponent<Mortal>(h);
         mortal->health.current = mortal->health.max;
-        mInjuredPioneers.erase(h);
     }
+    mInjuredPioneers.clear();
 
     mAS->PlayGlobalSound("heal.wav", ui);
 }
