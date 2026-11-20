@@ -258,7 +258,7 @@ void gamedev::UnitFactory::Init_Artisan()
     collider->dynamic = true;
 
     // Friendly
-    lifeform->name = "Jürgen";
+    lifeform->name = "JÃ¼rgen";
     lifeform->idle = 0.0;
     lifeform->friendly = true;
 

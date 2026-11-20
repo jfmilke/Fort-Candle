@@ -1144,8 +1144,8 @@ void gamedev::GamelogicSystem::ArrowListener(Event& e)
 
     if (!lifeform->friendly)
     {
-        Event e(EventType::MonsterHit, e.mSender, e.mSubject);
-        mECS->SendFunctionalEvent(e);
+        Event hitEvent(EventType::MonsterHit, e.mSender, e.mSubject);
+        mECS->SendFunctionalEvent(hitEvent);
     }
 
     if (arrow && lifeform && mortal && (mortal->health.current <= 0.0f))
