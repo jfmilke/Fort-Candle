@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Fort Candle is a small low-poly strategy game (RWTH Aachen GameDev practical 2021) built on a custom engine that is tightly coupled to the game. C++17, OpenGL 4.5, CMake. The CMake project/executable name is `GameDevSS21`. All dependencies are vendored in `extern/` (glfw, glow, glow-extras, imgui, polymesh, typed-geometry, clean-core, openal, dr-lib); treat them as third-party and don't modify them.
+Fort Candle is a small low-poly strategy game (RWTH Aachen GameDev practical 2021) built on a custom engine that is tightly coupled to the game. C++17, OpenGL 4.5, CMake. The CMake project/executable name is `GameDevSS21`. All dependencies are vendored in `extern/` (glfw, glow, glow-extras, imgui, polymesh, typed-geometry, clean-core, openal, dr-lib); treat them as third-party. Prefer workarounds in the top-level `CMakeLists.txt` or the game; if a library must change, do it in a separate commit per library named `extern/<lib>: ...` (see [Vendored libraries](#vendored-libraries-extern)).
 
 There are no tests, linters, or CI. "Verifying" a change means building and, where relevant, running the game.
 
@@ -15,22 +15,43 @@ cmake -S . -B build
 cmake --build build --config RelWithDebInfo --parallel
 ```
 
-- Requires CMake ≥ 3.21 and is tested with CMake 4.4 and MSVC 19.51 (Visual Studio 2026). Most `extern/` projects still declare `cmake_minimum_required(VERSION 3.0)`, which CMake 4 rejects; the top-level `CMakeLists.txt` sets `CMAKE_POLICY_VERSION_MINIMUM` around their `add_subdirectory` calls instead of patching them.
+- Requires CMake ≥ 3.21 and is tested with CMake 4.4 and MSVC 19.52 (Visual Studio 2026). Most `extern/` projects still declare `cmake_minimum_required(VERSION 3.0)`, which CMake 4 rejects; the top-level `CMakeLists.txt` sets `CMAKE_POLICY_VERSION_MINIMUM` around their `add_subdirectory` calls instead of patching them.
 - Single-config generators (Ninja, Makefiles) default to `CMAKE_BUILD_TYPE=RelWithDebInfo`. Multi-config generators (Visual Studio) pick the config at build time, and a plain `cmake --build build` builds **Debug**. Debug builds are *much* slower at runtime.
 - The executable and `OpenAL32.dll` are written to `bin/<Config>/` (e.g. `bin/RelWithDebInfo/GameDevSS21.exe`). In Visual Studio, `GameDevSS21` is the startup project and its debugger working directory is already `bin/`.
 - `bin/`, `build/`, and `build_vs/` are gitignored.
 - The game target compiles with `/W3 /MP /utf-8` on MSVC (keep sources UTF-8) and `-Wall -Wno-unused-variable` elsewhere. `stdc++fs` is linked only for GCC < 9.1.
 - Linux (checked on Ubuntu 26.04 in WSL2 with GCC 15.2 / Clang 21.1 / CMake 4.2):
   - Packages: `libgl-dev`, `libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev`, and `libpulse-dev` and/or `libasound2-dev` (without one of them OpenAL has no audio backend). GLFW is built X11-only; Wayland sessions use XWayland.
-  - **`extern/` does not compile unpatched with GCC ≥ 14 / libstdc++ ≥ 13**: missing `#include <cstdint>` in `glow/common/log.hh` and `glow-extras/colors/color.hh`, `always_false<D>` with an `int` parameter in typed-geometry (7 places), `this->mValue` in OpenAL's `common/aloptional.h`, and hard-coded `-fuse-ld=gold` in `clean-core/cmake/CompileOptions.cmake` and `polymesh/CMakeLists.txt` (gold is gone from binutils ≥ 2.44).
+  - **The 2021 `extern/` snapshots do not compile unpatched with GCC ≥ 14 / libstdc++ ≥ 13 and binutils ≥ 2.44.** The six fixes are applied as one commit per library: `4797612` glow and `e983060` glow-extras (missing `#include <cstdint>` in `common/log.hh` / `colors/color.hh`), `6ec1160` typed-geometry (`always_false<D>` with an `int` parameter, 7 places), `a90ca57` OpenAL (`this->mValue` in `common/aloptional.h`), `b66bf1e` clean-core and `69db695` polymesh (hard-coded `-fuse-ld=gold` in `cmake/CompileOptions.cmake` / `CMakeLists.txt`; gold is gone from binutils ≥ 2.44). MSVC does not need them. Current upstream versions no longer need them (see [Vendored libraries](#vendored-libraries-extern)).
   - The top-level `CMakeLists.txt` sets `GLOW_USE_GOLD_LINKER=OFF` and `GLOW_ENABLE_MARCH_NATIVE=OFF` (portable binaries; `-march=native` also enabled a broken AVX-512 path in glow's bundled xxHash).
   - The game links `OpenGL::GL` with `--no-as-needed`. Without that, libGL is only loaded by GLFW's `dlopen`, `glfwTerminate()` unloads it, and `~Game()` then crashes (SIGSEGV) while deleting GL objects.
   - `glow`, `glow-extras` and `glad` are shared libraries on Linux; they land next to the executable in `bin/<Config>/` and are found via RPATH.
-  - The OpenAL JACK backend is off by default (`ALSOFT_BACKEND_JACK=OFF`) because it failed to link with `undefined symbol: jack_error_callback`.
+  - The OpenAL JACK backend is off by default (`ALSOFT_BACKEND_JACK=OFF`) because it failed to link with `undefined symbol: jack_error_callback`. The cause is the vendored `ALSOFT_DLOPEN=OFF` default (see below): without dlopen, JACK symbols are linked directly instead of being looked up as optional.
 
 **Working directory matters.** `main.cc` aborts unless `../data` exists, and every asset path in the code is hard-coded relative (`../data/meshes/`, `../data/shaders/`, `../data/config/`, ...). Run the game from a direct subfolder of the repo root, e.g. from `bin/` (`./RelWithDebInfo/GameDevSS21`) or from `build/` (`../bin/RelWithDebInfo/GameDevSS21`).
 
 Code style: `.clang-format` (Google-based, Allman braces, 4-space indent, 150 column limit). Engine code lives in `namespace gamedev`; members use an `m` prefix.
+
+## Vendored libraries (`extern/`)
+
+Everything in `extern/` was imported as plain files in one commit (`1d74651`, 2022-01-19), without upstream metadata. The snapshots below were identified by matching file contents against upstream history. The arcana/Glow libraries have no maintained release tags (`develop` is their only active branch), so pin commits.
+
+| Directory | Upstream | Snapshot | Local differences |
+|---|---|---|---|
+| `clean-core` | https://github.com/project-arcana/clean-core | develop `8e2eba0` (2021-03-11) | `b66bf1e`; CRLF-only diffs in 3 `native/win32_*` files |
+| `typed-geometry` | https://github.com/project-arcana/typed-geometry | develop `9b48a94` (2021-03-01) | `6ec1160`; stale `detail/sum_of_pos.hh` |
+| `polymesh` | https://github.com/project-arcana/polymesh | develop `fba09a7` (2021-01-25) | **OBJ reader patch** (below); `69db695`; stale `algorithms/barycoords.hh` |
+| `glow` (bundles `extern/glad`) | https://gitlab.vci.rwth-aachen.de:9000/Glow/glow | develop `8f61a37` (2021-04-05) | `4797612`; an unused `struct transform;` in `fwd.hh` |
+| `glow-extras` | https://gitlab.vci.rwth-aachen.de:9000/Glow/glow-extras | develop `366c039` (2021-02-20) | **`GlfwApp` patch** (below); `e983060` |
+| `imgui` | `imgui-lean` wrapper fork: https://gitlab.vci.rwth-aachen.de:9000/ptrettner/imgui-lean | `fcf73e7` (2020-04-17) | none. Bundles imgui 1.77 WIP, GLFW/OpenGL3 backends from 2018 and ImGuizmo ≈ 1.61 WIP |
+| `glfw` | https://github.com/glfw/glfw | master `2c7f3ce9` (2021-02-17, a 3.4.0 pre-release) | 21 stale files from older GLFW versions (e.g. `deps/glad.c`, `deps/vulkan/`) |
+| `openal` | https://github.com/kcat/openal-soft | tag `1.21.1` (`ae4eacf14`) | `a90ca57`; **CMake option defaults** (below) |
+| `dr-lib` | https://github.com/mackron/dr_libs | dr_wav 0.12.19, dr_mp3 0.6.27, dr_flac 0.12.29 | not used by the build; the game compiles its own identical copy `src/utility/dr_wav.hh` |
+
+`extern/` is therefore **not** pristine upstream. The game depends on these local changes, so carry them over when updating a library:
+- **glow-extras `GlfwApp`** (course framework): a `virtual void onFrameStart()` hook, called right after `updateInput()` in `mainLoop()`, which `Game` overrides to start the per-frame stats. `setCursorMode()` applies `glfwSetInputMode` immediately (upstream: on the next `updateInput()`). An ImGuizmo `SetRect` for `IMGUI_HAS_VIEWPORT` (dead code with this imgui).
+- **polymesh OBJ reader** (course framework): `obj_reader::has_valid_texcoords()` / `has_valid_normals()`, used by `Mesh3D.cc`, and a reordered `l` (polyline) loop that adds no edge for a 2-index `l a b` record. Six meshes contain such records (`data/meshes/units/{person,person_artisan,person_soldier,creature}.obj`, `rock1.obj`, `nature/rock1.obj`). With upstream's loop, loading them asserts "vertex is already fully connected".
+- **OpenAL `CMakeLists.txt`**: option defaults flipped to OFF for `ALSOFT_DLOPEN`, `ALSOFT_UTILS`, `ALSOFT_EXAMPLES`, `ALSOFT_INSTALL_{HRTF_DATA,AMBDEC_PRESETS,EXAMPLES,UTILS}` and `ALSOFT_UPDATE_BUILD_VERSION`.
 
 ## Architecture
 
@@ -73,6 +94,6 @@ Notes:
 ### Other directories
 
 - `src/advanced/` contains the instance `World`, `transform`, the stats/debug helpers, and the editor. It originated from course framework code.
-- `src/utility/` contains the spatial hash maps, a quadtree, RNG, and sound loading (dr_wav/dr_mp3).
+- `src/utility/` contains the spatial hash maps, a quadtree, RNG, and WAV loading (`Sound.cc` with dr_wav; only `.wav` files are loaded).
 - `src/types/` contains plain data types shared across components (lights, materials, particles, unit and structure properties).
 - `docs/` contains early design notes and a ToDo list from the start of the project. They are not authoritative about the current code.
