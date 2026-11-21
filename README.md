@@ -59,8 +59,8 @@ The rendering equation involved the following processing:
 ## Requirements
 
 - CMake 3.21+
-- A C++17 compiler. Tested with:
-    - Windows: Visual Studio 2026 (MSVC 19.52), CMake 4.4
+- A C++23 compiler. Tested with:
+    - Windows: Visual Studio 2026 (MSVC 19.52), CMake 4.4 and 4.5
     - Linux: GCC 15.2 and Clang 21.1, CMake 4.2 (Ubuntu 26.04 in WSL2)
 - OpenGL 4.5
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Fort Candle is a small low-poly strategy game (RWTH Aachen GameDev practical 2021) built on a custom engine that is tightly coupled to the game. C++17, OpenGL 4.5, CMake. The CMake project/executable name is `GameDevSS21`. All dependencies are vendored in `extern/` (glfw, glow, glow-extras, imgui, polymesh, typed-geometry, clean-core, openal, dr-lib); treat them as third-party. Prefer workarounds in the top-level `CMakeLists.txt` or the game; if a library must change, do it in a separate commit per library named `extern/<lib>: ...` (see [Vendored libraries](#vendored-libraries-extern)).
+Fort Candle is a small low-poly strategy game (RWTH Aachen GameDev practical 2021) built on a custom engine that is tightly coupled to the game. C++23, OpenGL 4.5, CMake. The CMake project/executable name is `GameDevSS21`. All dependencies are vendored in `extern/` (glfw, glow, glow-extras, imgui, polymesh, typed-geometry, clean-core, openal, dr-lib); treat them as third-party. Prefer workarounds in the top-level `CMakeLists.txt` or the game; if a library must change, do it in a separate commit per library named `extern/<lib>: ...` (see [Vendored libraries](#vendored-libraries-extern)).
 
 There are no tests, linters, or CI. "Verifying" a change means building and, where relevant, running the game.
 
@@ -15,11 +15,12 @@ cmake -S . -B build
 cmake --build build --config RelWithDebInfo --parallel
 ```
 
-- Requires CMake ≥ 3.21 and is tested with CMake 4.4 and MSVC 19.52 (Visual Studio 2026). Every `extern/` CMake project declares at least 3.10 or a version range reaching past it (GLFW `3.16...3.28`, OpenAL's bundled fmt `3.8...3.28`), so CMake 4 configures them without warnings or a policy workaround.
+- Requires CMake ≥ 3.21 and is tested with CMake 4.4 and 4.5 and MSVC 19.52 (Visual Studio 2026). Every `extern/` CMake project declares at least 3.10 or a version range reaching past it (GLFW `3.16...3.28`, OpenAL's bundled fmt `3.8...3.28`), so CMake 4 configures them without warnings or a policy workaround.
 - Single-config generators (Ninja, Makefiles) default to `CMAKE_BUILD_TYPE=RelWithDebInfo`. Multi-config generators (Visual Studio) pick the config at build time, and a plain `cmake --build build` builds **Debug**. Debug builds are *much* slower at runtime.
 - The executable and `OpenAL32.dll` are written to `bin/<Config>/` (e.g. `bin/RelWithDebInfo/GameDevSS21.exe`). In Visual Studio, `GameDevSS21` is the startup project and its debugger working directory is already `bin/`.
 - `bin/`, `build/`, and `build_vs/` are gitignored.
-- The game target compiles with `/W3 /MP /utf-8` on MSVC (keep sources UTF-8) and `-Wall -Wno-unused-variable` elsewhere. `stdc++fs` is linked only for GCC < 9.1.
+- The game target compiles with `/W3 /MP /utf-8` on MSVC (keep sources UTF-8) and `-Wall -Wno-unused-variable` elsewhere.
+- C++23 is set globally (`CMAKE_CXX_STANDARD`, which glow and polymesh read), so the extern libraries build as C++23 too, except OpenAL, which pins its targets to C++17. On MSVC, CMake ≥ 4.5 passes `/std:c++23` (cl ≥ 19.52.37029). CMake < 4.5 passes `/std:c++latest`, i.e. the C++26 draft, so for MSVC ≥ 19.52 the top-level `CMakeLists.txt` overrides it with `/std:c++23` there (the Visual Studio generator gets `/std:c++23preview`, which it turns into `LanguageStandard=stdcpp23`, which MSBuild passes as `/std:c++23`). Remove that block once the minimum is CMake 4.5. C++20 module scanning is off (`CMAKE_CXX_SCAN_FOR_MODULES OFF`); nothing uses modules.
 - Some extern flags are PUBLIC and therefore also apply to the game: clean-core adds `/fp:precise` and `/we4715 /we4477 /we4474` (missing return and printf format warnings are errors) on MSVC and `-ffp-contract=off` (no FMA contraction) elsewhere; glow adds `-msse4.2` on GCC/Clang.
 - Linux (checked on Ubuntu 26.04 in WSL2 with GCC 15.2 / Clang 21.1 / CMake 4.2):
   - Packages: `libgl-dev`, `libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev`, and `libpulse-dev` and/or `libasound2-dev` (without one of them OpenAL has no audio backend). GLFW is built X11-only (`GLFW_BUILD_WAYLAND=OFF`); Wayland sessions use XWayland.

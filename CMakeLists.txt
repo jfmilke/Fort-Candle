@@ -7,10 +7,28 @@ project(GameDevSS21 LANGUAGES C CXX)
 # enable folders for visual studio
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-# force C++17 (without compiler-specific extensions)
-set(CMAKE_CXX_STANDARD 17)
+# force C++23 (without compiler-specific extensions)
+# glow and polymesh read CMAKE_CXX_STANDARD, so it is set globally; OpenAL pins its own targets to C++17.
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# CMake < 4.5 maps C++23 to /std:c++latest on MSVC, which is the C++26 working draft.
+# MSVC 19.52 (Build Tools 14.52) has /std:c++23, which CMake >= 4.5 uses natively (cl >= 19.52.37029).
+# The Visual Studio generator of CMake < 4.5 only knows the older /std:c++23preview spelling:
+# it turns it into LanguageStandard=stdcpp23, which MSBuild passes as /std:c++23.
+# TODO: remove this block once cmake_minimum_required is at least 4.5.
+if(CMAKE_VERSION VERSION_LESS 4.5 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 19.52)
+    if(CMAKE_GENERATOR MATCHES "^Visual Studio")
+        set(CMAKE_CXX23_STANDARD_COMPILE_OPTION "-std:c++23preview")
+    else()
+        set(CMAKE_CXX23_STANDARD_COMPILE_OPTION "-std:c++23")
+    endif()
+    set(CMAKE_CXX23_EXTENSION_COMPILE_OPTION ${CMAKE_CXX23_STANDARD_COMPILE_OPTION})
+endif()
+
+# No C++20 modules are used; without this, CMake (policy CMP0155) scans every game source for imports
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # Set a default build type for single-config generators (Ninja, Makefiles).
 # Multi-config generators (Visual Studio, Ninja Multi-Config) pick the config at build time.
@@ -145,11 +163,6 @@ else()
         -Wall # useful warnings
         -Wno-unused-variable # not a useful warning
     )
-
-    # GCC < 9.1 ships <filesystem> in a separate library
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.1)
-        target_link_libraries(${PROJECT_NAME} PRIVATE stdc++fs)
-    endif()
 endif()
 
 if(UNIX AND NOT APPLE)
