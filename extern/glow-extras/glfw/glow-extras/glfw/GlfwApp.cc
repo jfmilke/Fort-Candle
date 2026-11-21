@@ -474,6 +474,9 @@ void GlfwApp::mainLoop()
     while (!shouldClose())
     {
         updateInput();
+
+        onFrameStart();
+
         float cpuRenderDispatchTime = 0.f;
 
         // Update

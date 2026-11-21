@@ -323,6 +323,8 @@ public:
 protected:
     /// Called once GLOW is initialized. Allocated your resources and init your logic here.
     virtual void init();
+    /// Called at the start of a frame
+    virtual void onFrameStart() {}
     /// Called with at 1 / getUpdateRate() Hz (timestep)
     virtual void update(float elapsedSeconds);
     /// Called as fast as possible for rendering (elapsedSeconds is not fixed here)
