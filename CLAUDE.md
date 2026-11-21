@@ -15,18 +15,19 @@ cmake -S . -B build
 cmake --build build --config RelWithDebInfo --parallel
 ```
 
-- Requires CMake ≥ 3.21 and is tested with CMake 4.4 and MSVC 19.52 (Visual Studio 2026). Most `extern/` projects still declare `cmake_minimum_required(VERSION 3.0)`, which CMake 4 rejects; the top-level `CMakeLists.txt` sets `CMAKE_POLICY_VERSION_MINIMUM` around their `add_subdirectory` calls instead of patching them.
+- Requires CMake ≥ 3.21 and is tested with CMake 4.4 and MSVC 19.52 (Visual Studio 2026). Every `extern/` CMake project declares at least 3.10 or a version range reaching past it (GLFW `3.16...3.28`, OpenAL's bundled fmt `3.8...3.28`), so CMake 4 configures them without warnings or a policy workaround.
 - Single-config generators (Ninja, Makefiles) default to `CMAKE_BUILD_TYPE=RelWithDebInfo`. Multi-config generators (Visual Studio) pick the config at build time, and a plain `cmake --build build` builds **Debug**. Debug builds are *much* slower at runtime.
 - The executable and `OpenAL32.dll` are written to `bin/<Config>/` (e.g. `bin/RelWithDebInfo/GameDevSS21.exe`). In Visual Studio, `GameDevSS21` is the startup project and its debugger working directory is already `bin/`.
 - `bin/`, `build/`, and `build_vs/` are gitignored.
 - The game target compiles with `/W3 /MP /utf-8` on MSVC (keep sources UTF-8) and `-Wall -Wno-unused-variable` elsewhere. `stdc++fs` is linked only for GCC < 9.1.
+- Some extern flags are PUBLIC and therefore also apply to the game: clean-core adds `/fp:precise` and `/we4715 /we4477 /we4474` (missing return and printf format warnings are errors) on MSVC and `-ffp-contract=off` (no FMA contraction) elsewhere; glow adds `-msse4.2` on GCC/Clang.
 - Linux (checked on Ubuntu 26.04 in WSL2 with GCC 15.2 / Clang 21.1 / CMake 4.2):
-  - Packages: `libgl-dev`, `libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev`, and `libpulse-dev` and/or `libasound2-dev` (without one of them OpenAL has no audio backend). GLFW is built X11-only; Wayland sessions use XWayland.
-  - **The 2021 `extern/` snapshots do not compile unpatched with GCC ≥ 14 / libstdc++ ≥ 13 and binutils ≥ 2.44.** The six fixes are applied as one commit per library: `4797612` glow and `e983060` glow-extras (missing `#include <cstdint>` in `common/log.hh` / `colors/color.hh`), `6ec1160` typed-geometry (`always_false<D>` with an `int` parameter, 7 places), `a90ca57` OpenAL (`this->mValue` in `common/aloptional.h`), `b66bf1e` clean-core and `69db695` polymesh (hard-coded `-fuse-ld=gold` in `cmake/CompileOptions.cmake` / `CMakeLists.txt`; gold is gone from binutils ≥ 2.44). MSVC does not need them. Current upstream versions no longer need them (see [Vendored libraries](#vendored-libraries-extern)).
-  - The top-level `CMakeLists.txt` sets `GLOW_USE_GOLD_LINKER=OFF` and `GLOW_ENABLE_MARCH_NATIVE=OFF` (portable binaries; `-march=native` also enabled a broken AVX-512 path in glow's bundled xxHash).
-  - The game links `OpenGL::GL` with `--no-as-needed`. Without that, libGL is only loaded by GLFW's `dlopen`, `glfwTerminate()` unloads it, and `~Game()` then crashes (SIGSEGV) while deleting GL objects.
+  - Packages: `libgl-dev`, `libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev`, and `libpulse-dev` and/or `libasound2-dev` (without one of them OpenAL has no audio backend). GLFW is built X11-only (`GLFW_BUILD_WAYLAND=OFF`); Wayland sessions use XWayland.
+  - The top-level `CMakeLists.txt` sets `CC_LINKER_MOLD=OFF` and `GLOW_USE_MOLD_LINKER=OFF`: clean-core (which also configures typed-geometry and polymesh) and glow link with `-fuse-ld=mold` by default. It also sets `GLOW_ENABLE_MARCH_NATIVE=OFF` (portable binaries).
+  - The game links `OpenGL::GL` with `--no-as-needed`. Without that, libGL is only loaded by GLFW's `dlopen`, `glfwTerminate()` unloads it, and `~Game()` then crashes (SIGSEGV) while deleting GL objects. glow still links the empty `${OpenGL_LIBRARIES}`, and glow-extras' `GlfwApp` still terminates GLFW before the app object is destroyed.
   - `glow`, `glow-extras` and `glad` are shared libraries on Linux; they land next to the executable in `bin/<Config>/` and are found via RPATH.
-  - The OpenAL JACK backend is off by default (`ALSOFT_BACKEND_JACK=OFF`) because it failed to link with `undefined symbol: jack_error_callback`. The cause is the vendored `ALSOFT_DLOPEN=OFF` default (see below): without dlopen, JACK symbols are linked directly instead of being looked up as optional.
+  - The OpenAL JACK backend is off (`ALSOFT_BACKEND_JACK=OFF`); the game does not need it. With OpenAL 1.21.1 it failed to link (`undefined symbol: jack_error_callback`) because the vendored copy defaulted to `ALSOFT_DLOPEN=OFF`. The current version uses the upstream default (ON), which should fix that, but JACK was not tested.
+  - The 2021 `extern/` snapshots (replaced in 2026, see below) needed six small fixes for GCC ≥ 14 and binutils ≥ 2.44. The current versions compile unpatched with GCC 15, Clang 21 and MSVC 19.52.
 
 **Working directory matters.** `main.cc` aborts unless `../data` exists, and every asset path in the code is hard-coded relative (`../data/meshes/`, `../data/shaders/`, `../data/config/`, ...). Run the game from a direct subfolder of the repo root, e.g. from `bin/` (`./RelWithDebInfo/GameDevSS21`) or from `build/` (`../bin/RelWithDebInfo/GameDevSS21`).
 
@@ -42,24 +43,32 @@ Documentation: Doxygen comments, written to be read in the code first (the gener
 
 ## Vendored libraries (`extern/`)
 
-Everything in `extern/` was imported as plain files in one commit (`1d74651`, 2022-01-19), without upstream metadata. The snapshots below were identified by matching file contents against upstream history. The arcana/Glow libraries have no maintained release tags (`develop` is their only active branch), so pin commits.
+Each library in `extern/` is an unmodified upstream tree: the committed files are byte-identical to upstream, line endings included. Local patches sit on top as separate `extern/<lib>: ...` commits. The arcana/Glow libraries have no maintained release tags (`develop` is their only active branch), so pin commits.
 
-| Directory | Upstream | Snapshot | Local differences |
+| Directory | Upstream | Version | Local differences |
 |---|---|---|---|
-| `clean-core` | https://github.com/project-arcana/clean-core | develop `8e2eba0` (2021-03-11) | `b66bf1e`; CRLF-only diffs in 3 `native/win32_*` files |
-| `typed-geometry` | https://github.com/project-arcana/typed-geometry | develop `9b48a94` (2021-03-01) | `6ec1160`; stale `detail/sum_of_pos.hh` |
-| `polymesh` | https://github.com/project-arcana/polymesh | develop `fba09a7` (2021-01-25) | **OBJ reader patch** (below); `69db695`; stale `algorithms/barycoords.hh` |
-| `glow` (bundles `extern/glad`) | https://gitlab.vci.rwth-aachen.de:9000/Glow/glow | develop `8f61a37` (2021-04-05) | `4797612`; an unused `struct transform;` in `fwd.hh` |
-| `glow-extras` | https://gitlab.vci.rwth-aachen.de:9000/Glow/glow-extras | develop `366c039` (2021-02-20) | **`GlfwApp` patch** (below); `e983060` |
-| `imgui` | `imgui-lean` wrapper fork: https://gitlab.vci.rwth-aachen.de:9000/ptrettner/imgui-lean | `fcf73e7` (2020-04-17) | none. Bundles imgui 1.77 WIP, GLFW/OpenGL3 backends from 2018 and ImGuizmo ≈ 1.61 WIP |
-| `glfw` | https://github.com/glfw/glfw | master `2c7f3ce9` (2021-02-17, a 3.4.0 pre-release) | 21 stale files from older GLFW versions (e.g. `deps/glad.c`, `deps/vulkan/`) |
-| `openal` | https://github.com/kcat/openal-soft | tag `1.21.1` (`ae4eacf14`) | `a90ca57`; **CMake option defaults** (below) |
+| `clean-core` | https://github.com/project-arcana/clean-core | develop `08aa8fc` (2026-06-20) | `tests/` left out |
+| `typed-geometry` | https://github.com/project-arcana/typed-geometry | develop `6eaf455` (2026-04-17) | `tests/` left out |
+| `polymesh` | https://github.com/project-arcana/polymesh | develop `84b9a5d` (2026-05-28) | **OBJ reader patch** `35066b0` (below) |
+| `glow` (bundles `extern/glad`) | https://gitlab.vci.rwth-aachen.de:9000/Glow/glow | develop `552a908` (2026-05-28) | none |
+| `glow-extras` | https://gitlab.vci.rwth-aachen.de:9000/Glow/glow-extras | develop `20623d7` (2026-06-24) | **`GlfwApp::onFrameStart()` hook** `5d26a23` (below) |
+| `imgui` | `imgui-lean` wrapper fork: https://gitlab.vci.rwth-aachen.de:9000/ptrettner/imgui-lean | master `f37145b` (2026-01-25) | none. Bundles imgui 1.91.2 WIP (ocornut `67cd4ead6`) with its GLFW/OpenGL3 backends, ImGuizmo 1.92.5 WIP and ImPlot 0.17 (not built: `IMGUI_USE_IMPLOT=OFF`) |
+| `glfw` | https://github.com/glfw/glfw | tag `3.5.1` (`d9d6f0f1`, 2026-07-31) | none |
+| `openal` | https://github.com/kcat/openal-soft | tag `1.24.3` (`dc7d7054a`, 2025-03-28) | none |
 | `dr-lib` | https://github.com/mackron/dr_libs | dr_wav 0.12.19, dr_mp3 0.6.27, dr_flac 0.12.29 | not used by the build; the game compiles its own identical copy `src/utility/dr_wav.hh` |
 
-`extern/` is therefore **not** pristine upstream. The game depends on these local changes, so carry them over when updating a library:
-- **glow-extras `GlfwApp`** (course framework): a `virtual void onFrameStart()` hook, called right after `updateInput()` in `mainLoop()`, which `Game` overrides to start the per-frame stats. `setCursorMode()` applies `glfwSetInputMode` immediately (upstream: on the next `updateInput()`). An ImGuizmo `SetRect` for `IMGUI_HAS_VIEWPORT` (dead code with this imgui).
-- **polymesh OBJ reader** (course framework): `obj_reader::has_valid_texcoords()` / `has_valid_normals()`, used by `Mesh3D.cc`, and a reordered `l` (polyline) loop that adds no edge for a 2-index `l a b` record. Six meshes contain such records (`data/meshes/units/{person,person_artisan,person_soldier,creature}.obj`, `rock1.obj`, `nature/rock1.obj`). With upstream's loop, loading them asserts "vertex is already fully connected".
-- **OpenAL `CMakeLists.txt`**: option defaults flipped to OFF for `ALSOFT_DLOPEN`, `ALSOFT_UTILS`, `ALSOFT_EXAMPLES`, `ALSOFT_INSTALL_{HRTF_DATA,AMBDEC_PRESETS,EXAMPLES,UTILS}` and `ALSOFT_UPDATE_BUILD_VERSION`.
+History: `1d74651` (2022-01-19) imported 2021 snapshots as plain files, with a few course-framework patches. They were replaced by the versions above in `b2c9cee` (OpenAL), `87f741e` (arcana/Glow set and imgui) and `e745ea4` (GLFW). dr-lib is still from the original import.
+
+The game depends on these local patches, so carry them over when updating a library:
+- **glow-extras `GlfwApp`** (`5d26a23`, from the course framework): a `virtual void onFrameStart()` hook, called right after `updateInput()` in `mainLoop()`, which `Game` overrides to start the per-frame stats. The course framework also made `setCursorMode()` take effect immediately; that change was dropped, so a new cursor mode applies in the next `updateInput()`.
+- **polymesh OBJ reader** (`35066b0`, from the course framework): `obj_reader::has_valid_texcoords()` / `has_valid_normals()`, used by `Mesh3D.cc`, and a reordered `l` (polyline) loop that adds no edge for a 2-index `l a b` record. Six meshes contain such records (`data/meshes/units/{person,person_artisan,person_soldier,creature}.obj`, `rock1.obj`, `nature/rock1.obj`). With upstream's loop, loading them asserts "vertex is already fully connected".
+
+Updating `extern/`:
+- clean-core, typed-geometry, polymesh, glow and glow-extras move together: the others stop at configure time without the `clean-core` target, so `add_subdirectory(extern/clean-core)` comes first. imgui-lean moves with glow-extras (glow-extras adapts to each imgui-lean update; older glow-extras does not compile against newer imgui).
+- Import upstream trees as git objects (copy the objects of `<rev>^{tree}` into this repository, `git read-tree --prefix=extern/<lib>/ <tree>`, `git checkout -- extern/<lib>`), not by copying a checkout. With `core.autocrlf=true`, copied files get their line endings changed.
+- Known blockers (2026-11): OpenAL 1.25.2 fails on MSVC 19.52 (C3889 in `alc.cpp`) and Clang 21 (`-Wfunction-effects`). imgui ≥ 1.92.7 removed the `Combo`/`ListBox` getter overload that glow-extras' `debugging/imgui-util.cc` still uses.
+- typed-geometry's `tg::perspective_opengl` takes a `tg::horizontal_fov_t` since 2024 (it used to treat the angle as vertical FOV). The game converts its 60° vertical FOV in `RenderSystem::UpdateCamera` and in the editor gizmo (`Game::onGui`).
+- The game still uses deprecated APIs that newer versions may remove: `tg::distance_sqr(vec, vec)` and `tg::length_sqr(pos)` (deprecation warnings), and the old imgui names `ImGuiCol_TabActive`/`TabUnfocused`/`TabUnfocusedActive`/`NavHighlight` and single-argument `ImGui::PushFont` (available while `IMGUI_DISABLE_OBSOLETE_FUNCTIONS` is not defined).
 
 ## Architecture
 

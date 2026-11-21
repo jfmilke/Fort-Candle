@@ -4,7 +4,7 @@ Result of the GameDevelopment Practical 2021 at RWTH Aachen.
 Features a small strategy game which only aims to demonstrate the capabilities of the self-designed game engine.
 
 **Note:** This is a reupload to GitHub from another inaccessible Git repository, initially reflecting the code state at submission.
-Since then, the build was modernized for current compilers and a few bugs were fixed.
+Since then, the build was modernized for current compilers, the vendored libraries were updated to current upstream versions, and a few bugs were fixed.
 
 ![Cover Image](images/FC01_Start.jpg)
 
@@ -68,17 +68,18 @@ The rendering equation involved the following processing:
 
 All dependencies are vendored in the `extern` folder; nothing has to be installed besides the system libraries listed under Linux.
 
-- GLFW 3.4 (pre-release snapshot)
+- GLFW 3.5.1
 - Glad
 - GLOW *(modern OpenGL wrapper)* and glow-extras
-- Dear ImGui 1.77 *(UI)* with ImGuizmo
+- Dear ImGui 1.91.2 WIP *(UI)* with ImGuizmo, through the imgui-lean wrapper
 - Polymesh *(mesh library)*
 - Typed-Geometry *(math library)*
 - Clean-Core *(base library of GLOW, Polymesh and Typed-Geometry)*
-- OpenAL Soft 1.21.1 *(audio library)*
+- OpenAL Soft 1.24.3 *(audio library)*
 - dr_wav *(WAV loading)*
 
-Some of them carry small local changes (course-framework patches and fixes for current compilers); see `CLAUDE.md` for their exact versions and patches.
+GLOW, glow-extras, Polymesh, Typed-Geometry and Clean-Core have no releases; they are pinned to upstream commits from 2026.
+The libraries are unmodified upstream code, except for two small course-framework patches in glow-extras and Polymesh; see `CLAUDE.md` for the exact versions and patches.
 
 ## Building
 
@@ -103,7 +104,7 @@ Alternatively open the solution in `build/` (`GameDevSS21.slnx`) in Visual Studi
 Install a compiler, CMake and the development packages for OpenGL, X11 and audio, e.g. on Debian/Ubuntu:
 
 ```bash
-sudo apt install build-essential cmake ninja-build libgl-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libpulse-dev libasound2-dev
+sudo apt install build-essential cmake ninja-build libgl-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev libpulse-dev libasound2-dev
 ```
 
 Then build and run (single-config generators default to `RelWithDebInfo`):
@@ -120,7 +121,7 @@ cd bin
 Notes:
 - OpenAL needs PulseAudio or ALSA development files (`libpulse-dev` or `libasound2-dev`), otherwise it has no audio backend.
 - GLFW is built for X11 only; Wayland sessions run the game through XWayland.
-- The OpenAL JACK backend is disabled because it fails to link (`undefined symbol: jack_error_callback`).
+- The OpenAL JACK backend is disabled; the game does not need it.
 
 ## Images
 

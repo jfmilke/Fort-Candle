@@ -234,7 +234,7 @@ public:
      */
     void init() override;
 
-    /// Called at the start of each frame (course-framework hook in glow-extras): starts a new statistics frame.
+    /// Called at the start of each frame, after input polling (local glow-extras patch, see CLAUDE.md): starts a new statistics frame.
     void onFrameStart() override;
 
     /**
@@ -246,6 +246,10 @@ public:
     /**
      * Called once per frame (variable timestep): camera, mouse/keyboard input (selection, orders, editor spawning, key
      * shortcuts), renderer state, and rendering.
+     *
+     * Cursor capture for camera rotation (`setCursorMode`) takes effect at the start of the next frame, when glow-extras
+     * applies it in `updateInput()`. While the cursor is disabled, glow-extras switches GLFW to raw (unaccelerated) mouse
+     * motion if the platform supports it.
      */
     void render(float elapsedSeconds) override;
 
