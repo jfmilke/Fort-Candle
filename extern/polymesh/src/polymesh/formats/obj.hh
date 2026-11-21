@@ -57,6 +57,12 @@ public:
     /// Number of faces that could not be added
     int error_faces() const { return n_error_faces; }
 
+    /// Whether or not this mesh has texture coordinates
+    bool has_valid_texcoords() const { return has_texcoords; }
+
+    /// Whether or not this mesh has vertex normals
+    bool has_valid_normals() const { return has_normals; }
+
 private:
     void parse(std::istream& in, Mesh& mesh);
 
@@ -65,5 +71,7 @@ private:
     halfedge_attribute<std::array<ScalarT, 3>> normals;
 
     int n_error_faces = 0;
+    bool has_texcoords = false;
+    bool has_normals = false;
 };
 } // namespace polymesh

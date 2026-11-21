@@ -250,6 +250,9 @@ void obj_reader<ScalarT>::parse(std::istream& in, Mesh& mesh)
                 t[2] = z;
 
             raw_tex_coords.push_back(t);
+
+            // assuming this mesh has valid texcoords
+            has_texcoords = true;
         }
 
         // normals
@@ -260,6 +263,9 @@ void obj_reader<ScalarT>::parse(std::istream& in, Mesh& mesh)
             line >> n[1];
             line >> n[2];
             raw_normals.push_back(n);
+
+            // assuming this mesh has valid vertex normals
+            has_normals = true;
         }
 
         // faces
@@ -346,13 +352,11 @@ void obj_reader<ScalarT>::parse(std::istream& in, Mesh& mesh)
             int i0, i1;
             line >> i0;
             line >> i1;
-            mesh.edges().add_or_get(mesh[vertex_index(i0 - 1)], mesh[vertex_index(i1 - 1)]);
-
             while (line.good())
             {
+                mesh.edges().add_or_get(mesh[vertex_index(i0 - 1)], mesh[vertex_index(i1 - 1)]);
                 i0 = i1;
                 line >> i1;
-                mesh.edges().add_or_get(mesh[vertex_index(i0 - 1)], mesh[vertex_index(i1 - 1)]);
             }
         }
 
