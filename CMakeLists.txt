@@ -53,6 +53,10 @@ set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+# Linux: build for X11 only (Wayland sessions run the game through XWayland)
+set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "Build support for Wayland")
+# GLFW >= 3.4 refuses to configure while the GLFW_USE_WAYLAND cache entry of older GLFW versions exists
+unset(GLFW_USE_WAYLAND CACHE)
 add_subdirectory(extern/glfw)
 
 # Add UI library (Dear ImGui + ImGuizmo; the game does not use ImPlot)
@@ -92,7 +96,7 @@ foreach(TARGET_NAME
     alsoft.excommon
     alsoft.fmt
     clang-tidy-check
-    update_glfw_config
+    update_mappings
 )
     if(TARGET ${TARGET_NAME})
         set_property(TARGET ${TARGET_NAME} PROPERTY FOLDER "Extern")
