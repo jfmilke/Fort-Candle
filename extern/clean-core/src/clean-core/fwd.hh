@@ -1,6 +1,6 @@
 #pragma once
 
-#include <clean-core/typedefs.hh>
+#include <cstddef>
 
 namespace cc
 {
@@ -17,11 +17,17 @@ struct hash;
 template <class T = void, class = bool> // SFINAE-friendly for cc::enable_if
 struct less;
 template <class T = void, class = bool> // SFINAE-friendly for cc::enable_if
+struct greater;
+template <class T = void, class = bool> // SFINAE-friendly for cc::enable_if
 struct equal_to;
 
 struct nullopt_t;
 template <class T>
 struct optional;
+template <class... Types>
+struct variant;
+template <class Value, class Error>
+struct result;
 
 template <class A, class B>
 struct pair;
@@ -36,6 +42,8 @@ struct strided_span;
 
 template <class T>
 struct vector;
+template <class Traits>
+struct vector_ex;
 template <class T, size_t N>
 struct capped_vector;
 template <class T>
@@ -49,6 +57,9 @@ template <class T, size_t N>
 struct capped_array;
 template <class T>
 struct alloc_array;
+
+template <size_t N = dynamic_size>
+struct bitset;
 
 template <class KeyT, class ValueT, class HashT = cc::hash<KeyT>, class EqualT = cc::equal_to<void>>
 struct map;
@@ -92,17 +103,25 @@ template <class T>
 struct unique_ptr;
 template <class T>
 struct poly_unique_ptr;
+template <class T>
+struct shared_ptr;
+
+// locks
+struct spin_lock;
+template <class T>
+struct lock_guard;
 
 // allocators
 struct allocator;
 struct linear_allocator;
-struct system_allocator_t;
 struct stack_allocator;
-struct scratch_allocator;
 struct tlsf_allocator;
 struct atomic_pool_allocator;
 struct atomic_linear_allocator;
-struct synced_tlsf_allocator;
 
 extern allocator* const system_allocator;
-}
+
+// experimental
+template <class T>
+struct ringbuffer;
+} // namespace cc

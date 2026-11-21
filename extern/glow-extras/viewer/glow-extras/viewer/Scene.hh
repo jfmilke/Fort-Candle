@@ -32,7 +32,7 @@ private:
     /// computes the AABB of the scene
     aabb computeAabb() const;
 
-    mutable tg::optional<size_t> mCachedHash;
+    mutable cc::optional<size_t> mCachedHash;
 
     // properties
 public:

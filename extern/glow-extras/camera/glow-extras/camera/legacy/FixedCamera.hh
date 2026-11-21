@@ -49,7 +49,7 @@ public:
     virtual float getFarClippingPlane() const override { return mFarPlane; }
     // getters for fov (TODO: possibly derive these from the projection matrix or add setters
     virtual tg::angle getVerticalFieldOfView() const override { return 0_deg; }
-    virtual tg::angle getHorizontalFieldOfView() const override { return 0_deg; }
+    virtual tg::horizontal_fov getHorizontalFieldOfView() const override { return tg::horizontal_fov(0_deg); }
 };
 }
 }

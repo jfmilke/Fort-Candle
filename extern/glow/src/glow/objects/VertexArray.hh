@@ -93,6 +93,10 @@ public: // static construction
     static SharedVertexArray create(SharedArrayBuffer const& ab, SharedElementArrayBuffer const& eab, GLenum primitiveMode = GL_TRIANGLES);
     static SharedVertexArray create(SharedArrayBuffer const& ab, GLenum primitiveMode = GL_TRIANGLES);
     /// creates a VAO and attaches all specified attributes (and optionally an EAB)
-    static SharedVertexArray create(std::vector<SharedArrayBuffer> const& abs, SharedElementArrayBuffer const& eab = nullptr, GLenum primitiveMode = GL_TRIANGLES);
+    static SharedVertexArray create(cc::span<SharedArrayBuffer const> abs, SharedElementArrayBuffer const& eab = nullptr, GLenum primitiveMode = GL_TRIANGLES);
+    static SharedVertexArray create(std::initializer_list<SharedArrayBuffer> abs, SharedElementArrayBuffer const& eab = nullptr, GLenum primitiveMode = GL_TRIANGLES)
+    {
+        return create(cc::span(abs.begin(), abs.size()), eab, primitiveMode);
+    }
 };
 }

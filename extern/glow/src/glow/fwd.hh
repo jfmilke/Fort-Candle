@@ -71,6 +71,4 @@ using AsyncTextureRectangle = AsyncTexture<TextureRectangle>;
 using AsyncTextureCubeMapArray = AsyncTexture<TextureCubeMapArray>;
 using AsyncTexture2DMultisample = AsyncTexture<Texture2DMultisample>;
 using AsyncTexture2DMultisampleArray = AsyncTexture<Texture2DMultisampleArray>;
-
-struct transform;
 }

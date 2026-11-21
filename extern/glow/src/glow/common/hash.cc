@@ -1,6 +1,6 @@
 #include "hash.hh"
 
-#include <glow/detail/xxHash/xxh3.hh>
+#include <clean-core/detail/xxHash/xxhash.hh>
 
 size_t glow::hash_xxh3(array_view<const std::byte> data, size_t seed)
 {

@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+
 #include <clean-core/assert.hh>
 #include <clean-core/char_predicates.hh>
 #include <clean-core/enable_if.hh>
@@ -7,8 +11,8 @@
 #include <clean-core/fwd.hh>
 #include <clean-core/is_contiguous_range.hh>
 #include <clean-core/move.hh>
+#include <clean-core/pair.hh>
 #include <clean-core/sentinel.hh>
-#include <clean-core/typedefs.hh>
 
 namespace cc
 {
@@ -28,7 +32,7 @@ struct equals_case_insensitive_t
 {
     constexpr bool operator()(char a, char b) const { return a == b || cc::to_lower(a) == cc::to_lower(b); }
 };
-}
+} // namespace detail
 
 /// a view on an utf-8 string
 /// is NON-OWNING
@@ -37,6 +41,11 @@ struct equals_case_insensitive_t
 struct string_view
 {
     constexpr string_view() = default;
+
+    // make sure int and bool are not convertible
+    string_view(int) = delete;
+    string_view(bool) = delete;
+
     constexpr string_view(char const* data)
     {
         _data = data;
@@ -92,6 +101,10 @@ public:
         CC_CONTRACT(offset + size <= _size);
         return {_data + offset, size};
     }
+    constexpr string_view subview_clamped(size_t offset, size_t size) const
+    {
+        return {_data + offset, offset > _size ? 0 : offset + size > _size ? _size - offset : size};
+    }
     constexpr string_view subview(size_t offset) const
     {
         CC_CONTRACT(offset <= _size);
@@ -116,18 +129,29 @@ public:
 
         return false;
     }
+    constexpr bool contains_ignore_case(string_view s) const
+    {
+        if (s.size() > _size)
+            return false;
+
+        for (size_t i = 0; i < _size - s.size() + 1; ++i)
+            if (subview(i, s.size()).equals_ignore_case(s))
+                return true;
+
+        return false;
+    }
 
     /// returns the index of the first occurrence of the character (or -1 if not found)
-    constexpr int64 index_of(char c) const
+    constexpr int64_t index_of(char c) const
     {
         for (size_t i = 0; i < _size; ++i)
             if (_data[i] == c)
-                return int64(i);
+                return int64_t(i);
         return -1;
     }
 
     /// returns the index of the start of the first occurrence of the character sequence (or -1 if not found)
-    constexpr int64 index_of(string_view s) const
+    constexpr int64_t index_of(string_view s) const
     {
         CC_CONTRACT(!s.empty() && "search string must not be empty!");
         if (s.size() > _size)
@@ -139,23 +163,37 @@ public:
                 if (_data[i + j] != s[j])
                     break;
                 if (j == s.size() - 1)
-                    return int64(i);
+                    return int64_t(i);
             }
         }
         return -1;
     }
 
-    /// returns the index of the last occurrence of the character (or -1 if not found)
-    constexpr int64 last_index_of(char c) const
+    /// returns the common prefix between this and another string view
+    constexpr string_view common_prefix_with(string_view s) const
     {
-        for (auto i = int64(_size) - 1; i >= 0; --i)
+        size_t const min_size = _size < s._size ? _size : s._size;
+        size_t common_size = 0;
+        for (size_t i = 0; i < min_size; ++i)
+        {
+            if (_data[i] != s._data[i])
+                break;
+            ++common_size;
+        }
+        return {_data, common_size};
+    }
+
+    /// returns the index of the last occurrence of the character (or -1 if not found)
+    constexpr int64_t last_index_of(char c) const
+    {
+        for (auto i = int64_t(_size) - 1; i >= 0; --i)
             if (_data[i] == c)
-                return int64(i);
+                return int64_t(i);
         return -1;
     }
 
     /// returns the index of the start of the last occurrence of the character sequence (or -1 if not found)
-    constexpr int64 last_index_of(string_view s) const
+    constexpr int64_t last_index_of(string_view s) const
     {
         CC_CONTRACT(!s.empty() && "search string must not be empty!");
         if (s.size() > _size)
@@ -167,7 +205,7 @@ public:
                 if (_data[_size - (i + j + 1)] != s[s.size() - (j + 1)])
                     break;
                 if (j == s.size() - 1)
-                    return int64(_size - (i + s.size()));
+                    return int64_t(_size - (i + s.size()));
             }
         }
         return -1;
@@ -185,6 +223,24 @@ public:
 
     constexpr bool ends_with(char c) const { return _size > 0 && back() == c; }
     constexpr bool ends_with(string_view s) const { return _size >= s.size() && subview(_size - s.size(), s.size()) == s; }
+
+    /// pattern must be contained in this string_view
+    /// returns the part before and after the pattern
+    /// e.g. "this is a text".split_once(" ") == ("this", "is a text")
+    [[nodiscard]] constexpr pair<string_view, string_view> split_once(string_view pattern) const
+    {
+        auto idx = this->index_of(pattern);
+        CC_ASSERT(idx >= 0 && "pattern must be contained in this string_view");
+        return {subview(0, idx), subview(idx + pattern.size())};
+    }
+    // same as split_once but returns (this, "") if the pattern was not found
+    [[nodiscard]] constexpr pair<string_view, string_view> split_once_if_found(string_view pattern) const
+    {
+        auto idx = this->index_of(pattern);
+        if (idx == -1)
+            return {*this, {}};
+        return {subview(0, idx), subview(idx + pattern.size())};
+    }
 
     [[nodiscard]] constexpr auto split() const;
     [[nodiscard]] constexpr auto split(char sep, split_options opts = split_options::keep_empty) const;
@@ -272,6 +328,18 @@ public:
         return true;
     }
     [[nodiscard]] constexpr bool equals_ignore_case(string_view rhs) const { return equals<detail::equals_case_insensitive_t>(rhs); }
+
+    /// returns true iff this is lexicographically before rhs (NOTE: case sensitive)
+    [[nodiscard]] constexpr bool is_lexicographically_less_than(string_view rhs) const
+    {
+        auto min_size = _size < rhs._size ? _size : rhs._size;
+
+        for (size_t i = 0; i < min_size; ++i)
+            if (_data[i] != rhs._data[i])
+                return _data[i] < rhs._data[i];
+
+        return _size < rhs._size;
+    }
 
     // operators
 public:
@@ -382,7 +450,7 @@ private:
         size_t _size;
         char const* _sdata;
         size_t _ssize;
-        int64 _idx = -1;
+        int64_t _idx = -1;
 
         constexpr string_indices_of_iterator(char const* data, size_t size, char const* sdata, size_t ssize)
           : _data(data), _size(size), _sdata(sdata), _ssize(ssize)
@@ -391,11 +459,11 @@ private:
         }
 
         constexpr void operator++() { _idx = next_idx(_idx + 1); }
-        constexpr int64 operator*() const { return _idx; }
+        constexpr int64_t operator*() const { return _idx; }
         constexpr bool operator!=(cc::sentinel) const { return _idx >= 0; }
 
     private:
-        constexpr int64 next_idx(int64 start) const
+        constexpr int64_t next_idx(int64_t start) const
         {
             if (_ssize > (_size - start))
                 return -1;
@@ -406,7 +474,7 @@ private:
                     if (_data[i + j] != _sdata[j])
                         break;
                     if (j == _ssize - 1)
-                        return int64(i);
+                        return int64_t(i);
                 }
             }
             return -1;
@@ -459,4 +527,15 @@ constexpr auto string_view::split(Pred&& pred, split_options opts) const
     return string_split_range(_data, _data + _size, opts, cc::forward<Pred>(pred));
 }
 constexpr auto string_view::split() const { return split(cc::is_space, split_options::skip_empty); }
+
+/// compare two ascii strings lexicographically and returns true, iff lhs < rhs
+[[nodiscard]] inline bool ascii_lexicographical_less(string_view lhs, string_view rhs)
+{
+    size_t const min_size = lhs.size() < rhs.size() ? lhs.size() : rhs.size();
+    int const cmp = ::strncmp(lhs.data(), rhs.data(), min_size);
+    if (cmp == 0)
+        return lhs.size() < rhs.size();
+    return cmp < 0;
 }
+
+} // namespace cc

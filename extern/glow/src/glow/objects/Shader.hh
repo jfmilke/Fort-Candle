@@ -4,6 +4,8 @@
 #include <string_view>
 #include <vector>
 
+#include <clean-core/span.hh>
+
 #include <glow/common/file_watch.hh>
 #include <glow/common/non_copyable.hh>
 #include <glow/common/shared.hh>
@@ -69,7 +71,8 @@ public:
     /// Sets the shader source to a single string
     void setSource(std::string_view source);
     /// Sets the shader source to a list of strings
-    void setSource(std::vector<std::string> const& sources);
+    void setSource(cc::span<std::string const> sources);
+    void setSource(std::initializer_list<std::string> sources) { setSource(cc::span(sources.begin(), sources.size())); }
 
     /// Checks the file modification time and returns true if a newer version exists
     /// Returns false for non-file-backed shaders
@@ -92,7 +95,11 @@ public: // static construction
     /// Creates and compiles (!) a shader from a given source string
     static SharedShader createFromSource(GLenum shaderType, std::string_view source);
     /// Creates and compiles (!) a shader from a given list of source strings
-    static SharedShader createFromSource(GLenum shaderType, std::vector<std::string> const& sources);
+    static SharedShader createFromSource(GLenum shaderType, cc::span<std::string const> sources);
+    static SharedShader createFromSource(GLenum shaderType, std::initializer_list<std::string> const& sources)
+    {
+        return createFromSource(shaderType, cc::span(sources.begin(), sources.size()));
+    }
     /// Helper for embedded source files
     static SharedShader createFromSource(GLenum shaderType, const unsigned char source[]);
     /// Creates and compiles (!) a shader by loading the specified file

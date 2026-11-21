@@ -22,6 +22,10 @@ size_t glow::viewer::SceneConfig::computeHash() const
     add(ssaoRadius);
     add(enableTonemap);
     add(tonemapExposure);
+    add(bloom.enabled);
+    add(bloom.threshold);
+    add(bloom.strength);
+    add(bloom.radius);
 
     add(customBounds.has_value());
     if (customBounds.has_value())

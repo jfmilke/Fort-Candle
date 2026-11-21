@@ -9,6 +9,11 @@
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_opengl3.h>
 #include <imgui/imguizmo.h>
+
+#ifdef IMGUI_USE_IMPLOT
+#include <imgui/implot.h>
+#endif
+
 #endif
 
 #include <typed-geometry/tg.hh>
@@ -213,6 +218,9 @@ void GlfwApp::init()
     {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
+#ifdef IMGUI_USE_IMPLOT
+        ImPlot::CreateContext();
+#endif
         ImGui_ImplGlfw_InitForOpenGL(window(), false);
         char* glsl_version = nullptr;
 #ifdef __APPLE__
@@ -236,7 +244,7 @@ void GlfwApp::init()
         if (mCacheWindowSize)
         {
             // Restore window size
-            std::ifstream file("glfwapp.ini");
+            std::ifstream file(mCacheWindowSizeFilename);
             if (file.good())
             {
                 int w, h, x, y;
@@ -291,13 +299,7 @@ void GlfwApp::onResize(int w, int h)
         mCamera->setViewportSize(w, h);
 }
 
-void GlfwApp::onClose()
-{
-#ifdef GLOW_EXTRAS_HAS_IMGUI
-    ImGui_ImplGlfw_Shutdown();
-    ImGui_ImplOpenGL3_Shutdown();
-#endif
-}
+void GlfwApp::onClose() {}
 
 void GlfwApp::onGui() {}
 
@@ -366,6 +368,7 @@ bool GlfwApp::onChar(unsigned int codepoint, int /*mods*/)
 
 bool GlfwApp::onMousePosition(double x, double y)
 {
+    mMouseMoveDistance += length(mInputState.getMouseDelta());
     (void)x;
     (void)y;
 #ifdef GLOW_EXTRAS_HAS_ANTTWEAKBAR
@@ -399,7 +402,7 @@ bool GlfwApp::onMouseButton(double x, double y, int button, int action, int mods
 #endif
 
 #ifdef GLOW_EXTRAS_HAS_IMGUI
-    if (mGui == Gui::ImGui && mCursorMode == glfw::CursorMode::Normal)
+    if (mGui == Gui::ImGui)
     {
         ImGui_ImplGlfw_MouseButtonCallback(window(), button, action, mods);
 
@@ -457,23 +460,20 @@ void GlfwApp::mainLoop()
 {
     // Loop until the user closes the window
 
-    unsigned frames = 0;
+    [[maybe_unused]] unsigned frames = 0;
     double lastTime = glfwGetTime();
     [[maybe_unused]] double lastStatsTime = lastTime;
     double lastScheduledUpdateTime = lastTime;
     double timeAccum = 0.000001;
     mCurrentTime = 0.0;
-    size_t primitives = 0;
-    size_t fragments = 0;
-    double cpuRenderTime = 0;
+    [[maybe_unused]] size_t primitives = 0;
+    [[maybe_unused]] size_t fragments = 0;
+    [[maybe_unused]] double cpuRenderTime = 0;
     int updatesPerFrame = 1;
     mCurrentRenderDeltaTime = 1.0 / mUpdateRate; // tracks time between renders, init is for first frame only
     while (!shouldClose())
     {
         updateInput();
-
-        onFrameStart();
-
         float cpuRenderDispatchTime = 0.f;
 
         // Update
@@ -661,60 +661,77 @@ void GlfwApp::internalInit()
 
     // input callbacks
     {
-        glfwSetKeyCallback(mWindow, [](GLFWwindow*, int key, int scancode, int action, int mods) {
-            if (action == GLFW_PRESS)
-                sCurrApp->mInputState.onKeyPress(key);
-            else if (action == GLFW_RELEASE)
-                sCurrApp->mInputState.onKeyRelease(key);
+        glfwSetKeyCallback(mWindow,
+                           [](GLFWwindow*, int key, int scancode, int action, int mods)
+                           {
+                               if (action == GLFW_PRESS)
+                                   sCurrApp->mInputState.onKeyPress(key);
+                               else if (action == GLFW_RELEASE)
+                                   sCurrApp->mInputState.onKeyRelease(key);
 
-            sCurrApp->onKey(key, scancode, action, mods);
-        });
+                               sCurrApp->onKey(key, scancode, action, mods);
+                           });
         glfwSetCharModsCallback(mWindow, [](GLFWwindow*, unsigned int codepoint, int mods) { sCurrApp->onChar(codepoint, mods); });
-        glfwSetMouseButtonCallback(mWindow, [](GLFWwindow*, int button, int action, int mods) {
-            if (action == GLFW_PRESS)
-                sCurrApp->mInputState.onMouseButtonPress(button);
-            else if (action == GLFW_RELEASE)
-                sCurrApp->mInputState.onMouseButtonRelease(button);
+        glfwSetMouseButtonCallback(mWindow,
+                                   [](GLFWwindow*, int button, int action, int mods)
+                                   {
+                                       if (action == GLFW_PRESS)
+                                           sCurrApp->mInputState.onMouseButtonPress(button);
+                                       else if (action == GLFW_RELEASE)
+                                           sCurrApp->mInputState.onMouseButtonRelease(button);
 
-            sCurrApp->internalOnMouseButton(sCurrApp->mInputState.getMousePosition().x, sCurrApp->mInputState.getMousePosition().y, button, action, mods);
-        });
-        glfwSetCursorEnterCallback(mWindow, [](GLFWwindow*, int entered) {
-            if (entered)
-                sCurrApp->onMouseEnter();
-            else
-                sCurrApp->onMouseExit();
-        });
+                                       sCurrApp->internalOnMouseButton(sCurrApp->mInputState.getMousePosition().x,
+                                                                       sCurrApp->mInputState.getMousePosition().y, button, action, mods);
+                                   });
+        glfwSetCursorEnterCallback(mWindow,
+                                   [](GLFWwindow*, int entered)
+                                   {
+                                       if (entered)
+                                           sCurrApp->onMouseEnter();
+                                       else
+                                           sCurrApp->onMouseExit();
+                                   });
 
-        glfwSetCursorPosCallback(mWindow, [](GLFWwindow*, double x, double y) {
-            sCurrApp->mInputState.onMousePos(x, y);
-            sCurrApp->onMousePosition(x, y);
-        });
-        glfwSetScrollCallback(mWindow, [](GLFWwindow*, double sx, double sy) {
-            sCurrApp->mInputState.onScroll(static_cast<float>(sx), static_cast<float>(sy));
-            sCurrApp->onMouseScroll(sx, sy);
-        });
-        glfwSetFramebufferSizeCallback(mWindow, [](GLFWwindow*, int w, int h) {
-            sCurrApp->mWindowWidth = w;
-            sCurrApp->mWindowHeight = h;
+        glfwSetCursorPosCallback(mWindow,
+                                 [](GLFWwindow*, double x, double y)
+                                 {
+                                     sCurrApp->mInputState.onMousePos(x, y);
+                                     sCurrApp->onMousePosition(x, y);
+                                 });
+        glfwSetScrollCallback(mWindow,
+                              [](GLFWwindow*, double sx, double sy)
+                              {
+                                  sCurrApp->mInputState.onScroll(static_cast<float>(sx), static_cast<float>(sy));
+                                  sCurrApp->onMouseScroll(sx, sy);
+                              });
+        glfwSetFramebufferSizeCallback(mWindow,
+                                       [](GLFWwindow*, int w, int h)
+                                       {
+                                           sCurrApp->mWindowWidth = w;
+                                           sCurrApp->mWindowHeight = h;
 
-            sCurrApp->onResize(w, h);
+                                           sCurrApp->onResize(w, h);
 #ifdef GLOW_EXTRAS_HAS_ANTTWEAKBAR
-            if (sCurrApp->mGui == Gui::AntTweakBar)
-                TwWindowSize(w, h);
+                                           if (sCurrApp->mGui == Gui::AntTweakBar)
+                                               TwWindowSize(w, h);
 #endif
-        });
-        glfwSetWindowFocusCallback(mWindow, [](GLFWwindow*, int focused) {
-            if (focused)
-                sCurrApp->onFocusGain();
-            else
-                sCurrApp->onFocusLost();
-        });
-        glfwSetDropCallback(mWindow, [](GLFWwindow*, int count, const char** paths) {
-            std::vector<std::string> files;
-            for (auto i = 0; i < count; ++i)
-                files.push_back(paths[i]);
-            sCurrApp->onFileDrop(files);
-        });
+                                       });
+        glfwSetWindowFocusCallback(mWindow,
+                                   [](GLFWwindow*, int focused)
+                                   {
+                                       if (focused)
+                                           sCurrApp->onFocusGain();
+                                       else
+                                           sCurrApp->onFocusLost();
+                                   });
+        glfwSetDropCallback(mWindow,
+                            [](GLFWwindow*, int count, const char** paths)
+                            {
+                                std::vector<std::string> files;
+                                for (auto i = 0; i < count; ++i)
+                                    files.push_back(paths[i]);
+                                sCurrApp->onFileDrop(files);
+                            });
         glfwSetWindowIconifyCallback(mWindow, [](GLFWwindow*, int iconified) { sCurrApp->mMinimized = static_cast<bool>(iconified); });
     }
 
@@ -738,7 +755,7 @@ void GlfwApp::internalCleanUp()
     if (mCacheWindowSize)
     {
         // Save window size to disk
-        std::ofstream file("glfwapp.ini");
+        std::ofstream file(mCacheWindowSizeFilename);
         if (file.good())
         {
             if (mInternalContext->isFullscreen())
@@ -771,6 +788,9 @@ void GlfwApp::internalCleanUp()
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
+#ifdef IMGUI_USE_IMPLOT
+        ImPlot::DestroyContext();
+#endif
 #endif
         break;
 
@@ -811,17 +831,20 @@ void GlfwApp::internalCleanUp()
 void GlfwApp::internalOnMouseButton(double x, double y, int button, int action, int mods)
 {
     // check double click
-    if (distance(mClickPos, tg::pos2(x, y)) > 5) // too far
-        mClickCount = 0;
-    if (mClickTimer.elapsedSecondsD() > mDoubleClickTime) // too slow
-        mClickCount = 0;
-    if (mClickButton != button) // wrong button
-        mClickCount = 0;
-
-    mClickTimer.restart();
-    mClickButton = button;
-    mClickPos = tg::pos2(x, y);
-    mClickCount++;
+    if (action == GLFW_PRESS)
+    {
+        if (distance(mClickPos, tg::pos2(x, y)) > 5) // too far
+            mClickCount = 0;
+        if (mClickTimer.elapsedSecondsD() > mDoubleClickTime) // too slow
+            mClickCount = 0;
+        if (mClickButton != button) // wrong button
+            mClickCount = 0;
+        mClickCount++;
+        mMouseMoveDistance = 0;
+        mClickTimer.restart();
+        mClickButton = button;
+        mClickPos = tg::pos2(x, y);
+    }
 
     onMouseButton(x, y, button, action, mods, mClickCount);
 }
@@ -846,22 +869,11 @@ void GlfwApp::internalPerformGui()
     if (mGui == Gui::ImGui)
     {
         GLOW_SCOPED(debugGroup, "ImGui");
-
-        // imgui new frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-
-        // imguizmo new frame
-#ifdef IMGUI_HAS_VIEWPORT
-        ImGuiViewport const& viewport = *ImGui::GetMainViewport();
-        ImGuizmo::BeginFrame();
-        ImGuizmo::SetRect(viewport.Pos.x, viewport.Pos.y, viewport.Size.x, viewport.Size.y);
-#else
         ImGuizmo::BeginFrame();
         ImGuizmo::SetRect(0, 0, mWindowWidth, mWindowHeight);
-#endif
-
 
         onGui();
         internalOnGui();
@@ -873,6 +885,26 @@ void GlfwApp::internalPerformGui()
 
 void GlfwApp::updateInput()
 {
+    // update cursor mode
+    switch (mCursorMode)
+    {
+    case CursorMode::Normal:
+        glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        break;
+    case CursorMode::Hidden:
+        glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+        break;
+    case CursorMode::Disabled:
+        glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        break;
+    }
+
+    // Use raw mouse motion while the cursor is disabled (FPS-style look-around). This bypasses the OS cursor
+    // recentering/differencing of disabled mode, which on Windows can desync (DPI scaling, message coalescing,
+    // focus changes) and emit a spurious large delta that jerks the camera around. Only has effect while disabled.
+    if (glfwRawMouseMotionSupported())
+        glfwSetInputMode(mWindow, GLFW_RAW_MOUSE_MOTION, mCursorMode == CursorMode::Disabled ? GLFW_TRUE : GLFW_FALSE);
+
     // Poll for and process events
     mInputState.swap();
     glfwPollEvents();
@@ -946,24 +978,4 @@ void GlfwApp::startHeadless() { internalInit(); }
 
 GlfwApp::~GlfwApp() { internalCleanUp(); }
 
-void glow::glfw::GlfwApp::setCursorMode(CursorMode newMode)
-{
-    if (newMode == mCursorMode)
-        return;
-
-    mCursorMode = newMode;
-
-    // update cursor mode
-    switch (mCursorMode)
-    {
-    case CursorMode::Normal:
-        glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-        break;
-    case CursorMode::Hidden:
-        glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
-        break;
-    case CursorMode::Disabled:
-        glfwSetInputMode(mWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        break;
-    }
-}
+GlfwApp* glfw::detail::current_app() { return sCurrApp; }

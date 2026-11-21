@@ -1,7 +1,9 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.10)
 project(ImGui)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+option(IMGUI_USE_IMPLOT "add implot" ON)
 
 # auto ogl
 if (TARGET glow)
@@ -34,6 +36,7 @@ set(SOURCES
     "src/imgui/imgui_stdlib.cpp"
     "src/imgui/imgui_stdlib.h"
     "src/imgui/imgui_widgets.cpp"
+    "src/imgui/imgui_tables.cpp"
     "src/imgui/imstb_rectpack.h"
     "src/imgui/imstb_textedit.h"
     "src/imgui/imstb_truetype.h"
@@ -43,6 +46,7 @@ if (IMGUI_SUPPORT_OPENGL)
     list(APPEND SOURCES
         "src/imgui/imgui_impl_opengl3.h"
         "src/imgui/imgui_impl_opengl3.cpp"
+        "src/imgui/imgui_impl_opengl3_loader.h"
     )
 endif()
 
@@ -60,6 +64,15 @@ if (IMGUI_SUPPORT_GLFW)
     )
 endif()
 
+if (IMGUI_USE_IMPLOT)
+    list(APPEND SOURCES
+        "src/imgui/implot.h"
+        "src/imgui/implot_internal.h"
+        "src/imgui/implot.cpp"
+        "src/imgui/implot_items.cpp"
+    )
+endif()
+
 
 # =====================================================
 # create library
@@ -71,10 +84,14 @@ if (IMGUI_SUPPORT_GLFW)
 endif()
 
 if (IMGUI_SUPPORT_VULKAN)
-    target_link_libraries(imgui PUBLIC volk)
+    target_link_libraries(imgui PUBLIC Vulkan::Vulkan)
 endif()
 
 if (IMGUI_SUPPORT_OPENGL)
     target_link_libraries(imgui PRIVATE glad)
     target_compile_definitions(imgui PUBLIC IMGUI_IMPL_OPENGL_LOADER_GLAD)
+endif()
+
+if (IMGUI_USE_IMPLOT)
+    target_compile_definitions(imgui PUBLIC IMGUI_USE_IMPLOT)
 endif()

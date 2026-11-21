@@ -60,8 +60,10 @@ void main()
 
     n = normalize(mat3(uView) * n);
     vec3 p = viewPosAt(fragCoord);
+
+    // Clamp back-facing normals to closest camera-orthogonal vector
     if (dot(n, p) > 0)
-        n = -n;
+        n = normalize(n - n * dot(n, normalize(p)));
 
     vec3 t0 = normalize(cross(abs(n.x) > abs(n.y) ? vec3(0,1,0) : vec3(1,0,0), n));
     vec3 t1 = normalize(cross(n, t0));

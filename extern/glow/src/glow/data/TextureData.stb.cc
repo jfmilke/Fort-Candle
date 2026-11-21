@@ -16,7 +16,69 @@ SharedTextureData TextureData::loadWithStb(const std::string& filename, const st
     auto tex = std::make_shared<TextureData>();
     auto surface = std::make_shared<SurfaceData>();
 
-    int width, height, channel;
+    int width = 0;
+    int height = 0;
+    int channel = 0;
+
+    // HDR path (e.g. Radiance .hdr): stb decodes RGBE to linear float.
+    // GL has no sRGB float internal format; HDR files are linear radiance by convention.
+    if (glow_stbi_is_hdr(filename.c_str()))
+    {
+        if (colorSpace == ColorSpace::sRGB)
+            warning() << "HDR texture " << filename << " loaded as linear (sRGB requested but not applicable to float HDR)";
+
+        float* fdata = glow_stbi_loadf(filename.c_str(), &width, &height, &channel, 0);
+        if (!fdata)
+        {
+            error() << "Error loading STB HDR texture data from " << filename;
+            error() << "  Reason: " << glow_stbi_failure_reason();
+            return nullptr;
+        }
+
+        auto const* bytes = reinterpret_cast<char const*>(fdata);
+        size_t const num_bytes = size_t(width) * size_t(height) * size_t(channel) * sizeof(float);
+        surface->setData(std::vector<char>(bytes, bytes + num_bytes));
+        glow_stbi_image_free(fdata);
+
+        surface->setType(GL_FLOAT);
+        surface->setMipmapLevel(0);
+        surface->setWidth(width);
+        surface->setHeight(height);
+
+        tex->setWidth(width);
+        tex->setHeight(height);
+        tex->addSurface(surface);
+
+        switch (channel)
+        {
+        case 1:
+            surface->setFormat(GL_RED);
+            tex->setPreferredInternalFormat(GL_R16F);
+            break;
+        case 2:
+            surface->setFormat(GL_RG);
+            tex->setPreferredInternalFormat(GL_RG16F);
+            break;
+        case 3:
+            surface->setFormat(GL_RGB);
+            tex->setPreferredInternalFormat(GL_RGB16F);
+            break;
+        case 4:
+            surface->setFormat(GL_RGBA);
+            tex->setPreferredInternalFormat(GL_RGBA16F);
+            break;
+        default:
+            error() << "Error loading STB HDR texture data from " << filename;
+            error() << "  Unsupported number of channels: " << channel;
+            return nullptr;
+        }
+
+        tex->setAnisotropicFiltering(16.0f);
+        tex->setMagFilter(GL_LINEAR);
+        tex->setMinFilter(GL_LINEAR_MIPMAP_LINEAR);
+
+        return tex;
+    }
 
     unsigned char* data = glow_stbi_load(filename.c_str(), &width, &height, &channel, 0);
 
@@ -27,8 +89,6 @@ SharedTextureData TextureData::loadWithStb(const std::string& filename, const st
         error() << "  Reason: " << glow_stbi_failure_reason();
         return nullptr;
     }
-
-    // TODO: HDR!
 
     // ... process data if not NULL ...
     // ... x = width, y = height, n = # 8-bit components per pixel ...

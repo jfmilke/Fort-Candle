@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <type_traits>
 
+#include <clean-core/always_false.hh>
 #include <clean-core/enable_if.hh>
 #include <clean-core/forward.hh>
 #include <clean-core/fwd.hh>
@@ -72,6 +73,18 @@ constexpr decltype(auto) collection_add(CollectionT&& c, T&& value)
     return collection_traits<CollectionT>::add(c, cc::forward<T>(value));
 }
 
+/// an indexed range is a range (i.e. begin/end/ranged-base-for)
+/// with a subscript operator working with size_t (but might convert)
+/// and a size (i.e. cc::collection_size works)
+template <class CollectionT>
+constexpr bool is_indexed_range = collection_traits<CollectionT>::is_indexed_range;
+
+/// the type of elements when iterating over the collection
+/// NOTE: is not a reference but might be const
+/// NOTE: returns a special error type CollectionT is not a collection
+template <class CollectionT>
+using collection_element_t = typename collection_traits<CollectionT>::element_t;
+
 // ======= Implementation =======
 
 namespace detail
@@ -115,7 +128,23 @@ struct has_data_t<CollectionT,
 {
 };
 
+template <class CollectionT, class = void>
+struct has_index_access_t : std::false_type
+{
+};
+template <class CollectionT>
+struct has_index_access_t<CollectionT,
+                          std::void_t<                                        //
+                              decltype(std::declval<CollectionT>()[size_t{}]) // must not be size_t() due to an nvcc compiler bug
+                              >> : std::true_type
+{
+};
+
 struct collection_op_not_supported
+{
+};
+
+struct not_a_collection
 {
 };
 
@@ -163,9 +192,13 @@ constexpr decltype(auto) collection_add(CollectionT& c, T&& v)
 
 struct base_collection_traits
 {
+    using element_t = detail::not_a_collection;
+
     static constexpr bool has_data = false;
     static constexpr bool has_size = false;
+    static constexpr bool has_index_access = false;
     static constexpr bool is_range = false;
+    static constexpr bool is_indexed_range = false;
     static constexpr bool is_contiguous = false;
     static constexpr bool is_fixed_size = false;
     static constexpr bool can_add = false;
@@ -181,7 +214,9 @@ struct inferred_collection_traits : base_collection_traits
 
     static constexpr bool has_data = has_data_t<CollectionT>::value;
     static constexpr bool has_size = has_size_t<CollectionT>::value;
+    static constexpr bool has_index_access = has_index_access_t<CollectionT>::value;
     static constexpr bool is_range = has_begin_end_t<CollectionT>::value;
+    static constexpr bool is_indexed_range = has_size && has_index_access; // TODO: verify index access type matches element type
     static constexpr bool is_contiguous = has_data && has_size;
     static constexpr bool is_fixed_size = false;
     static constexpr bool can_add = !std::is_same_v<decltype( //
@@ -198,9 +233,22 @@ struct inferred_collection_traits : base_collection_traits
     template <size_t I>
     static constexpr decltype(auto) get(CollectionT& range)
     {
-        return range.data()[I];
+        if constexpr (has_data)
+            return range.data()[I];
+        else if constexpr (has_index_access)
+            return range[I];
+        else
+            static_assert(cc::always_false<CollectionT>, "not indexeable");
     }
-    static constexpr decltype(auto) get(CollectionT& range, size_t i) { return range.data()[i]; }
+    static constexpr decltype(auto) get(CollectionT& range, size_t i)
+    {
+        if constexpr (has_data)
+            return range.data()[i];
+        else if constexpr (has_index_access)
+            return range[i];
+        else
+            static_assert(cc::always_false<CollectionT>, "not indexeable");
+    }
 };
 
 template <class ArrayT, class ElementT, size_t N>
@@ -210,7 +258,9 @@ struct array_collection_traits : base_collection_traits
 
     static constexpr bool has_data = true;
     static constexpr bool has_size = true;
+    static constexpr bool has_index_access = true;
     static constexpr bool is_range = true;
+    static constexpr bool is_indexed_range = true;
     static constexpr bool is_contiguous = true;
     static constexpr bool is_fixed_size = true;
     static constexpr size_t fixed_size = N;
@@ -236,7 +286,9 @@ struct cc_array_collection_traits : base_collection_traits
 
     static constexpr bool has_data = true;
     static constexpr bool has_size = true;
+    static constexpr bool has_index_access = true;
     static constexpr bool is_range = true;
+    static constexpr bool is_indexed_range = true;
     static constexpr bool is_contiguous = true;
     static constexpr bool is_fixed_size = true;
     static constexpr size_t fixed_size = N;
@@ -254,7 +306,7 @@ struct cc_array_collection_traits : base_collection_traits
     }
     static constexpr ElementT& get(ArrayT& range, size_t i) { return range._values[i]; }
 };
-}
+} // namespace detail
 
 template <class T, class>
 struct collection_traits : detail::base_collection_traits // not a range
@@ -301,7 +353,7 @@ struct collection_traits<cc::array<T, N>> : detail::cc_array_collection_traits<c
 {
 };
 template <class T, size_t N>
-struct collection_traits<cc::array<T, N> const> : detail::cc_array_collection_traits<cc::array<T, N> const, T, N>
+struct collection_traits<cc::array<T, N> const> : detail::cc_array_collection_traits<cc::array<T, N> const, T const, N>
 {
 };
 template <class T, size_t N>
@@ -309,8 +361,8 @@ struct collection_traits<cc::array<T, N>&> : detail::cc_array_collection_traits<
 {
 };
 template <class T, size_t N>
-struct collection_traits<cc::array<T, N> const&> : detail::cc_array_collection_traits<cc::array<T, N> const&, T, N>
+struct collection_traits<cc::array<T, N> const&> : detail::cc_array_collection_traits<cc::array<T, N> const&, T const, N>
 {
 };
 
-}
+} // namespace cc

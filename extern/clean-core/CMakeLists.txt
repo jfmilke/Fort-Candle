@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.10)
 project(CleanCore)
 
 # =========================================
@@ -10,6 +10,7 @@ option(CC_ENABLE_BOUND_CHECKING "if true, enables bound checking (e.g. for conta
 option(CC_ENABLE_NULL_CHECKING "if true, enables null checking (e.g. for smart pointers, only if assertions are active)" ON)
 option(CC_ENABLE_CONTRACT_CHECKING "if true, enables contract checking (e.g. pre- and postconditions, only if assertions are active)" ON)
 option(CC_VERBOSE_CMAKE "if true, adds more verbose cmake output (for debugging)" OFF)
+option(CC_ENABLE_ADDRESS_SANITIZER "if true, enables address sanitizer on all arcana libraries" OFF)
 
 # =========================================
 # import scripts
@@ -18,6 +19,9 @@ include(cmake/UnityBuild.cmake)
 include(cmake/SourceGroup.cmake)
 include(cmake/CompileOptions.cmake)
 include(cmake/AddLibrary.cmake)
+
+# TODO: make configurable
+include(cmake/AddTest.cmake)
 
 # =========================================
 # define library
@@ -30,7 +34,9 @@ file(GLOB_RECURSE MISC_FILES "*.natvis")
 arcana_add_library(CC clean-core SOURCES HEADERS)
 
 # add natvis files (visual studio debug views for span, vector, etc.)
-target_sources(clean-core PUBLIC ${MISC_FILES})
+if (${CMAKE_GENERATOR} MATCHES "Visual Studio" OR WIN32)
+    target_sources(clean-core PUBLIC ${MISC_FILES})
+endif()
 
 target_include_directories(clean-core PUBLIC src/)
 
@@ -43,9 +49,15 @@ if(NOT CMAKE_BUILD_TYPE)
         "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel." FORCE)
 endif()
 
-target_compile_definitions(clean-core PUBLIC $<$<CONFIG:DEBUG>:CC_DEBUG>)
-target_compile_definitions(clean-core PUBLIC $<$<CONFIG:RELEASE>:CC_RELEASE>)
-target_compile_definitions(clean-core PUBLIC $<$<CONFIG:RELWITHDEBINFO>:CC_RELWITHDEBINFO>)
+target_link_libraries(clean-core PUBLIC
+    $<$<PLATFORM_ID:Linux>:-pthread>
+)
+
+target_compile_definitions(clean-core PUBLIC
+    $<$<CONFIG:DEBUG>:CC_DEBUG>
+    $<$<CONFIG:RELEASE>:CC_RELEASE>
+    $<$<CONFIG:RELWITHDEBINFO>:CC_RELWITHDEBINFO>
+)
 
 if (CC_ENABLE_ASSERTIONS)
     target_compile_definitions(clean-core PUBLIC $<$<CONFIG:DEBUG>:CC_ENABLE_ASSERTIONS>)

@@ -33,7 +33,7 @@ struct CameraData
     // If in reverse Z, the provided camera far plane is used as the simulated far plane.
     // It concerns directional shadow cascades and light clustering range.
     float camFarPlane = 0;
-    tg::angle camFov = 0_deg;
+    tg::horizontal_fov camFov = tg::horizontal_fov(0_deg);
     bool projectionChangedThisFrame = false;
 
     // == View and Projection matrices ==
@@ -64,7 +64,7 @@ struct ClusterData
     tg::isize3 clusterGridSize;         ///< Amount of clusters in each dimension
     unsigned clusterAmount = 0;         ///< Amount of clusters in total
     tg::isize2 lightAssignmentDispatch; ///< Amount of invocations of the light assignment compute shader
-    tg::vec2 scaleBias;                ///< Precomputed values to calculate cluster indices
+    tg::vec2 scaleBias;                 ///< Precomputed values to calculate cluster indices
 };
 
 struct TemporalData

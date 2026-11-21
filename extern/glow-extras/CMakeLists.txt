@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.10)
 project(glow-extras)
 
 #
@@ -92,10 +92,14 @@ endif()
 # all glow-extras
 add_library(glow-extras ${GLOW_LINK_TYPE})
 
-target_link_libraries(glow-extras PUBLIC glow)
+if (NOT TARGET clean-core)
+    message(FATAL_ERROR "[glow-extras] requires clean-core")
+endif()
+target_link_libraries(glow-extras PUBLIC glow clean-core)
 
 if (MSVC)
-    target_compile_options(glow-extras PUBLIC /MP /FC)
+    # /MP is an MSVC-only flag; clang-cl reports it as an unused argument
+    target_compile_options(glow-extras PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/MP> /FC)
 else()
     target_compile_options(glow-extras PRIVATE -Wall)
 endif()

@@ -63,7 +63,7 @@ void glow::pipeline::StageCamera::updateData(camera::CameraBase const& cam)
 
         // The -Wfloat-equal warning here is intentionally ignored
         // (The comparison is not unsafe, it does exactly what you expect it to do)
-        if (mCameraData.camNearPlane != newNearPlane || mCameraData.camFarPlane != newFarPlane || mCameraData.camFov != newFov)
+        if (mCameraData.camNearPlane != newNearPlane || mCameraData.camFarPlane != newFarPlane || mCameraData.camFov.angle != newFov.angle)
         {
             mCameraData.camNearPlane = newNearPlane;
             mCameraData.camFarPlane = newFarPlane;
@@ -119,7 +119,7 @@ void glow::pipeline::StageCamera::updateData(camera::CameraBase const& cam)
         mCameraData.tanHalfFovY = 1.f / std::abs(mCameraData.proj[1][1]);
 
         // Algorithm specific helper values
-        const float scale = -2.0f * tan(cam.getHorizontalFieldOfView() * 0.5f);
+        const float scale = -2.0f * tan(cam.getHorizontalFieldOfView().angle * 0.5f);
         mCameraData.imagePlanePixelsPerMeter = std::abs(float(mCameraData.resolution.width) / scale);
     }
 

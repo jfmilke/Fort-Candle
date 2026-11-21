@@ -40,7 +40,7 @@ public:
     float getNearClippingPlane() const override { return lens.getNearPlane(); }
     float getFarClippingPlane() const override { return lens.getFarPlane(); }
     tg::angle getVerticalFieldOfView() const override { return lens.getVerticalFov(); }
-    tg::angle getHorizontalFieldOfView() const override { return lens.getHorizontalFov(); }
+    tg::horizontal_fov getHorizontalFieldOfView() const override { return lens.getHorizontalFov(); }
 
 public:
     // -- Handle pass-through --
@@ -52,7 +52,7 @@ public:
     // -- Lens pass-through --
     void setNearPlane(float nearPlane) { lens.setNearPlane(nearPlane); }
     void setFarPlane(float farPlane) { lens.setFarPlane(farPlane); }
-    void setFoV(tg::angle fov) { lens.setFoV(fov); }
+    void setFoV(tg::horizontal_fov fov) { lens.setFoV(fov); }
     void setViewportSize(int w, int h) { lens.setViewportSize(w, h); }
     int getViewportWidth() const { return lens.getViewportSize().width; }
     int getViewportHeight() const { return lens.getViewportSize().height; }

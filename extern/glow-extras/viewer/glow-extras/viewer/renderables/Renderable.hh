@@ -2,6 +2,8 @@
 
 #include <functional>
 
+#include <clean-core/optional.hh>
+
 #include <typed-geometry/tg-lean.hh>
 
 #include <glow/fwd.hh>
@@ -14,6 +16,8 @@
 
 #include "../aabb.hh"
 #include "../fwd.hh"
+
+#include "../picking.hh"
 
 namespace glow
 {
@@ -30,7 +34,8 @@ private:
     bool mIsDirty = false; // this is opt-in
     bool mCanBeEmpty = false;
     std::string mName;
-    mutable tg::optional<size_t> mCachedHash;
+    mutable cc::optional<size_t> mCachedHash;
+    std::optional<Picker> mPicker;
 
     // properties
 public:
@@ -40,6 +45,9 @@ public:
     void setDirty() { mIsDirty = true; }
     void setCanBeEmpty() { mCanBeEmpty = true; }
     bool canBeEmpty() const { return mCanBeEmpty; }
+    void setPicker(Picker p) { mPicker = std::move(p); }
+    bool hasPicker() const { return mPicker.has_value(); }
+    Picker& getPicker() { return mPicker.value(); }
 
     size_t queryHash() const
     {
@@ -60,6 +68,7 @@ public:
     virtual void renderOverlay(RenderInfo const& /*info*/, vector::OGLRenderer const* /*oglRenderer*/, tg::isize2 const& /*res*/, tg::ipos2 const& /*offset*/)
     {
     }
+    virtual void renderPicking(RenderInfo const& /*info*/, int32_t /*RenderableID*/) {}
 
     // NOTE: glow::viewer::interactive possibly obsoletes this feature,
     // but the performance overhead is low

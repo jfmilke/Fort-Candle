@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string_view>
-#include <vector>
 
 #include <typed-geometry/tg-lean.hh>
 

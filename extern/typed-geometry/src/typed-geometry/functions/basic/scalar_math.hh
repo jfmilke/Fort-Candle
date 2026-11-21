@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <cstring>
 
 #include <typed-geometry/detail/scalar_traits.hh>
 #include <typed-geometry/detail/utility.hh>
@@ -153,9 +154,12 @@ template <class T>
 }
 
 template <class A, class B, class C>
-[[nodiscard]] constexpr auto clamp(A const& a, B const& min_value, C const& max_value) -> decltype(min(max(a, min_value), max_value))
+[[nodiscard]] constexpr auto clamp(A const& a, B const& min_value, C const& max_value) //
+    -> decltype(a < min_value   ? min_value
+                : max_value < a ? max_value
+                                : a)
 {
-    return min(max(a, min_value), max_value);
+    return a < min_value ? min_value : max_value < a ? max_value : a;
 }
 
 template <class T>
@@ -240,6 +244,21 @@ template <class T>
 [[nodiscard]] inline f32 log2(f32 v) { return std::log2(v); }
 [[nodiscard]] inline f64 log2(f64 v) { return std::log2(v); }
 
+static_assert(sizeof(f32) == sizeof(uint32_t));
+[[nodiscard]] inline i32 ilog2(f32 v)
+{
+    uint32_t bits;
+    std::memcpy(&bits, &v, sizeof(v));
+    return i32((bits & (0b1111'1111u << 23)) >> 23) - 127;
+}
+static_assert(sizeof(f64) == sizeof(uint64_t));
+[[nodiscard]] inline i32 ilog2(f64 v)
+{
+    uint64_t bits;
+    std::memcpy(&bits, &v, sizeof(v));
+    return i32((bits & (0b111'1111'1111uLL << 52)) >> 52) - 1023;
+}
+
 [[nodiscard]] inline f32 log10(f32 v) { return std::log10(v); }
 [[nodiscard]] inline f64 log10(f64 v) { return std::log10(v); }
 
@@ -286,13 +305,13 @@ template <class T>
 
 [[nodiscard]] constexpr f32 smoothstep(f32 edge0, f32 edge1, f32 x)
 {
-    auto t = clamp((x - edge0) / (edge1 - edge0), f32(0), f32(1));
-    return t * t * (f32(3) - f32(2) * t);
+    auto t = clamp((x - edge0) / (edge1 - edge0), 0.f, 1.f);
+    return t * t * (3.f - 2.f * t);
 }
 [[nodiscard]] constexpr f64 smoothstep(f64 edge0, f64 edge1, f64 x)
 {
-    auto t = clamp((x - edge0) / (edge1 - edge0), f64(0), f64(1));
-    return t * t * (f64(3) - f64(2) * t);
+    auto t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
 }
 
 // ==================================================================

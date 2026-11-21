@@ -2,8 +2,9 @@
 # set up compile options we want for a library
 function(arcana_configure_lib_options LIB_TARGET)
     if (MSVC)
-        target_compile_options(${LIB_TARGET} PUBLIC 
-            /MP # multi-threaded compilation
+        target_compile_options(${LIB_TARGET} PUBLIC
+            # /MP is an MSVC-only flag; clang-cl reports it as an unused argument
+            $<$<CXX_COMPILER_ID:MSVC>:/MP> # multi-threaded compilation
             /we4715 # error on missing return
             /we4477 # printf warnings as errors
             /we4474 # printf warnings as errors
@@ -15,14 +16,30 @@ function(arcana_configure_lib_options LIB_TARGET)
             -Werror=return-type # error on missing return
             -Werror=format # printf warnings as errors
         )
+        if(LINUX)
+            option(CC_LINKER_MOLD "If true, uses the mold linker (default, must be installed)" ON)
+            option(CC_LINKER_GOLD "If true, uses the gold linker (must be installed)" OFF)
+            if (CC_LINKER_MOLD)
+                target_link_libraries(${LIB_TARGET} PUBLIC -fuse-ld=mold)
+            elseif (CC_LINKER_GOLD)
+                target_link_libraries(${LIB_TARGET} PUBLIC -fuse-ld=gold)
+            endif()
+        endif()
 
         if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         else() # GCC
             target_compile_options(${LIB_TARGET} PRIVATE
                 -Wno-sign-compare # disable signed/unsigned warnings
-                -Wno-class-memaccess # disable memset warnings
+                $<$<COMPILE_LANGUAGE:CXX>:-Wno-class-memaccess> # disable memset warnings
             )
         endif()
+    endif()
+
+    # disable floating point contractions (will ruin a lot of code otherwise)
+    if (MSVC)
+        target_compile_options(${LIB_TARGET} PUBLIC /fp:precise)
+    else()
+        target_compile_options(${LIB_TARGET} PUBLIC -ffp-contract=off)
     endif()
 
     # strict mode enables some Werror-xyz errors (mainly used in deploy and CI)
@@ -56,6 +73,14 @@ function(arcana_configure_lib_options LIB_TARGET)
                     -Werror=unused-but-set-variable
                 )
             endif()
+        endif()
+    endif()
+
+    if (CC_ENABLE_ADDRESS_SANITIZER)
+        if (MSVC)
+            target_compile_options(${LIB_TARGET} PUBLIC /fsanitize=address)
+        else()
+            target_compile_options(${LIB_TARGET} PUBLIC -fsanitize=address)
         endif()
     endif()
 endfunction()

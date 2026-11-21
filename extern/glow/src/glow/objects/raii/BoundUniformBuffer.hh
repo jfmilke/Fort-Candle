@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include <clean-core/span.hh>
+
 #include <glow/common/non_copyable.hh>
 #include <glow/fwd.hh>
 #include <glow/gl.hh>
@@ -20,16 +22,17 @@ struct BoundUniformBuffer
     /// Sets the data of this uniform buffer (generic version)
     void setData(size_t size, const void* data, GLenum usage = GL_STATIC_DRAW);
     /// Sets the data of this uniform buffer (vector-of-data version)
-    template <typename DataT>
-    void setData(std::vector<DataT> const& data, GLenum usage = GL_STATIC_DRAW)
+    template <class DataRangeT>
+    void setData(DataRangeT&& data, GLenum usage = GL_STATIC_DRAW)
     {
-        setData(data.size() * sizeof(DataT), data.data(), usage);
+        auto bytes = cc::as_byte_span(data);
+        setData(bytes.size(), bytes.data(), usage);
     }
-    /// Sets the data of this uniform buffer (POD version)
-    template <typename DataT>
-    void setData(DataT const& data, GLenum usage = GL_STATIC_DRAW)
+    /// same as above for initializer list
+    template <class DataT>
+    void setData(std::initializer_list<DataT> data, GLenum usage = GL_STATIC_DRAW)
     {
-        setData(sizeof(data), &data, usage);
+        setData(data.size() * sizeof(DataT), data.begin(), usage);
     }
 
 private:

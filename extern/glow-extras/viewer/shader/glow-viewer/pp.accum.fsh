@@ -1,5 +1,6 @@
 uniform sampler2DRect uTexSSAO;
 uniform sampler2DRect uTexColor;
+uniform sampler2DRect uTexColorOverlay;
 uniform sampler2DRect uTexDepth;
 uniform sampler2DRect uTexColorTransparent;
 uniform sampler2DRect uTexDepthTransparent;
@@ -11,6 +12,7 @@ uniform float uSSAOPower;
 uniform bool uEnableSSAO;
 uniform bool uEnableTonemap;
 uniform bool uReverseZEnabled;
+uniform bool uForceAlphaOne;
 
 uniform float uTonemapExposure;
 
@@ -46,7 +48,7 @@ vec3 RRTAndODTFit(vec3 v)
     return a / b;
 }
 
-vec3 ACESFittedTonemap(vec3 inputColor, float exposure, float gamma)
+vec3 ACESFittedTonemap(vec3 inputColor, float exposure)
 {
     inputColor *= exposure;
 
@@ -66,6 +68,15 @@ vec3 reinhardTonemap(vec3 rgb)
     return rgb / (rgb + vec3(1));
 }
 
+// Exact sRGB OETF (linear -> sRGB), piecewise. Expects c in [0, 1].
+vec3 linearToSrgb(vec3 c)
+{
+    bvec3 cutoff = lessThanEqual(c, vec3(0.0031308));
+    vec3 low  = c * 12.92;
+    vec3 high = 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055;
+    return mix(high, low, vec3(cutoff));
+}
+
 void main()
 {
     vec2 fragCoord = gl_FragCoord.xy;
@@ -73,6 +84,7 @@ void main()
 
     // compose color
     vec4 color = texture(uTexColor, fragCoord);
+    vec4 colorOver = texture(uTexColorOverlay, fragCoord);
     vec4 colorTrans = texture(uTexColorTransparent, fragCoord);
     float dTrans = texture(uTexDepthTransparent, fragCoord).x;
 
@@ -87,14 +99,6 @@ void main()
             color = colorTrans;
     }
     
-    // accum buffer
-    if (uAccumCnt > 0)
-    {
-        vec4 accum = texelFetch(uTexAccum, ivec2(fragCoord));
-        color = mix(accum, color, 1.0 / (uAccumCnt + 1));
-    }
-    fAccum = color;
-    
     // ssao
     if (uEnableSSAO && d > 0)
     {
@@ -104,19 +108,35 @@ void main()
         color.rgb *= ssao;
     }
 
+    // overlay
+    color = mix(color, colorOver, colorOver.a);
+    
+    // accum buffer
+    if (uAccumCnt > 0)
+    {
+        vec4 accum = texelFetch(uTexAccum, ivec2(fragCoord));
+        color = mix(accum, color, 1.0 / (uAccumCnt + 1));
+    }
+    fAccum = color;
+
     if(uReverseZEnabled)
     {
-        if (d > 0 && uEnableTonemap) color = vec4(ACESFittedTonemap(color.xyz, uTonemapExposure, 2.224), 1.0);
+        if (d > 0 && uEnableTonemap) color = vec4(ACESFittedTonemap(color.xyz, uTonemapExposure), 1.0);
         else color = clamp(color, 0.0, 1.0);
     }
     else
     {
-        if (d < 1 && uEnableTonemap) color = vec4(ACESFittedTonemap(color.xyz, uTonemapExposure, 2.224), 1.0);
+        if (d < 1 && uEnableTonemap) color = vec4(ACESFittedTonemap(color.xyz, uTonemapExposure), 1.0);
         else color = clamp(color, 0.0, 1.0);
     }
 
-    // gamma correction
-    color.rgb = pow(color.rgb, vec3(1 / 2.224));
+    // sRGB encode (display transfer function)
+    color.rgb = linearToSrgb(color.rgb);
+
+	if (uForceAlphaOne)
+	{
+		color.a = 1.f;
+	}
 
     fOutput = color;
-    }
+}

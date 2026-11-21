@@ -59,7 +59,7 @@ public:
      * a field of view.
      * @return the horizontal field of view
      */
-    virtual tg::angle getHorizontalFieldOfView() const = 0;
+    virtual tg::horizontal_fov getHorizontalFieldOfView() const = 0;
 };
 }
 }

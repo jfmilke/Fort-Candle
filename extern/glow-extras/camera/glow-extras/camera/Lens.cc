@@ -30,4 +30,4 @@ tg::mat4 glow::camera::Lens::getProjectionMatrix() const
     }
 }
 
-tg::angle glow::camera::Lens::getVerticalFov() const { return tg::atan(tan(0.5f * mHorizontalFov) / mAspectRatio) * 2.0f; }
+tg::angle glow::camera::Lens::getVerticalFov() const { return tg::atan(tan(0.5f * mHorizontalFov.angle) / mAspectRatio) * 2.0f; }

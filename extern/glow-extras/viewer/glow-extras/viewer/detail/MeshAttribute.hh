@@ -35,7 +35,7 @@ class MeshAttribute
 public:
     std::string const& name() const { return mName; }
 
-    MeshAttribute(std::string name) : mName(move(name)) {}
+    MeshAttribute(std::string name) : mName(std::move(name)) {}
 
     virtual SharedArrayBuffer createMeshRenderableArrayBuffer(MeshDefinition&)
     {
@@ -75,7 +75,7 @@ protected:
 
 private:
     std::string mName;
-    mutable tg::optional<size_t> mCachedHash;
+    mutable cc::optional<size_t> mCachedHash;
 };
 
 template <class T>
@@ -86,7 +86,7 @@ public:
 
     T mConstant;
 
-    ConstantMeshAttribute(std::string name, T const& constant) : MeshAttribute(move(name)), mConstant(constant) {}
+    ConstantMeshAttribute(std::string name, T const& constant) : MeshAttribute(std::move(name)), mConstant(constant) {}
 
     SharedArrayBuffer createMeshRenderableArrayBuffer(MeshDefinition&) override { return nullptr; }  // works
     SharedArrayBuffer createLineRenderableArrayBuffer(MeshDefinition&) override { return nullptr; }  // works
@@ -185,7 +185,7 @@ public:
             throw std::logic_error("Mesh type " + std::string(typeid(mesh).name()) + " not supported");
     }
 
-    VertexMeshAttribute(std::string name, polymesh::vertex_attribute<T> const& data) : MeshAttribute(move(name))
+    VertexMeshAttribute(std::string name, polymesh::vertex_attribute<T> const& data) : MeshAttribute(std::move(name))
     {
         polymesh::Mesh const& mesh = data.mesh();
         mMeshInfo = make_mesh_info(mesh);
@@ -194,12 +194,12 @@ public:
         for (auto v : mesh.all_vertices())
             mData.push_back(data[v]);
     }
-    VertexMeshAttribute(std::string name, std::vector<T> const& data) : MeshAttribute(move(name))
+    VertexMeshAttribute(std::string name, std::vector<T> const& data) : MeshAttribute(std::move(name))
     {
         mMeshInfo.vertexCount = data.size();
         mData = data;
     }
-    VertexMeshAttribute(std::string name, std::vector<std::vector<T>> const& data) : MeshAttribute(move(name))
+    VertexMeshAttribute(std::string name, std::vector<std::vector<T>> const& data) : MeshAttribute(std::move(name))
     {
         mMeshInfo.vertexCount = 0;
 
@@ -211,7 +211,7 @@ public:
             }
     }
     template <int N>
-    VertexMeshAttribute(std::string name, std::vector<std::array<T, N>> const& data) : MeshAttribute(move(name))
+    VertexMeshAttribute(std::string name, std::vector<std::array<T, N>> const& data) : MeshAttribute(std::move(name))
     {
         mMeshInfo.vertexCount = 0;
 
@@ -306,7 +306,7 @@ public:
             throw std::logic_error("Mesh type " + std::string(typeid(mesh).name()) + " not supported");
     }
 
-    EdgeMeshAttribute(std::string name, polymesh::edge_attribute<T> const& data) : MeshAttribute(move(name))
+    EdgeMeshAttribute(std::string name, polymesh::edge_attribute<T> const& data) : MeshAttribute(std::move(name))
     {
         polymesh::Mesh const& mesh = data.mesh();
         mMeshInfo = make_mesh_info(mesh);
@@ -315,7 +315,7 @@ public:
         for (auto e : mesh.all_edges())
             mData.push_back(data[e]);
     }
-    EdgeMeshAttribute(std::string name, std::vector<T> const& data) : MeshAttribute(move(name))
+    EdgeMeshAttribute(std::string name, std::vector<T> const& data) : MeshAttribute(std::move(name))
     {
         mMeshInfo.edgeCount = data.size();
         mData = data;
@@ -425,7 +425,7 @@ public:
             throw std::logic_error("Mesh type " + std::string(typeid(mesh).name()) + " not supported");
     }
 
-    FaceMeshAttribute(std::string name, polymesh::face_attribute<T> const& data) : MeshAttribute(move(name))
+    FaceMeshAttribute(std::string name, polymesh::face_attribute<T> const& data) : MeshAttribute(std::move(name))
     {
         polymesh::Mesh const& mesh = data.mesh();
         mMeshInfo = make_mesh_info(mesh);
@@ -434,7 +434,7 @@ public:
         for (auto f : mesh.all_faces())
             mData.push_back(data[f]);
     }
-    FaceMeshAttribute(std::string name, std::vector<T> const& data) : MeshAttribute(move(name))
+    FaceMeshAttribute(std::string name, std::vector<T> const& data) : MeshAttribute(std::move(name))
     {
         mMeshInfo.faceCount = data.size();
         mData = data;
@@ -521,7 +521,7 @@ public:
             throw std::logic_error("Mesh type " + std::string(typeid(mesh).name()) + " not supported");
     }
 
-    HalfedgeMeshAttribute(std::string name, polymesh::halfedge_attribute<T> const& data) : MeshAttribute(move(name))
+    HalfedgeMeshAttribute(std::string name, polymesh::halfedge_attribute<T> const& data) : MeshAttribute(std::move(name))
     {
         polymesh::Mesh const& mesh = data.mesh();
         mMeshInfo = make_mesh_info(mesh);
@@ -530,7 +530,7 @@ public:
         for (auto h : mesh.all_halfedges())
             mData.push_back(data[h]);
     }
-    HalfedgeMeshAttribute(std::string name, std::vector<T> const& data) : MeshAttribute(move(name))
+    HalfedgeMeshAttribute(std::string name, std::vector<T> const& data) : MeshAttribute(std::move(name))
     {
         mMeshInfo.edgeCount = data.size() / 2;
         mData = data;
@@ -717,7 +717,7 @@ public:
             throw std::logic_error("Mesh type " + std::string(typeid(mesh).name()) + " not supported");
     }
 
-    RawMeshAttribute(std::string name, std::vector<T> const& data) : MeshAttribute(move(name)) { mData = data; }
+    RawMeshAttribute(std::string name, std::vector<T> const& data) : MeshAttribute(std::move(name)) { mData = data; }
 
     float computeMaxFloat() override
     {

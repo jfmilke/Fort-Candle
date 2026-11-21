@@ -74,6 +74,12 @@ public:
     using compact_size_t = detail::compact_size_t_typed<T, N>;
     constexpr capped_vector() = default;
 
+    explicit capped_vector(size_t size)
+    {
+        CC_CONTRACT(size <= N);
+        resize(size, T());
+    }
+
     [[nodiscard]] static capped_vector defaulted(size_t size)
     {
         CC_CONTRACT(size <= N);
@@ -161,18 +167,20 @@ public:
 
     // methods
 public:
-    void push_back(T const& t)
+    T& push_back(T const& t)
     {
         CC_CONTRACT(_size < N);
         new (placement_new, &_u.value[_size]) T(t);
         ++_size;
+        return back();
     }
 
-    void push_back(T&& t)
+    T& push_back(T&& t)
     {
         CC_CONTRACT(_size < N);
         new (placement_new, &_u.value[_size]) T(cc::move(t));
         ++_size;
+        return back();
     }
 
     void pop_back()
@@ -219,6 +227,34 @@ public:
         _size = compact_size_t(new_size);
     }
 
+    /// removes the element at the given index
+    void remove_at(size_t idx)
+    {
+        CC_CONTRACT(idx < _size);
+        for (size_t i = size_t(idx) + 1; i < _size; ++i)
+            _u.value[i - 1] = cc::move(_u.value[i]);
+        --_size;
+        _u.value[_size].~T();
+    }
+
+    /// removes the element at the given index without preserving order
+    void remove_at_unordered(size_t idx)
+    {
+        CC_CONTRACT(size_t(idx) < _size);
+        cc::swap(_u.value[size_t(idx)], this->back());
+        this->pop_back();
+    }
+
+    /// returns true iff any entry is == value
+    template <class U = T>
+    bool contains(U const& value) const
+    {
+        for (size_t i = 0; i < size_t(_size); ++i)
+            if (_u.value[i] == value)
+                return true;
+        return false;
+    }
+
     constexpr bool operator==(cc::span<T const> rhs) const noexcept
     {
         if (_size != rhs.size())
@@ -238,6 +274,9 @@ public:
                 return true;
         return false;
     }
+
+    bool operator==(capped_vector const& rhs) const noexcept { return operator==(span<T const>(rhs)); }
+    bool operator!=(capped_vector const& rhs) const noexcept { return operator!=(span<T const>(rhs)); }
 
 private:
     compact_size_t _size = 0;

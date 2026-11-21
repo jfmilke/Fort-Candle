@@ -155,6 +155,8 @@ void DebugOverlay::ToggleVisibility()
         mSuppressed = false;
 }
 
+void DebugOverlay::Supress() { mSuppressed = true; }
+
 void DebugOverlay::OnGui()
 {
     TG_ASSERT(mInitialized);

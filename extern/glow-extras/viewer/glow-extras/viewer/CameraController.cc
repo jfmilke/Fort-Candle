@@ -18,14 +18,8 @@ tg::vec3 fwd_from_azi_alti(tg::angle azi, tg::angle alt)
                     saz * cal);
 }
 
-tg::angle azi_from_fwd(tg::vec3 fwd)
-{
-    return angle_between(tg::vec2(fwd.x, fwd.z), tg::vec2::unit_x) * tg::sign(-fwd.z);
-}
-tg::angle alti_from_fwd(tg::vec3 fwd)
-{
-    return -tg::asin(tg::dir(fwd).y);
-}
+tg::angle azi_from_fwd(tg::vec3 fwd) { return angle_between(tg::vec2(fwd.x, fwd.z), tg::vec2::unit_x) * tg::sign(-fwd.z); }
+tg::angle alti_from_fwd(tg::vec3 fwd) { return -tg::asin(tg::dir(fwd).y); }
 }
 
 
@@ -36,18 +30,24 @@ void CameraController::setupMesh(float size, tg::pos3 center)
     mMeshSize = size;
     mMeshCenter = center;
 
-    s.TargetMinDistance = mMeshSize / 10000.f;
-    s.DefaultTargetDistance = mMeshSize * 1.0f;
-    s.MoveSpeedStart = mMeshSize;
-    s.MoveSpeedMin = mMeshSize / 1000.f;
-    s.MoveSpeedMax = mMeshSize * 1000.f;
-    s.FocusRefDistance = mMeshSize / 3.f;
+    // Originally, glow-viewer used a default FoV of 60° and a camera distance of 1 times mMeshSize.
+    // We take these settings as a base value to maintain visual continuity for scenes that use the default camera FoV.
+    const float legacyDistanceFactor = tg::tan(0.5f * 60_deg);
+
+    // Camera distance depends on mesh size and the actual camera FoV.
+    s.DefaultTargetDistance = mMeshSize * legacyDistanceFactor / tg::tan(0.5f * s.HorizontalFov.angle);
+
+    s.TargetMinDistance = s.DefaultTargetDistance / 10000.f;
+    s.MoveSpeedStart = s.DefaultTargetDistance;
+    s.MoveSpeedMin = s.DefaultTargetDistance / 1000.f;
+    s.MoveSpeedMax = s.DefaultTargetDistance * 1000.f;
+    s.FocusRefDistance = s.DefaultTargetDistance / 3.f;
 
     // Near plane must not be zero
     auto constexpr floatEps = 1e-12f;
     static_assert(floatEps > 0.f, "Float epsilon too small");
-    s.NearPlane = tg::max(mMeshSize / 100000.f, floatEps);
-    s.FarPlane = 2.f * mMeshSize; // only used if no reverse z
+    s.NearPlane = tg::max(s.DefaultTargetDistance / 100000.f, floatEps);
+    s.FarPlane = 2.f * s.DefaultTargetDistance; // only used if no reverse z
 
     resetView();
 }
@@ -100,6 +100,31 @@ tg::mat4 CameraController::computeProjMatrix() const
     }
     else if (mReverseZEnabled)
         return tg::perspective_reverse_z_opengl(s.HorizontalFov, mWindowWidth / float(mWindowHeight), s.NearPlane);
+    else
+    {
+        auto np = tg::max(s.NearPlane, s.FarPlane / 4e3f);
+        return tg::perspective_opengl(s.HorizontalFov, mWindowWidth / float(mWindowHeight), np, s.FarPlane);
+    }
+}
+
+tg::mat4 CameraController::computeProjMatrixNoReverseZ() const
+{
+    if (mOrthographicModeEnabled)
+    {
+        auto const aspect = float(mWindowWidth) / mWindowHeight;
+        auto bounds = mOrthographicBounds;
+        if (aspect < 1.0f)
+        {
+            bounds.min.y /= aspect;
+            bounds.max.y /= aspect;
+        }
+        else
+        {
+            bounds.min.x *= aspect;
+            bounds.max.x *= aspect;
+        }
+        return tg::orthographic(bounds.min.x, bounds.max.x, bounds.min.y, bounds.max.y, bounds.min.z, bounds.max.z);
+    }
     else
     {
         auto np = tg::max(s.NearPlane, s.FarPlane / 4e3f);
@@ -248,15 +273,16 @@ void CameraController::targetLookaround(float relDx, float relDy)
     mMode = Mode::Targeted;
 }
 
-void CameraController::moveCamera(float dRight, float dFwd, float dUp, float elapsedSeconds)
+void CameraController::moveCamera(float dRight, float dFwd, float dUp, float dUpAbsolute, float elapsedSeconds)
 {
-    if (dRight == 0 && dUp == 0 && dFwd == 0)
+    if (dRight == 0 && dUp == 0 && dFwd == 0 && dUpAbsolute == 0)
         return;
 
     auto speed = mMoveSpeed * elapsedSeconds;
 
     mPos += mRight * speed * dRight;
     mPos += mUp * speed * dUp;
+    mPos += tg::vec3{0.f, speed * dUpAbsolute, 0.f};
     mPos += mFwd * speed * dFwd;
 
     mMode = Mode::FPS;
@@ -336,9 +362,17 @@ void CameraController::update(float elapsedSeconds)
     mRight = normalize(cross(mFwd, mUp));
     mUp = normalize(cross(mRight, mFwd));
 
+    TG_ASSERT(s.TranslationalSmoothingHalfTimeMillis >= 0);
+    TG_ASSERT(s.RotationalSmoothingHalfTimeMillis >= 0);
+
     // smoothing
-    auto alphaTranslational = tg::pow(0.5f, 1000 * elapsedSeconds / s.TranslationalSmoothingHalfTime);
-    auto alphaRotational = tg::pow(0.5f, 1000 * elapsedSeconds / s.RotationalSmoothingHalfTime);
+    auto alphaTranslational = 0.f;
+    auto alphaRotational = 0.f;
+    if (s.TranslationalSmoothingHalfTimeMillis > 0)
+        alphaTranslational = tg::pow(0.5f, 1000 * elapsedSeconds / s.TranslationalSmoothingHalfTimeMillis);
+    if (s.RotationalSmoothingHalfTimeMillis > 0)
+        alphaRotational = tg::pow(0.5f, 1000 * elapsedSeconds / s.RotationalSmoothingHalfTimeMillis);
+
     mSmoothedTargetDistance = tg::mix(mTargetDistance, mSmoothedTargetDistance, alphaTranslational);
     mSmoothedTargetPos = mix(mTargetPos, mSmoothedTargetPos, alphaTranslational);
     mSmoothedPos = mix(mPos, mSmoothedPos, alphaTranslational);

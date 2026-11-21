@@ -1,12 +1,15 @@
 #pragma once
 
+#include <cstddef>
 #include <cstring> // memcpy
+
 #include <type_traits>
 
 #include <clean-core/assert.hh>
 #include <clean-core/enable_if.hh>
+#include <clean-core/has_operator.hh>
 #include <clean-core/is_contiguous_range.hh>
-#include <clean-core/typedefs.hh>
+#include <clean-core/utility.hh>
 
 namespace cc
 {
@@ -17,6 +20,8 @@ namespace cc
 template <class T>
 struct span
 {
+    using element_t = T;
+
     // ctors
 public:
     constexpr span() = default;
@@ -31,7 +36,7 @@ public:
 
     /// generic span constructor from contiguous_range
     /// CAUTION: container MUST outlive the span!
-    template <class Container, cc::enable_if<is_contiguous_range<Container, T>> = true>
+    template <class Container, cc::enable_if<is_contiguous_range<Container, T> && !std::is_same_v<std::decay_t<Container>, span>> = true>
     CC_FORCE_INLINE constexpr span(Container&& c) : _data(c.data()), _size(c.size())
     {
     }
@@ -53,6 +58,17 @@ public:
     constexpr size_t size() const { return _size; }
     constexpr size_t size_bytes() const { return _size * sizeof(T); }
     constexpr bool empty() const { return _size == 0; }
+
+    /// returns true iff any entry is == value
+    template <class U = T>
+    constexpr bool contains(U const& value) const
+    {
+        static_assert(cc::has_operator_equal<T, U>);
+        for (size_t i = 0; i < _size; ++i)
+            if (_data[i] == value)
+                return true;
+        return false;
+    }
 
     constexpr T& operator[](size_t i) const
     {
@@ -94,11 +110,11 @@ public:
         return {_data + offset, _size - offset};
     }
 
-    span<byte const> as_bytes() const { return {reinterpret_cast<byte const*>(_data), _size * sizeof(T)}; }
+    span<std::byte const> as_bytes() const { return {reinterpret_cast<std::byte const*>(_data), _size * sizeof(T)}; }
     template <class U = T, cc::enable_if<!std::is_const_v<U>> = true>
-    span<byte> as_writable_bytes() const
+    span<std::byte> as_writable_bytes() const
     {
-        return {reinterpret_cast<byte*>(_data), _size * sizeof(T)};
+        return {reinterpret_cast<std::byte*>(_data), _size * sizeof(T)};
     }
 
     template <class U>
@@ -106,29 +122,41 @@ public:
     {
         static_assert(std::is_trivially_copyable_v<T>, "only works if source type is trivially copyable");
         static_assert(std::is_trivially_copyable_v<U>, "only works if target type is trivially copyable");
-        CC_CONTRACT(size_bytes() % sizeof(U) == 0 && "target size must be integer");
         static_assert(std::is_const_v<U> || !std::is_const_v<T>, "cannot break const-correctness with reinterpret_as<U>");
+
+        CC_CONTRACT(size_bytes() % sizeof(U) == 0 && "target size must be integer");
         return {reinterpret_cast<U*>(_data), _size * sizeof(T) / sizeof(U)};
+    }
+
+    /// true iff both spans have equal size and content compares equal
+    /// in particular, they can point to different regions in memory
+    constexpr bool equals_content(span<T const> rhs) const
+    {
+        if (_size != rhs._size)
+            return false;
+
+        for (size_t i = 0; i < _size; ++i)
+            if (_data[i] != rhs._data[i])
+                return false;
+
+        return true;
+    }
+
+    /// true iff "this < rhs" in a lexicographic sense
+    constexpr bool is_lexicographically_smaller_than(span<T const> rhs) const
+    {
+        auto const min_size = cc::min(_size, rhs._size);
+
+        for (size_t i = 0; i < min_size; ++i)
+            if (_data[i] != rhs._data[i])
+                return _data[i] < rhs._data[i]; // TODO: use 3way comparison?
+
+        // if all elements are equal, the shorter one is "smaller"
+        return _size < rhs._size;
     }
 
     // operations
 public:
-    /// copies all elements from this span to a target
-    /// NOTE: sizes must match
-    /// NOTE: target and this must not overlap!
-    /// NOTE: uses std::memcpy for trivially copyable types
-    /// TODO: versions with offset + count?
-    template <class U = std::remove_const_t<T>, enable_if<std::is_assignable_v<U&, T>> = true>
-    constexpr void copy_to(span<U> target) const
-    {
-        CC_CONTRACT(target.size() == _size);
-        if constexpr (std::is_same_v<std::decay_t<T>, std::decay_t<U>> && std::is_trivially_copyable_v<T>)
-            std::memcpy(target.data(), _data, size_bytes());
-        else
-            for (size_t i = 0; i < _size; ++i)
-                target._data[i] = _data[i];
-    }
-
     /// copies all elements from the source to this span
     /// NOTE: sizes must match
     /// NOTE: target and this must not overlap!
@@ -138,12 +166,54 @@ public:
     constexpr void copy_from(span<U> source) const
     {
         CC_CONTRACT(source.size() == _size);
+
         if constexpr (std::is_same_v<std::decay_t<T>, std::decay_t<U>> && std::is_trivially_copyable_v<T>)
-            std::memcpy(_data, source._data, size_bytes());
+        {
+            if (_size > 0)
+                std::memcpy(_data, source._data, size_bytes());
+        }
         else
+        {
             for (size_t i = 0; i < _size; ++i)
                 _data[i] = source._data[i];
+        }
     }
+    constexpr void copy_from(span<T const> source) const { this->copy_from<T const>(source); }
+
+    /// copies all elements from this span to a target
+    template <class U = std::remove_const_t<T>, enable_if<std::is_assignable_v<U&, T>> = true>
+    constexpr void copy_to(span<U> target) const
+    {
+        target.copy_from(*this);
+    }
+    constexpr void copy_to(span<std::remove_const_t<T>> target) const { target.copy_from(*this); }
+
+    /// fills this span with elements from the source up until capacity
+    /// returns amount of elements in source
+    constexpr size_t fill_from(span<T const> source) const
+    {
+        size_t const num_elements_written = cc::min(source._size, _size);
+        if constexpr (std::is_trivially_copyable_v<T>)
+        {
+            if (num_elements_written > 0)
+            {
+                std::memcpy(_data, source._data, num_elements_written * sizeof(T));
+            }
+        }
+        else
+        {
+            for (size_t i = 0; i < num_elements_written; ++i)
+            {
+                _data[i] = source._data[i];
+            }
+        }
+
+        return source._size;
+    }
+
+    // allow access to private fields across template instantiations
+    template <class U>
+    friend struct span;
 
 private:
     T* _data = nullptr;
@@ -153,39 +223,49 @@ private:
 
 // deduction guide for containers
 template <class Container, cc::enable_if<is_any_contiguous_range<Container>> = true>
-span(Container& c)->span<std::remove_reference_t<decltype(*c.data())>>;
+span(Container& c) -> span<std::remove_reference_t<decltype(*c.data())>>;
 template <class Container, cc::enable_if<is_any_contiguous_range<Container>> = true>
-span(Container&& c)->span<std::remove_reference_t<decltype(*c.data())>>;
+span(Container&& c) -> span<std::remove_reference_t<decltype(*c.data())>>;
 
 /// converts a triv. copyable value, or a container with triv. copyable elements to a cc::span<std::byte>
 template <class T>
 auto as_byte_span(T&& value)
 {
-    if constexpr (is_contiguous_range<T, void>)
+    if constexpr (std::is_array_v<std::remove_reference_t<T>>)
+    {
+        // T(&)[N]
+        auto s = cc::span(value);
+        using ElementT = std::remove_reference_t<decltype(s[0])>;
+        if constexpr (std::is_const_v<ElementT>)
+            return s.template reinterpret_as<std::byte const>();
+        else
+            return s.template reinterpret_as<std::byte>();
+    }
+    else if constexpr (is_contiguous_range<T, void>)
     {
         // container of some type
         using ElementT = std::remove_reference_t<decltype(value.data()[0])>;
         static_assert(std::is_trivially_copyable_v<ElementT>, "cannot convert range of non-trivially copyable elements to byte span");
-        return span<byte>{reinterpret_cast<byte*>(value.data()), sizeof(ElementT) * value.size()};
+        return span<std::byte>{reinterpret_cast<std::byte*>(value.data()), sizeof(ElementT) * value.size()};
     }
     else if constexpr (is_contiguous_range<T, void const>)
     {
         // container of some type
         using ElementT = std::remove_reference_t<decltype(value.data()[0])>;
         static_assert(std::is_trivially_copyable_v<ElementT>, "cannot convert range of non-trivially copyable elements to byte span");
-        return span<byte const>{reinterpret_cast<byte const*>(value.data()), sizeof(ElementT) * value.size()};
+        return span<std::byte const>{reinterpret_cast<std::byte const*>(value.data()), sizeof(ElementT) * value.size()};
     }
     else if constexpr (std::is_const_v<std::remove_reference_t<T>>)
     {
         // single POD type
         static_assert(std::is_trivially_copyable_v<std::remove_reference_t<T>>, "cannot convert non-trivially copyable element to byte span");
-        return span<byte const>{reinterpret_cast<byte const*>(&value), sizeof(T)};
+        return span<std::byte const>{reinterpret_cast<std::byte const*>(&value), sizeof(T)};
     }
     else
     {
         // single POD type
         static_assert(std::is_trivially_copyable_v<std::remove_reference_t<T>>, "cannot convert non-trivially copyable element to byte span");
-        return span<byte>{reinterpret_cast<byte*>(&value), sizeof(T)};
+        return span<std::byte>{reinterpret_cast<std::byte*>(&value), sizeof(T)};
     }
 }
 
@@ -212,4 +292,4 @@ T& from_byte_span(cc::span<std::byte const> bytes)
     CC_ASSERT(bytes.size() == sizeof(T) && "size must match exactly");
     return *reinterpret_cast<T*>(bytes.data());
 }
-}
+} // namespace cc

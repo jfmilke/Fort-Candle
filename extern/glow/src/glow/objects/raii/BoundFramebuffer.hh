@@ -66,6 +66,7 @@ private:
     bool isCurrent() const;
 
     void updateViewport();
+    void updateViewportIfAuto();
 
 public:
     BoundFramebuffer(BoundFramebuffer&&); // allow move

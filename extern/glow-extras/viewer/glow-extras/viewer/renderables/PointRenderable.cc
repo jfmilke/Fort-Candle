@@ -1,6 +1,7 @@
 #include "PointRenderable.hh"
 
 #include <glow/common/hash.hh>
+#include <glow/common/scoped_gl.hh>
 
 #include "../RenderInfo.hh"
 #include "../detail/MeshShaderBuilder.hh"
@@ -46,7 +47,8 @@ void PointRenderable::renderPoints(const RenderInfo& info)
     shader["uInvModel"] = inverse(transform());
     shader["uInvView"] = inverse(info.view);
     shader["uInvProj"] = inverse(info.proj);
-    shader["uClipPlane"] = getClipPlane();
+    shader["uFragmentClipPlane"] = getFragmentClipPlane();
+    shader["uPrimitiveClipPlane"] = getPrimitiveClipPlane();
 
     if (mRenderMode == RenderMode::Sphere)
     {
@@ -55,6 +57,7 @@ void PointRenderable::renderPoints(const RenderInfo& info)
         auto const tanHalfFovY = 1.f / tg::abs(info.proj[1][1]);
         shader["uTanFov2"] = tanHalfFovY;
         shader["uScreenHeight"] = float(info.resolution.height);
+        shader["uScreenWidth"] = float(info.resolution.width);
     }
 
     if (getColorMapping())
@@ -84,6 +87,8 @@ void PointRenderable::renderShadow(RenderInfo const& info)
     shader["uInvProj"] = inverse(info.proj);
     shader["uScreenSize"] = tg::vec2(info.resolution);
     shader["uCamPos"] = info.camPos;
+    shader["uFragmentClipPlane"] = getFragmentClipPlane();
+    shader["uPrimitiveClipPlane"] = getPrimitiveClipPlane();
 
     if (mRenderMode == RenderMode::Sphere)
     {
@@ -117,6 +122,47 @@ void PointRenderable::renderTransparent(const RenderInfo& info)
         return;
 
     renderPoints(info);
+}
+
+void glow::viewer::PointRenderable::renderPicking(RenderInfo const& info, int32_t renderableID)
+{
+    if (!hasPicker())
+        return;
+
+    if (mVertexArray->getVertexCount() == 0)
+        return; // empty
+
+    auto shader = mPickingShader->use();
+
+    shader["uModel"] = transform();
+    shader["uView"] = info.view;
+    shader["uProj"] = info.proj;
+    shader["uInvModel"] = inverse(transform());
+    shader["uInvView"] = inverse(info.view);
+    shader["uInvProj"] = inverse(info.proj);
+    shader["uScreenSize"] = tg::vec2(info.resolution);
+    shader["uCamPos"] = info.camPos;
+    shader["uCamDir"] = info.camForward;
+    shader["uRenderableID"] = renderableID;
+    shader["uFragmentClipPlane"] = getFragmentClipPlane();
+    shader["uPrimitiveClipPlane"] = getPrimitiveClipPlane();
+
+    if (mRenderMode == RenderMode::Sphere)
+    {
+        shader["uIsReverseZEnabled"] = info.reverseZEnabled;
+        shader["uViewTranspose"] = transpose(info.view);
+        auto const tanHalfFovY = 1.f / tg::abs(info.proj[1][1]);
+        shader["uTanFov2"] = tanHalfFovY;
+        shader["uScreenHeight"] = float(info.resolution.height);
+    }
+
+    for (auto const& a : getAttributes())
+        a->prepareShader(shader);
+
+    if (getMasking())
+        getMasking()->prepareShader(shader);
+
+    mVertexArray->bind().draw();
 }
 
 SharedPointRenderable PointRenderable::create(const builder::PointBuilder& builder)
@@ -180,6 +226,29 @@ void PointRenderable::init()
         auto const color = tg::color4(tg::color3(mCameraFacing && mRenderMode != RenderMode::Sphere ? 0.2f : .7f), 1.0f);
         addAttribute(detail::make_mesh_attribute("aColor", color));
     }
+    if (hasPicker() && !hasAttribute("aPickID"))
+    {
+        /* Define ids per primitive*/
+        pm::vertex_attribute<int32_t> IDs;
+        int32_t vID = 0;
+        auto& p = this->getPicker();
+
+        auto pm = std::dynamic_pointer_cast<detail::PolyMeshDefinition>(getMeshDefinition());
+        TG_ASSERT(pm);
+
+        IDs = pm::vertex_attribute<int32_t>(pm->mesh);
+        std::vector<pm::vertex_index> vertex_indices;
+        vertex_indices.reserve(IDs.size());
+        for (auto v : pm->mesh.vertices())
+        {
+            IDs[v] = vID;
+            vID++;
+            vertex_indices.push_back(v.idx); // offers ability to map back the read IDs to face_indices
+        }
+
+        addAttribute(detail::make_mesh_attribute("aPickID", IDs));
+        p.init(vertex_indices);
+    }
 
     const auto aColor = getAttribute("aColor");
 
@@ -220,7 +289,8 @@ void PointRenderable::init()
     // build shader
     {
         // Shared functionality
-        auto createNonFragmentShaderParts = [&](detail::MeshShaderBuilder& sb) {
+        auto createNonFragmentShaderParts = [&](detail::MeshShaderBuilder& sb)
+        {
             sb.addUniform("mat4", "uModel");
             sb.addUniform("mat4", "uInvModel");
 
@@ -229,8 +299,9 @@ void PointRenderable::init()
             sb.addUniform("mat4", "uProj");
             sb.addUniform("mat4", "uInvProj");
             sb.addUniform("vec3", "uCamPos");
-            sb.addUniform("vec4", "uClipPlane");
-
+            sb.addUniform("vec3", "uCamDir");
+            sb.addUniform("vec4", "uFragmentClipPlane");
+            sb.addUniform("vec4", "uPrimitiveClipPlane");
 
             sb.addUniform("vec2", "uScreenSize");
             if (mRenderMode == RenderMode::Sphere)
@@ -238,6 +309,7 @@ void PointRenderable::init()
                 sb.addUniform("mat4", "uViewTranspose");
                 sb.addUniform("float", "uTanFov2");
                 sb.addUniform("float", "uScreenHeight");
+                sb.addUniform("float", "uScreenWidth");
             }
 
             sb.addAttribute("vec2", "aQuadPos");
@@ -245,12 +317,13 @@ void PointRenderable::init()
             sb.addPassthrough("vec2", "QuadPos");
             sb.addPassthrough("vec3", "Normal");
 
+            sb.addPassthrough("vec3", "PointPositionWorldSpace");
+
             for (auto const& attr : getAttributes())
                 attr->buildShader(sb);
 
             if (mRenderMode == RenderMode::Sphere)
             {
-                sb.addPassthrough("vec3", "SphereCenter");
                 sb.addPassthrough("float", "SphereRadius");
                 sb.addPassthrough("vec3", "fragPosWS");
 
@@ -258,23 +331,34 @@ void PointRenderable::init()
                 {
                     // world space size spheres
                     sb.addVertexShaderCode(R"(
-                        vOut.SphereRadius = aPointSize;
-                        vOut.SphereCenter = vec3(uModel * vec4(aPosition, 1.0));
+                         vOut.SphereRadius = aPointSize;
+                         vOut.PointPositionWorldSpace = vec3(uModel * vec4(aPosition, 1.0));
 
-                        vec4 vpos = uView * uModel * vec4(aPosition, 1.0);
-                        vec3 fwd = normalize(vpos.xyz);
-                        vec3 left = normalize(cross(vec3(0,1,0), fwd));
-                        vec3 up = cross(fwd, left);
-                        vec2 qp = aQuadPos * 2 - 1;
-                        vpos.xyz -= left * qp.x * aPointSize;
-                        vpos.xyz += up * qp.y * aPointSize;
-                        vpos.xyz -= fwd * aPointSize;
+                         vec4 vpos = uView * uModel * vec4(aPosition, 1.0);
+                         vec4 vposCS = uProj * vpos;
+                         vec2 vposNDC = vposCS.xy / vposCS.w;
 
-                        vpos = uInvModel * uInvView * vpos;
+                         // clip position to near plane in NDC and get orientation by transforming back into VS (required for orthographic rendering)
+                         vec4 pNearNDC = vec4(vposNDC, -1, 1);
+                         vec4 pNearCS = pNearNDC * vposCS.w;
 
-                        vOut.Normal = vec3(0,0,0);
-                        vOut.fragPosWS = vec3(uModel * vec4(vpos.xyz, 1.0));
-                        gl_Position = uProj * uView * uModel * vec4(vpos.xyz, 1.0);
+                         vec4 pNearVS = uInvProj * pNearCS;
+                         pNearVS /= pNearVS.w;
+
+                         vec3 fwd = normalize(vpos.xyz - pNearVS.xyz);
+
+                         vec3 left = normalize(cross(vec3(0,1,0), fwd));
+                         vec3 up = normalize(cross(fwd, left));
+                         vec2 qp = aQuadPos * 2 - 1;
+                         vpos.xyz -= left * qp.x * aPointSize;
+                         vpos.xyz += up * qp.y * aPointSize;
+                         vpos.xyz -= fwd * aPointSize;
+
+                         vpos =  uInvView * vpos;
+
+                         vOut.Normal = vec3(0,0,0);
+                         vOut.fragPosWS = vpos.xyz;
+                         gl_Position = uProj * uView * vec4(vpos.xyz, 1.0);
                     )");
                 }
                 else
@@ -285,7 +369,7 @@ void PointRenderable::init()
                         float l = 2 * distance(pos, uCamPos) * uTanFov2;
                         float s = l * aPointSize / uScreenHeight;
                         vOut.SphereRadius = s;
-                        vOut.SphereCenter = pos;
+                        vOut.PointPositionWorldSpace = pos;
 
                         vec4 vpos = uView * uModel * vec4(aPosition, 1.0);
                         vec3 fwd = normalize(vpos.xyz);
@@ -309,7 +393,8 @@ void PointRenderable::init()
                 // camera facing screen space size
                 sb.addPassthrough("vec3", "fragPosWS"); // Needed for clipping
                 sb.addVertexShaderCode(R"(
-                    vec4 spos = uProj * uView * uModel * vec4(aPosition, 1.0);
+                    vec4 wspos = uModel * vec4(aPosition, 1.0);
+                    vec4 spos = uProj * uView * wspos;
                     spos /= spos.w;
 
                     vec2 qp = aQuadPos * 2 - 1;
@@ -321,6 +406,7 @@ void PointRenderable::init()
 
                     vOut.Normal = vec3(0,0,0);
                     vOut.fragPosWS = vec3(uModel * vec4(spos.xyz, 1.0));
+                    vOut.PointPositionWorldSpace = wspos.xyz;
                     gl_Position = uProj * uView * uModel * vec4(spos.xyz, 1.0);
                 )");
             }
@@ -329,7 +415,8 @@ void PointRenderable::init()
                 // camera facing world space size
                 sb.addPassthrough("vec3", "fragPosWS"); // Needed for clipping
                 sb.addVertexShaderCode(R"(
-                    vec4 vpos = uView * uModel * vec4(aPosition, 1.0);
+                    vec4 wspos = uModel * vec4(aPosition, 1.0);
+                    vec4 vpos = uView * wspos;
                     vec2 qp = aQuadPos * 2 - 1;
                     vpos.xy += qp * aPointSize;
 
@@ -337,6 +424,7 @@ void PointRenderable::init()
 
                     vOut.Normal = vec3(0,0,0);
                     vOut.fragPosWS = vec3(uModel * vec4(vpos.xyz, 1.0));
+                    vOut.PointPositionWorldSpace = wspos.xyz;
                     gl_Position = uProj * uView * uModel * vec4(vpos.xyz, 1.0);
                 )");
             }
@@ -346,17 +434,46 @@ void PointRenderable::init()
                 sb.addPassthrough("vec3", "fragPosWS"); // Needed for fresnel transparency
                 sb.addVertexShaderCode(R"(
                     vec3 pos = vec3(uModel * vec4(aPosition, 1.0));
-                    vec3 dir = normalize(mat3(uModel) * aNormal);
+                    vec3 dir = normalize(transpose(mat3(uInvModel)) * aNormal);
                     vec3 up = abs(dir.y) < abs(dir.x) ? vec3(0, 1, 0) : vec3(1, 0, 0);
                     vec3 left = normalize(cross(dir, up));
                     up = normalize(cross(dir, left));
                     vec2 qp = aQuadPos * 2 - 1;
                     vOut.fragPosWS = pos + aPointSize * (left * qp.x + up * qp.y);
 
+                    vOut.PointPositionWorldSpace = pos;
                     vOut.Normal = dir;
                     gl_Position = uProj * uView * vec4(vOut.fragPosWS, 1.0);
                 )");
             }
+
+            // per-primitive clipping
+            sb.addGeometryShaderDecl(R"(
+                        layout(triangles) in;
+                        layout(triangle_strip, max_vertices = 3) out;
+                    )");
+            sb.addGeometryShaderCode(R"(
+                        vec3 center = vIn[0].PointPositionWorldSpace;
+
+                        if (dot(uPrimitiveClipPlane.xyz, center) > uPrimitiveClipPlane.w)
+                            return;
+
+                        PASSTHROUGH(0);
+                        gl_Position = gl_in[0].gl_Position;
+                        EmitVertex();
+
+                        PASSTHROUGH(1);
+                        gl_Position = gl_in[1].gl_Position;
+                        EmitVertex();
+
+                        PASSTHROUGH(2);
+                        gl_Position = gl_in[2].gl_Position;
+                        EmitVertex();
+
+                        EndPrimitive();
+                    )");
+
+
         };
 
 
@@ -373,13 +490,11 @@ void PointRenderable::init()
             sbForward.addUniform("uint", "uSeed");
 
             sbForward.addPassthrough("float", "VertexID");
-            sbForward.addVertexShaderCode(R"(
-                                    vOut.VertexID = float(gl_VertexID);
-                                   )");
+            sbForward.addVertexShaderCode(R"(vOut.VertexID = float(gl_VertexID);)");
 
             // colored mesh
             if (aColor)
-                sbForward.addPassthrough(aColor->typeInShader(), "Color");
+                sbForward.addPassthrough(aColor->typeInShader(), "Color", detail::MeshShaderBuilder::TypeHandling::ExtendToVec4Color);
 
             // data mapped mesh
             if (getColorMapping())
@@ -404,34 +519,47 @@ void PointRenderable::init()
                      }
                 )");
 
+
                 sbForward.addFragmentShaderCode(R"(
-                                                vec3 rayOrigin = uCamPos;
-                                                vec3 rayDir = normalize(vIn.fragPosWS - uCamPos);
+                                                // clip FragCoord to near plane in NDC and transform back into VS (required for orhtographic rendering)
+                                                vec3 rayOriginNDC = vec3((gl_FragCoord.x / uScreenSize[0]) * 2 - 1, (gl_FragCoord.y / uScreenSize[1]) * 2 - 1, uIsReverseZEnabled ? 1 : -1);
 
-                                                vec3 closestP = rayOrigin + rayDir * dot(rayDir, vSphereCenter - rayOrigin);
-                                                float sphereDis2 = distance2(closestP, vSphereCenter);
+                                                vec4 rayOriginCS = vec4(rayOriginNDC,1) / gl_FragCoord.w;
+                                                vec4 rayOriginVS = (uInvProj * rayOriginCS);
+                                                rayOriginVS /= rayOriginVS.w;
 
-                                                if (dot(uClipPlane.xyz, vSphereCenter) > uClipPlane.w)
+                                                vec4 rayTargetVS = (uView * vec4(vIn.fragPosWS, 1));
+
+                                                vec3 rayDirVS = normalize(rayTargetVS.xyz - rayOriginVS.xyz);
+                                                vec3 PointPositionWorldSpaceVS = (uView * vec4(vPointPositionWorldSpace, 1)).xyz;
+
+                                                vec3 closestP = rayOriginVS.xyz + rayDirVS * dot(rayDirVS, PointPositionWorldSpaceVS - rayOriginVS.xyz);
+                                                float sphereDis2 = distance2(closestP, PointPositionWorldSpaceVS);
+
+                                                if (dot(uFragmentClipPlane.xyz, vPointPositionWorldSpace) > uFragmentClipPlane.w)
                                                     discard;
 
                                                 if (sphereDis2 > vSphereRadius * vSphereRadius)
                                                     discard;
 
-                                                vec3 spherePos = closestP - rayDir * sqrt(vSphereRadius * vSphereRadius - sphereDis2);
+                                                vec3 spherePosVS = closestP - rayDirVS * sqrt(vSphereRadius * vSphereRadius - sphereDis2);
+                                                vec4 spherePosCS = uProj * vec4(spherePosVS, 1);
+                                                spherePosCS /= spherePosCS.w;
 
-                                                vec3 sphereN = normalize(spherePos - vSphereCenter);
+                                                float depthNDC = spherePosCS.z;
 
-                                                vec4 spherePosCS = uProj * uView * vec4(spherePos, 1);
-                                                float depthNDC = spherePosCS.z / spherePosCS.w;
+                                                vec3 spherePosWS = (uInvView * vec4(spherePosVS, 1)).xyz;
+                                                vec3 sphereWS_N = normalize(spherePosWS - vPointPositionWorldSpace);
 
                                                 if(uIsReverseZEnabled)
                                                     gl_FragDepth = (depthNDC - gl_DepthRange.near) / gl_DepthRange.diff;
                                                 else
                                                     gl_FragDepth = depthNDC * 0.5 + 0.5;
 
-                                                fColor.rgb = vec3(vColor) * (sphereN.y * .5 + .5);
+                                                fColor.rgb = vec3(vColor) * (sphereWS_N.y * .5 + .5);
                                                 fColor.a = 1;
-                                                fNormal = sphereN;
+
+                                                fNormal = sphereWS_N;
                                                 )");
             }
             else
@@ -442,15 +570,15 @@ void PointRenderable::init()
 
                 if (!getShadingEnabled())
                     sbForward.addFragmentShaderCode(R"(
-                                             if (dot(uClipPlane.xyz, vIn.fragPosWS) > uClipPlane.w)
+                                             if (dot(uFragmentClipPlane.xyz, vIn.fragPosWS) > uFragmentClipPlane.w)
                                                  discard;
-                                             fNormal = vIn.Normal == vec3(0) ? aNormal : normalize(vIn.Normal);
+                                             fNormal = vIn.Normal == vec3(0) ? vIn.Normal : normalize(vIn.Normal);
                                              fColor.rgb = vec3(vColor);
                                              fColor.a = 1;
                                              )");
                 else
                     sbForward.addFragmentShaderCode(R"(
-                                             if (dot(uClipPlane.xyz, vIn.fragPosWS) > uClipPlane.w)
+                                             if (dot(uFragmentClipPlane.xyz, vIn.fragPosWS) > uFragmentClipPlane.w)
                                                  discard;
                                              fNormal = vIn.Normal == vec3(0) ? vIn.Normal : normalize(vIn.Normal);
                                              fColor.rgb = vec3(vColor) * (fNormal.y * .5 + .5);
@@ -462,11 +590,6 @@ void PointRenderable::init()
                 sbForward.addFragmentShaderCode(R"(
                                          if (uIsTransparent)
                                          {
-                                            uint h = uint(gl_FragCoord.x) * 4096 + uint(gl_FragCoord.y);
-                                            h = hash_combine(h, uint(uSeed));
-                                            h = hash_combine(h, uint(vVertexID * 17));
-                                            h = wang_hash(h);
-
                                             float a = vColor.a;
 
                                             if (uFresnel)
@@ -477,7 +600,7 @@ void PointRenderable::init()
                                                 a = mix(vColor.a, 1, t);
                                             }
 
-                                            if (wang_float(h) > a)
+                                            if (a < make_hashed_threshold(vVertexID, uSeed))
                                                 discard;
                                          })");
 
@@ -507,10 +630,12 @@ void PointRenderable::init()
                     vec3 rayOrigin = uCamPos;
                     vec3 rayDir = normalize(vIn.fragPosWS - uCamPos);
 
-                    vec3 closestP = rayOrigin + rayDir * dot(rayDir, vSphereCenter - rayOrigin);
-                    float sphereDis2 = distance2(closestP, vSphereCenter);
+                    vec3 closestP = rayOrigin + rayDir * dot(rayDir, vPointPositionWorldSpace - rayOrigin);
+                    float sphereDis2 = distance2(closestP, vPointPositionWorldSpace);
                     if (sphereDis2 > vSphereRadius * vSphereRadius)
                         discard;
+
+
                 )");
             }
             else
@@ -521,6 +646,58 @@ void PointRenderable::init()
             }
 
             mShadowShader = sbShadow.createProgram();
+        }
+
+        // picking shader
+        if (hasPicker())
+        {
+            detail::MeshShaderBuilder sbPicking;
+            createNonFragmentShaderParts(sbPicking);
+
+            sbPicking.addFragmentLocation("ivec2", "fPickIDs");
+
+            sbPicking.addUniform("int", "uRenderableID");
+            sbPicking.addPassthrough("int", "FragmentID");
+            sbPicking.addPassthrough("int", "RenderableID");
+
+
+            sbPicking.addVertexShaderCode(R"(
+									vOut.FragmentID = aPickID;
+									vOut.RenderableID = uRenderableID;
+                                   )");
+
+            sbPicking.addFragmentShaderDecl(R"(
+                     float distance2(vec3 a, vec3 b)
+                     {
+                         vec3 d = a - b;
+                         return dot(d, d);
+                     }
+                )");
+
+            if (mRenderMode == RenderMode::Sphere)
+            {
+                sbPicking.addFragmentShaderCode(R"(
+												vec3 rayOrigin = uCamPos;
+                                                vec3 rayDir = normalize(vIn.fragPosWS - uCamPos);
+
+                                                vec3 closestP = rayOrigin + rayDir * dot(rayDir, vPointPositionWorldSpace - rayOrigin);
+                                                                                                float sphereDis2 = distance2(closestP, vPointPositionWorldSpace);
+
+                                                if (dot(uFragmentClipPlane.xyz, vPointPositionWorldSpace) > uFragmentClipPlane.w)
+                                                    discard;
+
+                                                if (sphereDis2 > vSphereRadius * vSphereRadius)
+                                                    discard;
+										
+									)");
+            }
+
+
+            sbPicking.addFragmentShaderCode(R"(							
+                                  fPickIDs = ivec2((vIn.RenderableID), (vIn.FragmentID));
+                                 )");
+
+            mPickingShader = sbPicking.createProgram();
         }
     }
 }

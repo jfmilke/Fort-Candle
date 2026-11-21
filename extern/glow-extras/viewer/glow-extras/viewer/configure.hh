@@ -8,6 +8,7 @@
 #include "detail/MeshAttribute.hh"
 #include "detail/config_structs_impl.hh"
 #include "fwd.hh"
+#include "picking.hh"
 #include "renderables/GeometricRenderable.hh"
 #include "traits.hh"
 
@@ -34,6 +35,37 @@ struct ssao_radius
     float radius;
     constexpr explicit ssao_radius(float r) : radius(r) {}
 };
+struct shadow_screen_fadeout_distance
+{
+    float radius;
+    constexpr explicit shadow_screen_fadeout_distance(float r) : radius(r) {}
+};
+struct shadow_world_fadeout_factor
+{
+    float inner_factor;
+    float outer_factor;
+    constexpr explicit shadow_world_fadeout_factor(float inner, float outer = 1.f) : inner_factor(inner), outer_factor(outer) {}
+};
+struct shadow_strength
+{
+    float strength;
+    constexpr explicit shadow_strength(float s) : strength(s) {}
+};
+struct sun_offset_factor
+{
+    float factor;
+    constexpr explicit sun_offset_factor(float f) : factor(f) {}
+};
+struct sun_scale_factor
+{
+    float factor;
+    constexpr explicit sun_scale_factor(float f) : factor(f) {}
+};
+struct total_shadow_samples
+{
+    int samples;
+    constexpr explicit total_shadow_samples(int s) : samples(s) {}
+};
 struct grid_size
 {
     float size;
@@ -55,6 +87,12 @@ struct camera_orientation
     {
     }
 };
+struct camera_fov
+{
+    tg::horizontal_fov fov;
+
+    constexpr explicit camera_fov(tg::horizontal_fov fov) : fov(fov) {}
+};
 struct orthogonal_projection
 {
     tg::aabb3 bounds;
@@ -72,11 +110,20 @@ struct camera_transform
     tg::pos3 target;
     constexpr explicit camera_transform(tg::pos3 pos, tg::pos3 target) : pos(pos), target(target) {}
 };
+/// per fragment clipping
 struct clip_plane
 {
     tg::pos3 pos;
     tg::vec3 normal;
     clip_plane(tg::pos3 p, tg::vec3 n) : pos(p), normal(n) {}
+};
+/// per primitive clipping
+struct primitive_clip_plane
+{
+    tg::plane3 plane;
+    primitive_clip_plane(tg::pos3 const& p, tg::dir3 const& n) : plane(n, p) {}
+    primitive_clip_plane(tg::pos3 const& p, tg::vec3 const& n) : plane(normalize(n), p) {}
+    primitive_clip_plane(tg::plane3 const& plane) : plane(plane) {}
 };
 
 /// additional keys for closing the viewer
@@ -111,11 +158,27 @@ struct headless_screenshot
     }
 };
 
+struct file_drop_handler
+{
+    std::function<void(std::vector<std::string> const&)> callback;
+
+    explicit file_drop_handler(std::function<void(std::vector<std::string> const&)> f) : callback(f) {}
+};
+
+struct cache_window_size
+{
+    std::string_view folder;
+
+    constexpr explicit cache_window_size(std::string_view folder) : folder(folder) {}
+};
+
 // Config tags
 inline auto constexpr no_grid = no_grid_t{};
 inline auto constexpr no_left_mouse_control = no_left_mouse_control_t{};
 inline auto constexpr no_right_mouse_control = no_right_mouse_control_t{};
+inline auto constexpr no_viewer_ui = no_viewer_ui_t{};
 inline auto constexpr no_shadow = no_shadow_t{};
+inline auto constexpr no_backfacing_shadow = no_backfacing_shadow_t{};
 inline auto constexpr no_shading = no_shading_t{};
 inline auto constexpr maybe_empty = maybe_empty_t{};
 inline auto constexpr print_mode = print_mode_t{};
@@ -133,12 +196,15 @@ inline auto constexpr tonemap_exposure = tonemap_exposure_t{};
 inline auto constexpr backface_culling = backface_culling_t{};
 inline auto constexpr preserve_camera = preserve_camera_t{};
 inline auto constexpr reuse_camera = reuse_camera_t{};
+inline auto constexpr no_cache_window_size = cache_window_size("");
 
 // passthrough configures for scene modification commands
 void configure(Renderable&, no_grid_t b);
-void configure(Renderable&, no_shadow_t);
+void configure(Renderable&, no_shadow_t b);
+void configure(Renderable&, no_backfacing_shadow_t b);
 void configure(Renderable&, no_left_mouse_control_t b);
 void configure(Renderable&, no_right_mouse_control_t b);
+void configure(Renderable&, no_viewer_ui_t b);
 void configure(Renderable&, print_mode_t b);
 void configure(Renderable&, maybe_empty_t);
 void configure(Renderable&, no_outline_t b);
@@ -148,18 +214,28 @@ void configure(Renderable&, dark_ui_t b);
 void configure(Renderable&, subview_margin_t b);
 void configure(Renderable&, clear_accumulation_t b);
 void configure(Renderable&, tonemap_exposure_t const& b);
+void configure(Renderable&, BloomConfig const& b);
 void configure(Renderable&, background_color const& b);
 void configure(Renderable&, ssao_power const& b);
 void configure(Renderable&, ssao_radius const& b);
+void configure(Renderable&, shadow_screen_fadeout_distance const& b);
+void configure(Renderable&, shadow_world_fadeout_factor const& b);
+void configure(Renderable&, shadow_strength const& b);
+void configure(Renderable&, sun_offset_factor const& b);
+void configure(Renderable&, sun_scale_factor const& b);
+void configure(Renderable&, total_shadow_samples const& v);
 void configure(Renderable&, grid_size const& v);
 void configure(Renderable&, grid_center const& v);
 void configure(Renderable&, camera_orientation const& b);
 void configure(Renderable&, orthogonal_projection const& p);
 void configure(Renderable&, camera_transform const& b);
+void configure(Renderable&, camera_fov const& b);
 void configure(Renderable&, headless_screenshot const& b);
 void configure(Renderable&, close_keys const& k);
 void configure(Renderable&, preserve_camera_t b);
 void configure(Renderable&, reuse_camera_t b);
+void configure(Renderable&, file_drop_handler const& h);
+void configure(Renderable&, cache_window_size const& h);
 
 /// custom scene configuration
 void configure(Renderable&, std::function<void(SceneConfig&)> f);
@@ -224,11 +300,18 @@ void configure(GeometricRenderable& r, no_fresnel_t);
 void configure(GeometricRenderable& r, backface_culling_t b);
 
 /// clipping
+
+/// clip per fragment
 void configure(GeometricRenderable& r, clip_plane const& p);
+/// clip per primitive, i.e. clip the whole primitive if any vertex is clipped
+void configure(GeometricRenderable& r, primitive_clip_plane const& p);
 
 /// shading
 void configure(GeometricRenderable& r, no_shading_t s);
 void configure(GeometricRenderable& r, EnvMap const& em);
+
+/// picking
+void configure(GeometricRenderable& r, Picker p);
 
 // ================== Implementation ==================
 template <class Color, class>

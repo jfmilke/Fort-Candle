@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include <clean-core/span.hh>
+
 #include <glow/common/non_copyable.hh>
 #include <glow/fwd.hh>
 #include <glow/gl.hh>
@@ -19,34 +21,34 @@ struct BoundShaderStorageBuffer
 
     /// Sets the data of this uniform buffer (generic version)
     void setData(size_t size, const void* data, GLenum usage = GL_STATIC_DRAW);
-    /// Sets the data of this uniform buffer (vector-of-data version)
-    template <typename DataT>
-    void setData(std::vector<DataT> const& data, GLenum usage = GL_STATIC_DRAW)
+    /// Sets the data of this uniform buffer (range version)
+    template <class DataRangeT>
+    void setData(DataRangeT&& data, GLenum usage = GL_STATIC_DRAW)
     {
-        setData(data.size() * sizeof(DataT), data.data(), usage);
+        auto bytes = cc::as_byte_span(data);
+        setData(bytes.size(), bytes.data(), usage);
     }
-    /// Sets the data of this uniform buffer (POD version)
-    template <typename DataT, class = std::enable_if_t<std::is_trivially_copyable<DataT>::value>>
-    void setData(DataT const& data, GLenum usage = GL_STATIC_DRAW)
+    /// Same as above for initializer list
+    template <class DataT>
+    void setData(std::initializer_list<DataT> data, GLenum usage = GL_STATIC_DRAW)
     {
-        setData(sizeof(data), &data, usage);
+        setData(data.size() * sizeof(DataT), data.begin(), usage);
     }
-
     /// Ses a subportion of the buffer (does NOT allocate/enlarge memory!)
     void setSubData(size_t offset, size_t size, const void* data);
     /// vector-of-data version of setSubData
-    template <typename DataT>
-    void setSubData(size_t offset, std::vector<DataT> const& data)
+    template <typename DataRangeT>
+    void setSubData(size_t offset, DataRangeT&& data)
     {
-        setSubData(offset, data.size() * sizeof(DataT), data.data());
+        auto bytes = cc::as_byte_span(data);
+        setSubData(offset, bytes.size(), bytes.data());
     }
-    ///  POD version of setSubData
-    template <typename DataT, class = std::enable_if_t<std::is_trivially_copyable<DataT>::value>>
-    void setSubData(size_t offset, DataT const& data)
+    /// Same as above for initializer list
+    template <class DataT>
+    void setSubData(size_t offset, std::initializer_list<DataT> data)
     {
-        setSubData(offset, sizeof(data), &data);
+        setSubData(offset, data.size() * sizeof(DataT), data.begin());
     }
-
     /// Writes all buffer data into the given memory
     /// Data is truncated to maxSize
     void getData(void* destination, size_t maxSize = 0, bool warnOnTruncate = true);

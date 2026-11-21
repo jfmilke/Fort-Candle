@@ -20,7 +20,7 @@ private:
     tg::isize2 mViewportSize;
     float mAspectRatio = 1.f;
 
-    tg::angle mHorizontalFov = 80_deg;
+    tg::horizontal_fov mHorizontalFov = tg::horizontal_fov(80_deg);
 
     float mNearPlane = .1f;
     float mFarPlane = 1000.f;
@@ -29,7 +29,7 @@ public:
     // == Setters ==
     void setNearPlane(float nearPlane) { mNearPlane = nearPlane; }
     void setFarPlane(float farPlane) { mFarPlane = farPlane; }
-    void setFoV(tg::angle fov) { mHorizontalFov = fov; }
+    void setFoV(tg::horizontal_fov fov) { mHorizontalFov = fov; }
     void setViewportSize(int w, int h);
 
     // == Getters ==

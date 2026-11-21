@@ -33,7 +33,8 @@ private:
     bool mFresnel = true;
     bool mBackfaceCullingEnabled = false;
     bool mShadingEnabled = true;
-    tg::vec4 mClipPlane;
+    tg::vec4 mFragmentClipPlane;
+    tg::vec4 mPrimitiveClipPlane;
 
     glow::SharedTextureCubeMap mEnvMap;
     float mEnvReflectivity = 0;
@@ -43,7 +44,8 @@ public:
     GLOW_PROPERTY(Fresnel);
     GLOW_PROPERTY(BackfaceCullingEnabled);
     GLOW_PROPERTY(ShadingEnabled);
-    GLOW_PROPERTY(ClipPlane);
+    GLOW_PROPERTY(FragmentClipPlane);
+    GLOW_PROPERTY(PrimitiveClipPlane);
     GLOW_PROPERTY(EnvMap);
     GLOW_PROPERTY(EnvReflectivity);
     GLOW_GETTER(MeshAABB);

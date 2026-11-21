@@ -14,11 +14,19 @@ namespace detail
 // TODO: cache shaders
 class MeshShaderBuilder
 {
+public:
+    enum class TypeHandling
+    {
+        Default,
+        ExtendToVec4Color, // Variable will be converted to vec4 in Fragment Shader
+    };
+
 private:
     struct Variable
     {
         std::string type;
         std::string name;
+        TypeHandling typeHandling = TypeHandling::Default;
     };
 
 private:
@@ -50,7 +58,7 @@ public:
     void addFragmentShaderDecl(std::string const& code);
 
     /// addPassthrough("Color") adds Color to interface blocks
-    void addPassthrough(std::string const& type, std::string const& nameWithoutPrefix);
+    void addPassthrough(std::string const& type, std::string const& nameWithoutPrefix, TypeHandling typeHandling = TypeHandling::Default);
 
 private:
     Variable const* findMatchingAttrOrUniform(Variable const& toSearch);

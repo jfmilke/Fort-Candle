@@ -48,23 +48,24 @@ public: // static construction
     /// Creates a element array buffer with the given indices
     /// Automatically picks the correct index type
     /// CAUTION: Cannot be used while a VAO is bound! (runtime error)
-    static SharedElementArrayBuffer create(std::vector<int16_t> const& indices);
-    static SharedElementArrayBuffer create(std::vector<uint16_t> const& indices);
-    static SharedElementArrayBuffer create(std::vector<int32_t> const& indices);
-    static SharedElementArrayBuffer create(std::vector<uint32_t> const& indices);
+    static SharedElementArrayBuffer create(cc::span<int16_t const> indices) { return create(int(indices.size()), indices.data()); }
+    static SharedElementArrayBuffer create(cc::span<uint16_t const> indices) { return create(int(indices.size()), indices.data()); }
+    static SharedElementArrayBuffer create(cc::span<int32_t const> indices) { return create(int(indices.size()), indices.data()); }
+    static SharedElementArrayBuffer create(cc::span<uint32_t const> indices) { return create(int(indices.size()), indices.data()); }
     static SharedElementArrayBuffer create(int indexCount, const int16_t* data);
     static SharedElementArrayBuffer create(int indexCount, const uint16_t* data);
     static SharedElementArrayBuffer create(int indexCount, const int32_t* data);
     static SharedElementArrayBuffer create(int indexCount, const uint32_t* data);
-    [[deprecated("8bit indices are slow on modern hardware")]] static SharedElementArrayBuffer create(std::vector<int8_t> const& indices);
-    [[deprecated("8bit indices are slow on modern hardware")]] static SharedElementArrayBuffer create(std::vector<uint8_t> const& indices);
+    [[deprecated("8bit indices are slow on modern hardware")]] static SharedElementArrayBuffer create(cc::span<int8_t> const& indices)
+    {
+        return create(int(indices.size()), indices.data());
+    }
+    [[deprecated("8bit indices are slow on modern hardware")]] static SharedElementArrayBuffer create(cc::span<uint8_t> const& indices)
+    {
+        return create(int(indices.size()), indices.data());
+    }
     [[deprecated("8bit indices are slow on modern hardware")]] static SharedElementArrayBuffer create(int indexCount, const int8_t* data);
     [[deprecated("8bit indices are slow on modern hardware")]] static SharedElementArrayBuffer create(int indexCount, const uint8_t* data);
-    template <typename T, std::size_t N>
-    static SharedElementArrayBuffer create(const T (&data)[N])
-    {
-        return create(N, data);
-    }
 
     /// Creates a element array buffer with the given indices
     /// Type must be specified explicitly

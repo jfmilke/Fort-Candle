@@ -1,6 +1,20 @@
 #pragma once
 
 // =========
+// architecture
+
+#if defined(__x86_64__) || defined(_M_X64)
+    #define CC_ARCH_X86_64
+#elif defined(__i386__) || defined(_M_IX86)
+    #define CC_ARCH_X86_32
+#elif defined(__aarch64__) || defined(_M_ARM64)
+    #define CC_ARCH_ARM64
+#else
+#error "Unknown architecture"
+#endif
+
+
+// =========
 // compiler
 
 #if defined(_MSC_VER)
@@ -45,25 +59,69 @@
 #endif
 #endif
 
-// =========
-// operating system
+// from CMake:
+// CC_DEBUG is defined in debug configurations
+// CC_RELEASE in release configurations
+// CC_RELWITHDEBINFO in release-with-debug
 
-// CC_OS_WINDOWS, CC_OS_LINUX, CC_OS_OSX, or CC_OS_IOS
+// =========
+// operating systems
+// CC_OS_WINDOWS, CC_OS_LINUX, CC_OS_APPLE, or CC_OS_BSD
+
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32)
 #define CC_OS_WINDOWS
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) || defined(__MACH__) || defined(macintosh)
+#define CC_OS_APPLE
+#elif defined(__linux__) || defined(linux)
+#define CC_OS_LINUX
+#elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#define CC_OS_BSD
+#else
+#error "Unknown platform"
+#endif
+
+// =========
+// targets
+
+#if defined(CC_OS_WINDOWS)
+#if defined(_DURANGO)
+#define CC_TARGET_XBOX
+#else
+#define CC_TARGET_PC
+#endif
+#endif
+
+#if defined(CC_OS_APPLE)
 #include "TargetConditionals.h"
-#if defined(TARGET_OS_MAC)
-#define CC_OS_OSX
-#elif defined(TARGET_OS_IPHONE)
-#define CC_OS_IOS
+#if TARGET_OS_MAC
+#define CC_TARGET_MACOS
+#elif TARGET_OS_IOS
+#define CC_TARGET_IOS
+#elif TARGET_OS_TV
+#define CC_TARGET_TVOS
 #else
 #error "Unknown Apple platform"
 #endif
-#elif defined(__linux__)
-#define CC_OS_LINUX
-#else
-#error "Unknown platform"
+#endif
+
+#if defined(__ANDROID__)
+#define CC_TARGET_ANDROID
+#endif
+
+#if defined(__ORBIS__)
+#define CC_TARGET_ORBIS
+#endif
+
+#if defined(__NX__)
+#define CC_TARGET_NX
+#endif
+
+#if defined(CC_TARGET_IOS) || defined(CC_TARGET_TVOS) || defined(CC_TARGET_ANDROID)
+#define CC_TARGET_MOBILE
+#endif
+
+#if defined(CC_TARGET_ORBIS) || defined(CC_TARGET_NX) || defined(CC_TARGET_XBOX)
+#define CC_TARGET_CONSOLE
 #endif
 
 
@@ -77,14 +135,27 @@
 #define CC_FORCE_INLINE __forceinline
 #define CC_DONT_INLINE __declspec(noinline)
 
-// only way of reproducing these is using C++20 [[likely]] / [[unlikely]]
+// WARNING: deprecated, use CC_CONDITION_LIKELY
 #define CC_LIKELY(x) x
 #define CC_UNLIKELY(x) x
+
+// usage: if CC_CONDITION_LIKELY(foo) { /*...*/ }
+#if defined(__has_cpp_attribute) && __has_cpp_attribute(likely)
+// the standard C++20 spelling; clang-cl is classified as MSVC here but rejects
+// the [[msvc::*]] spelling, while MSVC (VS2019 16.6+) accepts the standard one
+#define CC_CONDITION_LIKELY(x) (x) [[likely]]
+#define CC_CONDITION_UNLIKELY(x) (x) [[unlikely]]
+#else
+// MSVC custom attributes, supported since March 2021 and valid in C++14 and up
+#define CC_CONDITION_LIKELY(x) (x) [[msvc::likely]]
+#define CC_CONDITION_UNLIKELY(x) (x) [[msvc::unlikely]]
+#endif
 #define CC_COLD_FUNC
 #define CC_HOT_FUNC
 
 #define CC_BUILTIN_UNREACHABLE __assume(0)
-#define CC_COUNTOF(arr) _countof(arr)
+#define CC_COUNTOF(arr) __crt_countof(arr)
+#define CC_ASSUME(x) __assume(x)
 
 #elif defined(CC_COMPILER_POSIX)
 
@@ -94,16 +165,32 @@
 #define CC_FORCE_INLINE __attribute__((always_inline)) inline
 #define CC_DONT_INLINE __attribute__((noinline))
 
+// WARNING: deprecated, use CC_CONDITION_LIKELY
 #define CC_LIKELY(x) __builtin_expect((x), 1)
 #define CC_UNLIKELY(x) __builtin_expect((x), 0)
+
+// usage: if CC_CONDITION_LIKELY(foo) { /*...*/ }
+#define CC_CONDITION_LIKELY(x) (__builtin_expect((x), 1))
+#define CC_CONDITION_UNLIKELY(x) (__builtin_expect((x), 0))
 #define CC_COLD_FUNC __attribute__((cold))
 #define CC_HOT_FUNC __attribute__((hot))
 
 #define CC_BUILTIN_UNREACHABLE __builtin_unreachable()
 #define CC_COUNTOF(arr) (sizeof(arr) / sizeof(arr[0]))
+#if defined(CC_COMPILER_CLANG)
+#define CC_ASSUME(x) __builtin_assume(x)
+#else
+#define CC_ASSUME(x) ((!x) ? __builtin_unreachable() : void(0))
+#endif
 
 #else
 #error "Unknown compiler"
+#endif
+
+#ifdef CC_DEBUG
+#define CC_FORCE_INLINE_DEBUGGABLE inline
+#else
+#define CC_FORCE_INLINE_DEBUGGABLE CC_FORCE_INLINE
 #endif
 
 // =========
@@ -111,7 +198,7 @@
 
 #if defined(CC_COMPILER_POSIX) || defined(__clang__) || defined(__GNUC__)
 // even if code isn't compiled on a POSIX compiler, these helpers can still
-// be active in ie. a clang code model (ie.: MSVC via Qt Creator)
+// be active in a clang code model (eg MSVC via Qt Creator)
 
 // enables warnings/errors on malformed calls to a printf-like function
 // indices start at 1 and count the implicit 'this'-argument of methods
@@ -129,6 +216,6 @@
 #define CC_DETAIL_MACRO_JOIN(arg1, arg2) arg1##arg2
 #define CC_MACRO_JOIN(arg1, arg2) CC_DETAIL_MACRO_JOIN(arg1, arg2)
 
-#define CC_UNUSED(expr) void(sizeof(bool((expr)))) // force ;
+#define CC_UNUSED(expr) (void)(sizeof((expr))) // force ;
 
 #define CC_FORCE_SEMICOLON static_assert(true) // force ;

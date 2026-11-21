@@ -57,7 +57,7 @@ struct plane
     // <x, normal> = dis
 
     dir_t normal;
-    scalar_t dis; // NOTE: this is not the "d" from the plane equation, but -d
+    scalar_t dis = scalar_t(0); // NOTE: this is not the "d" from the plane equation, but -d
 
     constexpr plane() = default;
     constexpr plane(dir_t n, scalar_t d) : normal(n), dis(d) {}
@@ -65,6 +65,10 @@ struct plane
 
     template <class OtherT>
     explicit constexpr plane(plane<D, OtherT> const& v) : normal(v.normal), dis(v.dis)
+    {
+    }
+    template <class OtherT>
+    explicit constexpr plane(halfspace<D, OtherT> const& v) : normal(v.normal), dis(v.dis)
     {
     }
 

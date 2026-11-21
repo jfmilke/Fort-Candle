@@ -19,6 +19,11 @@ struct no_shadow_t
     bool active = true;
     no_shadow_t operator()(bool a) const { return {a}; }
 };
+struct no_backfacing_shadow_t
+{
+    bool active = true;
+    no_backfacing_shadow_t operator()(bool a) const { return {a}; }
+};
 struct print_mode_t
 {
     bool active = true;
@@ -47,6 +52,11 @@ struct no_right_mouse_control_t
 {
     bool active = true;
     no_right_mouse_control_t operator()(bool a) const { return {a}; }
+};
+struct no_viewer_ui_t
+{
+    bool active = true;
+    no_viewer_ui_t operator()(bool a) const { return {a}; }
 };
 struct no_fresnel_t
 {

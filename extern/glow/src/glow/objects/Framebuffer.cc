@@ -216,7 +216,7 @@ Framebuffer::~Framebuffer()
 
 SharedFramebuffer Framebuffer::create() { return std::make_shared<Framebuffer>(); }
 
-SharedFramebuffer Framebuffer::create(const std::vector<FramebufferAttachment>& colors, const SharedTexture& depth, const SharedTexture& stencil, int depthStencilMipmapLevel, int depthStencilLayer)
+SharedFramebuffer Framebuffer::create(cc::span<FramebufferAttachment const> colors, const SharedTexture& depth, const SharedTexture& stencil, int depthStencilMipmapLevel, int depthStencilLayer)
 {
     auto fbo = create();
     auto bfbo = fbo->bind();
@@ -263,6 +263,12 @@ void BoundFramebuffer::updateViewport()
         glViewport(0, 0, dim.width, dim.height);
 }
 
+void BoundFramebuffer::updateViewportIfAuto()
+{
+    if (buffer->mAutoViewport)
+        updateViewport();
+}
+
 bool BoundFramebuffer::checkComplete()
 {
     if (!isCurrent())
@@ -300,13 +306,13 @@ void BoundFramebuffer::attachColor(const std::string& fragName, const SharedText
             a.texture = tex;
             a.mipmapLevel = mipmapLevel;
             a.layer = layer;
-            updateViewport();
+            updateViewportIfAuto();
             return; // attachment name found
         }
 
     // not found: add it
     buffer->mColorAttachments.push_back({fragName, tex, mipmapLevel, layer});
-    updateViewport();
+    updateViewportIfAuto();
 }
 
 void BoundFramebuffer::attachColor(const FramebufferAttachment& a) { attachColor(a.locationName, a.texture, a.mipmapLevel, a.layer); }
@@ -318,7 +324,7 @@ void BoundFramebuffer::attachDepth(const SharedTexture& tex, int mipmapLevel, in
 
     attachToFramebuffer(tex, GL_DEPTH_ATTACHMENT, mipmapLevel, layer);
     buffer->mDepthAttachment = {"", tex, mipmapLevel, layer};
-    updateViewport();
+    updateViewportIfAuto();
 }
 
 void BoundFramebuffer::attachStencil(const SharedTexture& tex, int mipmapLevel, int layer)
@@ -328,7 +334,7 @@ void BoundFramebuffer::attachStencil(const SharedTexture& tex, int mipmapLevel, 
 
     attachToFramebuffer(tex, GL_STENCIL_ATTACHMENT, mipmapLevel, layer);
     buffer->mStencilAttachment = {"", tex, mipmapLevel, layer};
-    updateViewport();
+    updateViewportIfAuto();
 }
 
 void BoundFramebuffer::attachDepthStencil(const SharedTexture& tex, int mipmapLevel, int layer)
@@ -339,7 +345,7 @@ void BoundFramebuffer::attachDepthStencil(const SharedTexture& tex, int mipmapLe
     attachToFramebuffer(tex, GL_DEPTH_STENCIL_ATTACHMENT, mipmapLevel, layer);
     buffer->mDepthAttachment = {"", tex, mipmapLevel, layer};
     buffer->mStencilAttachment = {"", tex, mipmapLevel, layer};
-    updateViewport();
+    updateViewportIfAuto();
 }
 
 void BoundFramebuffer::attachDepth(GLenum depthFormat)

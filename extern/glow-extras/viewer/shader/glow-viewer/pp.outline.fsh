@@ -89,5 +89,5 @@ void main()
     if (is_edge)
         fColor = vec4(0,0,0,0.8);
     else
-        fColor = vec4(0,0,0,0);
+        discard;
 }

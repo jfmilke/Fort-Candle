@@ -6,6 +6,7 @@
 #include "renderables/LineRenderable.hh"
 #include "renderables/MeshRenderable.hh"
 #include "renderables/PointRenderable.hh"
+#include "renderables/QuadricRenderable.hh"
 #include "renderables/Renderable.hh"
 #include "renderables/TextureRenderable.hh"
 #include "renderables/Vector2DRenderable.hh"
@@ -62,13 +63,18 @@ template <class Pos3, class = std::enable_if_t<detail::is_pos3_like<Pos3>>>
 SharedLineRenderable make_renderable(std::vector<std::pair<Pos3, Pos3>> const& pos);
 template <class Pos3, class = std::enable_if_t<detail::is_pos3_like<Pos3>>>
 SharedLineRenderable make_renderable(std::vector<std::array<Pos3, 2>> const& pos);
-template <class Pos3, int N, class = std::enable_if_t<detail::is_pos3_like<Pos3> && N >= 3>>
+template <class Pos3, std::size_t N, class = std::enable_if_t<detail::is_pos3_like<Pos3> && N >= 3>>
 SharedMeshRenderable make_renderable(std::vector<std::array<Pos3, N>> const& pos);
 template <class Pos3, class = std::enable_if_t<detail::is_pos3_like<Pos3>>>
 SharedMeshRenderable make_renderable(std::vector<std::vector<Pos3>> const& pos);
 
 template <class Pos3, class = std::enable_if_t<detail::is_pos3_like<Pos3>>>
 SharedPointRenderable make_renderable(Pos3 const& pos);
+
+// quadrics
+SharedQuadricRenderable make_renderable(boxed_quadric const& q);
+SharedQuadricRenderable make_renderable(array_view<boxed_quadric const> qs);
+
 
 // labels
 SharedLabelRenderable make_renderable(label const& label);
@@ -207,7 +213,9 @@ SharedLineRenderable make_renderable(std::vector<std::array<Pos3, 2>> const& pos
 {
     return make_renderable(viewer::lines(pos));
 }
-template <class Pos3, int N, class>
+
+/// note: N must be of type std::size_t as that is what std::array expects. Otherwise this will cause substitution failure
+template <class Pos3, std::size_t N, class>
 SharedMeshRenderable make_renderable(std::vector<std::array<Pos3, N>> const& pos)
 {
     return make_renderable(viewer::polygons(pos));

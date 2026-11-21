@@ -213,7 +213,9 @@ void gamedev::RenderSystem::UpdateCamera(const tg::pos3& cameraPos, const tg::ve
     mNearPlane = 0.01;
     mFarPlane = 500.0;
 
-    mProj = tg::perspective_opengl(60_deg, aspectRatio, mNearPlane, mFarPlane);
+    // perspective_opengl takes the horizontal FOV; convert from the 60° vertical FOV
+    auto const horizontalFov = 2.f * tg::atan(tg::tan(60_deg / 2.f) * aspectRatio);
+    mProj = tg::perspective_opengl(tg::horizontal_fov_t(horizontalFov), aspectRatio, mNearPlane, mFarPlane);
     mView = tg::look_at_opengl(cameraPos, cameraForward, cameraUp);
 }
 
@@ -541,7 +543,7 @@ void gamedev::RenderSystem::RenderDepthCubemap()
 
     // create depth cubemap transformation matrices
     float const shadowWidth = mPointShadowResolution, shadowHeight = mPointShadowResolution;
-    tg::mat4 shadowProj = tg::perspective_opengl(90_deg, shadowWidth / (float)shadowHeight, shadowNear, shadowFar);
+    tg::mat4 shadowProj = tg::perspective_opengl(tg::horizontal_fov_t(90_deg), shadowWidth / (float)shadowHeight, shadowNear, shadowFar);
     std::vector<tg::mat4> shadowTransforms;
 
     shadowTransforms.push_back(shadowProj * tg::look_at_opengl(lightPos, lightPos + tg::vec3(1.0f, 0.0f, 0.0f), tg::vec3(0.0f, -1.0f, 0.0f)));

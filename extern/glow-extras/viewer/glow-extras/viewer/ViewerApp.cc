@@ -90,7 +90,7 @@ ViewerApp::ViewerApp(glow::viewer::detail::shared_command_queue queue, glow::vie
     mLayoutNodes.reserve(8);
 }
 
-tg::optional<tg::pos3> ViewerApp::query3DPosition(int x, int y)
+cc::optional<tg::pos3> ViewerApp::query3DPosition(int x, int y)
 {
     auto px = querySubViewPixel(x, y);
 
@@ -100,9 +100,49 @@ tg::optional<tg::pos3> ViewerApp::query3DPosition(int x, int y)
         return {};
 }
 
+cc::optional<float> ViewerApp::queryDepth(int x, int y)
+{
+    auto px = querySubViewPixel(x, y);
+
+    if (px.is_valid())
+        return mRenderer.queryDepth(px.size, px.pos, *px.data);
+    else
+        return {};
+}
+
+cc::optional<tg::mat4> ViewerApp::queryCamView(int x, int y)
+{
+    auto px = querySubViewPixel(x, y);
+
+    if (px.is_valid())
+        return px.cam->computeViewMatrix();
+    else
+        return {};
+}
+
+cc::optional<tg::mat4> ViewerApp::queryCamProjNoReverseZ(int x, int y)
+{
+    auto px = querySubViewPixel(x, y);
+
+    if (px.is_valid())
+        return px.cam->computeProjMatrixNoReverseZ();
+    else
+        return {};
+}
+
 void ViewerApp::renderScreenshotNextFrame(std::string const& filename, int w, int h, int accumulationCount, GLenum format)
 {
     mNewScreenshots.push_back({filename, w, h, accumulationCount, format});
+}
+
+void glow::viewer::ViewerApp::handlePicking(int x, int y)
+{
+    auto px = querySubViewPixel(x, y);
+
+    if (!px.is_valid())
+        return;
+
+    mRenderer.handlePicking(px.size, px.pos, *px.data, *px.cam, mMouseButtonLeftPicking, mMouseButtonRightPicking);
 }
 
 void ViewerApp::resetCameraToSceneNextFrame(bool clipCam)
@@ -158,9 +198,34 @@ void ViewerApp::init()
     if (mSettings.headlessScreenshot)
         setStartInvisible(true);
 
+    // set where to read and write the window position
+    // (empty location -> don't read or write)
+    if (mSettings.cacheWindowSizeFolder.empty())
+    {
+        setCacheWindowSize(false);
+    }
+    else
+    {
+        setCacheWindowSize(true);
+        setCacheWindowSizeFilename(mSettings.cacheWindowSizeFolder + "glfwapp.ini");
+        setCacheWindowSizeFilenameImGui(mSettings.cacheWindowSizeFolder + "imgui.ini");
+    }
+
     sLastCloseInfo.closed_by_key = -1;
 
     GlfwApp::init();
+
+    // set where to read and write the window position; part 2
+    // (ImGui Context has to be initialized already)
+    if (getGui() == Gui::ImGui)
+    {
+        if (!getCacheWindowSize())
+            ImGui::GetIO().IniFilename = nullptr;
+        else
+        {
+            ImGui::GetIO().IniFilename = getCacheWindowSizeFilenameImGui().c_str();
+        }
+    }
 
     // create camera (before initial layout)
     // (or take preserved camera)
@@ -183,7 +248,6 @@ void ViewerApp::init()
     // init cam
     if (newCamera)
     {
-        mCamera->s.HorizontalFov = 60_deg;
         resetCameraToScene();
     }
 
@@ -239,7 +303,7 @@ void ViewerApp::updateCamera(float dt)
     dUp -= int(mKeyQ) * speed;
 
     auto& cam = cameraAtPosition(tg::ipos2(mLastX, mLastY));
-    cam.moveCamera(dRight, dFwd, dUp, dt);
+    cam.moveCamera(dRight, dFwd, dUp, 0.f, dt);
 
     std::unordered_set<CameraController*> updated;
     for (auto& node : mLayoutNodes)
@@ -299,7 +363,7 @@ void ViewerApp::renderFrame(int width, int height, bool maximizeSamples)
     }
 
     (void)width;
-    if (mSettings.controls2d_enabled)
+    if (mSettings.use_2d_controls())
         mRenderer.set_2d_transform(mTransform_2d);
 
 #ifdef GLOW_EXTRAS_OPENGL_DEBUG_GROUPS
@@ -337,7 +401,9 @@ void ViewerApp::renderFrame(int width, int height, bool maximizeSamples)
             sCurrentViewMatrix = node.scene.viewMatrix;
             sCurrentProjMatrix = node.scene.projMatrix;
 
-            mRenderer.renderSubview(size, start, getOrCreateSubViewData(start, size), node.scene, cam);
+            auto& subview = getOrCreateSubViewData(start, size);
+            subview.mElapsedSeconds = elapsedSeconds;
+            mRenderer.renderSubview(size, start, subview, node.scene, cam);
         }
     }
 
@@ -361,6 +427,9 @@ void ViewerApp::resetCameraToScene(bool clipCam)
 
         auto& camera = node.scene.config.customCameraController ? *node.scene.config.customCameraController : *mCamera;
 
+        if (node.scene.config.cameraFov.has_value())
+            camera.s.HorizontalFov = node.scene.config.cameraFov.value();
+
         camera.setupMesh(bounding.diagonal, bounding.center);
 
         if (node.scene.config.customCameraOrientation)
@@ -369,11 +438,9 @@ void ViewerApp::resetCameraToScene(bool clipCam)
             camera.setTransform(node.scene.config.cameraPosition, node.scene.config.cameraTarget);
         if (node.scene.config.enableOrthogonalProjection)
             camera.enableOrthographicMode(node.scene.config.orthogonalProjectionBounds);
-        if (node.scene.config.cameraHorizontalFov.has_value())
-            camera.s.HorizontalFov = node.scene.config.cameraHorizontalFov.value();
     }
 
-    detail::set_2d_controls(mSettings.controls2d_enabled || !has_3d_geometry);
+    detail::set_has_3d_content(has_3d_geometry);
 
     if (clipCam)
     {
@@ -399,41 +466,55 @@ void ViewerApp::render(float dt)
 {
     updateCamera(dt);
     renderFrame(getWindowWidth(), getWindowHeight());
+    handlePicking(mLastX, mLastY);
+    mMouseButtonLeftPicking = false;
+    mMouseButtonRightPicking = false;
 
     for (auto const& s : mNewScreenshots)
         renderScreenshot(s.file, s.w, s.h, s.samples, s.format);
     mNewScreenshots.clear();
+
+    elapsedSeconds += dt;
 }
 
 bool ViewerApp::onMousePosition(double x, double y)
 {
-    if (GlfwApp::onMousePosition(x, y))
-        return true;
+    bool const guiCaptured = GlfwApp::onMousePosition(x, y);
 
     auto dx = x - mLastX;
     auto dy = y - mLastY;
+    auto camPos = tg::ipos2(mLastX, mLastY);
 
-    if (mSettings.controls2d_enabled && mMouseMiddle)
-    {
-        mTransform_2d[2][0] += float(dx);
-        mTransform_2d[2][1] += float(dy);
-    }
-    else
-    {
-        auto& cam = cameraAtPosition(tg::ipos2(mLastX, mLastY));
-
-        auto minS = double(tg::min(getWindowWidth(), getWindowHeight())); // correct?
-        auto relDx = dx / minS;
-        auto relDy = dy / minS;
-
-        if (mMouseRight && mSettings.rightMouseControlEnabled)
-            cam.fpsStyleLookaround(float(relDx), float(relDy));
-        else if (mMouseLeft && mSettings.leftMouseControlEnabled)
-            cam.targetLookaround(float(relDx), float(relDy));
-    }
-
+    // Always keep the previous mouse position in sync, even when the GUI captures the mouse or no button is held.
+    // Otherwise mLastX/mLastY go stale (e.g. while the cursor passes over an ImGui panel or an active gizmo mid-drag)
+    // and the next delta becomes one large jump that throws the camera around.
     mLastX = x;
     mLastY = y;
+
+    if (guiCaptured)
+        return true;
+
+    if (!isRealMouseClick())
+    {
+        if (mSettings.use_2d_controls() && mMouseMiddle)
+        {
+            mTransform_2d[2][0] += float(dx);
+            mTransform_2d[2][1] += float(dy);
+        }
+        else
+        {
+            auto& cam = cameraAtPosition(camPos);
+
+            auto minS = double(tg::min(getWindowWidth(), getWindowHeight())); // correct?
+            auto relDx = dx / minS;
+            auto relDy = dy / minS;
+
+            if (mMouseRight && mSettings.rightMouseControlEnabled)
+                cam.fpsStyleLookaround(float(relDx), float(relDy));
+            else if (mMouseLeft && mSettings.leftMouseControlEnabled)
+                cam.targetLookaround(float(relDx), float(relDy));
+        }
+    }
 
     return false;
 }
@@ -446,20 +527,37 @@ bool ViewerApp::onMouseButton(double x, double y, int button, int action, int mo
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS && clickCount >= 2 && mods == 0)
     {
         if (auto p = query3DPosition(int(x), int(y)); p.has_value())
-            mCamera->focusOnSelectedPoint(p.value());
+            cameraAtPosition({int(x), int(y)}).focusOnSelectedPoint(p.value());
     }
     if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS && clickCount >= 2 && mods == 0)
         resetCameraToScene(false);
 
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+    {
         mMouseLeft = true;
+    }
+
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
+    {
+        if (isRealMouseClick())
+        {
+            mMouseButtonLeftPicking = true;
+        }
         mMouseLeft = false;
+    }
 
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
+    {
         mMouseRight = true;
+    }
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
+    {
+        if (isRealMouseClick())
+        {
+            mMouseButtonRightPicking = true;
+        }
         mMouseRight = false;
+    }
 
     if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS)
         mMouseMiddle = true;
@@ -617,7 +715,7 @@ bool ViewerApp::onMouseScroll(double sx, double sy)
     if (GlfwApp::onMouseScroll(sx, sy))
         return true;
 
-    if (mSettings.controls2d_enabled)
+    if (mSettings.use_2d_controls())
     {
         auto const speed = mKeyCtrl ? 0.2f : 0.1f;
         auto scale = (sy < 0) ? 1 - speed : 1 + speed;
@@ -633,6 +731,16 @@ bool ViewerApp::onMouseScroll(double sx, double sy)
         camera.zoom(float(sy));
     }
 
+    return false;
+}
+
+bool ViewerApp::onFileDrop(const std::vector<std::string>& files)
+{
+    if (mSettings.onDropFiles)
+    {
+        mSettings.onDropFiles(files);
+        return true;
+    }
     return false;
 }
 
@@ -656,7 +764,7 @@ void ViewerApp::onGui()
         updateLayoutNodes(getCurrentDeltaTime(), getWindowSize());
 
     // perform viewer-global imgui
-    if (ImGui::BeginMainMenuBar())
+    if (mSettings.enableViewerUI && ImGui::BeginMainMenuBar())
     {
         ImGui::PushID("glow_viewer_menu");
 

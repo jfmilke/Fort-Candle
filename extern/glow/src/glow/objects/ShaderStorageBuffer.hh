@@ -10,7 +10,6 @@
 
 #include <map>
 #include <string>
-#include <vector>
 
 namespace glow
 {
@@ -43,15 +42,8 @@ public: // static construction
     static SharedShaderStorageBuffer create();
     /// Data is uninitialized
     static SharedShaderStorageBuffer create(size_t sizeInBytes);
-    template <class DataT>
-    static SharedShaderStorageBuffer create(std::vector<DataT> const& data)
-    {
-        auto ssbo = create();
-        ssbo->bind().setData(data);
-        return ssbo;
-    }
-    template <class DataT, class = std::enable_if_t<std::is_trivially_copyable<DataT>::value>>
-    static SharedShaderStorageBuffer create(DataT const& data)
+    template <class DataRangeT>
+    static SharedShaderStorageBuffer create(DataRangeT&& data)
     {
         auto ssbo = create();
         ssbo->bind().setData(data);

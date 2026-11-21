@@ -1,5 +1,7 @@
 #pragma once
 
+#include <clean-core/optional.hh>
+
 #include <glow-extras/viewer/objects/other/file.hh>
 #include <glow/fwd.hh>
 #include <iostream>
@@ -46,7 +48,7 @@ public:
 
 protected:
     virtual size_t computeHash() const = 0;
-    mutable tg::optional<size_t> mCachedHash;
+    mutable cc::optional<size_t> mCachedHash;
 };
 
 class PolyMeshDefinition : public MeshDefinition
@@ -152,7 +154,30 @@ std::shared_ptr<PolyMeshDefinition> make_mesh_definition(std::vector<std::vector
 
     return pm;
 }
-template <class Pos3, int N, class = std::enable_if_t<is_pos3_like<Pos3>>>
+template <class Pos3, class = std::enable_if_t<is_pos3_like<Pos3>>>
+std::shared_ptr<PolyMeshDefinition> make_mesh_definition(std::vector<std::array<Pos3, 2>> const& pos)
+{
+    auto pm = std::make_shared<PolyMeshDefinition>();
+    pm->info.type = MeshType::LineList;
+    pm->info.vertexCount = int(2 * pos.size());
+    pm->info.edgeCount = int(pos.size());
+    pm->info.faceCount = 0;
+
+    for (auto const& seg : pos)
+    {
+        auto v0 = pm->mesh.vertices().add();
+        auto v1 = pm->mesh.vertices().add();
+        pm->mesh.edges().add_or_get(v0, v1);
+
+        pm->pos[v0] = tg::pos3(seg[0][0], seg[0][1], seg[0][2]);
+        pm->pos[v1] = tg::pos3(seg[1][0], seg[1][1], seg[1][2]);
+    }
+
+    return pm;
+}
+
+/// note: N must be of type std::size_t as that is what std::array expects. Otherwise this will cause substitution failure
+template <class Pos3, std::size_t N, class = std::enable_if_t<is_pos3_like<Pos3>>>
 std::shared_ptr<PolyMeshDefinition> make_mesh_definition(std::vector<std::array<Pos3, N>> const& pos)
 {
     auto pm = std::make_shared<PolyMeshDefinition>();
@@ -180,6 +205,27 @@ std::shared_ptr<PolyMeshDefinition> make_mesh_definition(std::vector<std::array<
 }
 
 
+template <class Pos3, class = std::enable_if_t<is_pos3_like<Pos3>>>
+std::shared_ptr<PolyMeshDefinition> make_mesh_definition(std::vector<std::pair<Pos3, Pos3>> const& pos)
+{
+    auto pm = std::make_shared<PolyMeshDefinition>();
+    pm->info.type = MeshType::LineList;
+    pm->info.vertexCount = int(2 * pos.size());
+    pm->info.edgeCount = int(pos.size());
+    pm->info.faceCount = 0;
+
+    for (auto const& seg : pos)
+    {
+        auto v0 = pm->mesh.vertices().add();
+        auto v1 = pm->mesh.vertices().add();
+        pm->mesh.edges().add_or_get(v0, v1);
+
+        pm->pos[v0] = tg::pos3(seg.first[0], seg.first[1], seg.first[2]);
+        pm->pos[v1] = tg::pos3(seg.second[0], seg.second[1], seg.second[2]);
+    }
+
+    return pm;
+}
 template <int D, class ScalarT>
 std::shared_ptr<PolyMeshDefinition> make_mesh_definition(std::vector<tg::segment<D, ScalarT>> const& segs)
 {
@@ -275,7 +321,8 @@ std::shared_ptr<PolyMeshDefinition> make_mesh_definition(std::vector<tg::quad<D,
         auto v11 = pm->mesh.vertices().add();
         pm->mesh.faces().add(v00, v10, v11, v01);
 
-        auto to_pos = [](tg::pos<D, ScalarT> p) -> tg::pos3 {
+        auto to_pos = [](tg::pos<D, ScalarT> p) -> tg::pos3
+        {
             if constexpr (D == 2)
                 return tg::pos3(p.x, 0, p.y);
             else
@@ -306,7 +353,8 @@ std::shared_ptr<PolyMeshDefinition> make_mesh_definition(std::vector<tg::aabb<D,
     pm->info.edgeCount = 12 * int(aabbs.size());
     pm->info.faceCount = 6 * int(aabbs.size());
 
-    auto mix3 = [](tg::pos3 a, tg::pos3 b, tg::vec3 t) {
+    auto mix3 = [](tg::pos3 a, tg::pos3 b, tg::vec3 t)
+    {
         return tg::pos3(tg::mix(a.x, b.x, t.x), //
                         tg::mix(a.y, b.y, t.y), //
                         tg::mix(a.z, b.z, t.z));
@@ -410,7 +458,8 @@ std::shared_ptr<PolyMeshDefinition> make_mesh_definition(std::vector<tg::sphere<
     {
         pm::objects::add_uv_sphere(
             pm->mesh,
-            [&](pm::vertex_handle v, float x, float y) {
+            [&](pm::vertex_handle v, float x, float y)
+            {
                 auto [sx, cx] = tg::sin_cos(x * 360_deg);
                 auto [sy, cy] = tg::sin_cos(y * 180_deg);
                 auto& p = pm->pos[v];
@@ -452,7 +501,8 @@ std::shared_ptr<PolyMeshDefinition> make_mesh_definition(std::vector<tg::cylinde
 
         pm::objects::add_cylinder(
             pm->mesh,
-            [&](pm::vertex_handle v, float x, float y) {
+            [&](pm::vertex_handle v, float x, float y)
+            {
                 auto [sx, cx] = tg::sin_cos(x * 360_deg);
                 auto& p = pm->pos[v];
                 p = c.axis[y] + (t0 * sx + t1 * cx) * c.radius;
@@ -491,7 +541,8 @@ std::shared_ptr<PolyMeshDefinition> make_mesh_definition(std::vector<tg::cylinde
 
         pm::objects::add_cylinder(
             pm->mesh,
-            [&](pm::vertex_handle v, float x, float y) {
+            [&](pm::vertex_handle v, float x, float y)
+            {
                 auto [sx, cx] = tg::sin_cos(x * 360_deg);
                 auto& p = pm->pos[v];
                 p = c.axis[y] + (t0 * sx + t1 * cx) * c.radius;
@@ -528,7 +579,8 @@ std::shared_ptr<PolyMeshDefinition> make_mesh_definition(std::vector<tg::cone<3,
 
         pm::objects::add_cone(
             pm->mesh,
-            [&](pm::vertex_handle v, float x, float y) {
+            [&](pm::vertex_handle v, float x, float y)
+            {
                 auto [sx, cx] = tg::sin_cos(x * 360_deg);
                 auto& p = pm->pos[v];
                 if (y == 0)

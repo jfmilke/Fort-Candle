@@ -47,7 +47,7 @@ struct font2D
     float line_height = 1.f;
 
     font2D(char const* face) : face(face) {}
-    font2D(std::string face, float size = 16.f, text_align align = text_align::baseline_left) : face(move(face)), size(size), align(align) {}
+    font2D(std::string face, float size = 16.f, text_align align = text_align::baseline_left) : face(std::move(face)), size(size), align(align) {}
 };
 
 /// High-level API for writing to images

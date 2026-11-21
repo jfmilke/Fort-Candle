@@ -2,13 +2,27 @@
 
 #include <vector>
 
-#include <typed-geometry/detail/optional.hh>
+#include <clean-core/optional.hh>
+
 #include <typed-geometry/tg-lean.hh>
 
 #include "CameraController.hh"
 
 namespace glow::viewer
 {
+// Configuration for the bloom/glow post-process (see SceneConfig::bloom).
+struct BloomConfig
+{
+    /// if true, applies the bloom post-process
+    bool enabled = false;
+    /// luminance above which a pixel contributes to the bloom
+    float threshold = 1.f;
+    /// intensity multiplier for the bloom that is added back to the image
+    float strength = 1.f;
+    /// relative spread of the bloom blur (in downsampled texels per blur tap)
+    float radius = 1.f;
+};
+
 // NOTE: whenever a new setting is added it must also be added to computeHash
 struct SceneConfig
 {
@@ -24,6 +38,9 @@ struct SceneConfig
 
     /// if true, shows a shadow on the ground
     bool enableShadows = true;
+
+    /// if true, also shows shadows when the camera is below the ground plane
+    bool enableBackfacingShadows = true;
 
     /// if true, performs forward rendering
     /// NOTE: this can be disabled if bg / shadows are to be rendered separately
@@ -47,6 +64,9 @@ struct SceneConfig
     /// background color (border)
     tg::color3 bgColorOuter = tg::color3(.6f);
 
+    /// if non-null, draws an env map instead of the background gradient
+    glow::SharedTextureCubeMap bgEnvmap;
+
     /// "strength" / "darkness" of the SSAO
     float ssaoPower = 4.f;
     /// relative radius of the SSAO
@@ -56,6 +76,29 @@ struct SceneConfig
     bool enableTonemap = false;
     /// exposure setting for tonemapping
     float tonemapExposure = 1.f;
+
+    /// bloom/glow post-process: bright (HDR) areas bleed into their surroundings.
+    /// Disabled by default so existing views are unaffected.
+    BloomConfig bloom;
+
+    /// screen-space distance (in px) for fading out shadows near the screen border
+    float shadowScreenFadeoutDistance = 0.f;
+
+    /// world-space distance (relative to the scene's bounding box) for fading out the shadow on the ground, inner radius
+    float shadowWorldFadeoutFactorInner = 0.7f;
+    /// world-space distance (relative to the scene's bounding box) for fading out the shadow on the ground, outer radius
+    float shadowWorldFadeoutFactorOuter = 1.f;
+
+    /// darkness of the shadows
+    float shadowStrength = 0.95f;
+
+    /// relative distance of the disk-shaped light source (for soft shadows)
+    float sunOffsetFactor = 1.f;
+    /// relative distance of the disk-shaped light source (for soft shadows)
+    float sunScaleFactor = 1.f;
+
+    /// maximum number of samples for the soft shadow
+    int maxShadowSamples = 1024;
 
 
     //
@@ -77,7 +120,7 @@ struct SceneConfig
     float cameraDistance = -1.f;
 
     /// custom camera fov
-    tg::optional<tg::angle> cameraHorizontalFov;
+    cc::optional<tg::horizontal_fov> cameraFov;
 
     /// if true, overwrites the starting camera position
     bool customCameraPosition = false;
@@ -101,13 +144,14 @@ struct SceneConfig
 
     /// if set, uses this as bounding box instead of deriving it from renderables
     /// (useful to make the grid steady)
-    tg::optional<tg::aabb3> customBounds;
+    cc::optional<tg::aabb3> customBounds;
 
     /// if set, this is where the ground grid originates
-    tg::optional<tg::pos3> customGridCenter;
+    cc::optional<tg::pos3> customGridCenter;
 
     /// if set, this is the size of a ground grid cell (the major ones)
-    tg::optional<float> customGridSize;
+    cc::optional<float> customGridSize;
+
 
     //
     // Interaction settings

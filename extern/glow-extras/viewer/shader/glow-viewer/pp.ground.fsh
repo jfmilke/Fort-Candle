@@ -9,11 +9,15 @@ uniform float uShadowSamples;
 uniform vec3 uGroundShadowMin;
 uniform vec3 uGroundShadowMax;
 uniform sampler2D uShadowMapSoft;
+uniform float uShadowScreenFadeoutDistance;
+uniform float uShadowWorldFadeoutFactorInner;
+uniform float uShadowWorldFadeoutFactorOuter;
 
 uniform float uGroundY;
 uniform float uMeshDiag;
 uniform vec3 uMeshCenter;
 uniform bool uShowGrid;
+uniform bool uShowBackfacingShadows;
 uniform bool uReverseZEnabled;
 
 uniform float uGridSize;
@@ -104,9 +108,22 @@ void main()
         fColor.a *= 0.5;
     }
 
-    vec2 shadowPos = ((p - uGroundShadowMin) / (uGroundShadowMax - uGroundShadowMin)).xz;
-    float shadow = texture(uShadowMapSoft, shadowPos).x / uShadowSamples;
-    fColor.a = mix(fColor.a, 1, shadow * uShadowStrength);
+    if ((uCamPos.y >= uGroundY) || uShowBackfacingShadows)
+    {
+        vec2 shadowPos = ((p - uGroundShadowMin) / (uGroundShadowMax - uGroundShadowMin)).xz;
+        float shadow = texture(uShadowMapSoft, shadowPos).x / uShadowSamples;
+        if (uShadowScreenFadeoutDistance > 0)
+        {
+            vec2 ss = vec2(textureSize(uTexDepth));
+            vec2 fc = gl_FragCoord.xy;
+            float minDis = min(min(fc.x, fc.y), min(ss.x - fc.x, ss.y - fc.y)) / uShadowScreenFadeoutDistance;
+            float f = clamp(minDis, 0, 1);
+            f = 1 - (1 - f) * (1 - f);
+            f = smoothstep(0, 1, f);
+            shadow *= f;
+        }
+        fColor.a = mix(fColor.a, 1, shadow * uShadowStrength);
+    }
 
-    fColor.a *= smoothstep(uMeshDiag * 1, uMeshDiag * 0.7, centerDis);
+    fColor.a *= smoothstep(uMeshDiag * uShadowWorldFadeoutFactorOuter, uMeshDiag * uShadowWorldFadeoutFactorInner, centerDis);
 }

@@ -680,7 +680,9 @@ void Game::onGui()
                 // calculate camera matrices
                 auto const resolution = getWindowSize();
                 float const aspectRatio = resolution.width / float(resolution.height);
-                tg::mat4 const proj = tg::perspective_opengl(60_deg, aspectRatio, 0.01f, 500.f);
+                // same projection as RenderSystem::UpdateCamera (60° vertical FOV, given to perspective_opengl as horizontal FOV)
+                auto const horizontalFov = 2.f * tg::atan(tg::tan(60_deg / 2.f) * aspectRatio);
+                tg::mat4 const proj = tg::perspective_opengl(tg::horizontal_fov_t(horizontalFov), aspectRatio, 0.01f, 500.f);
                 tg::mat4 const view = tg::look_at_opengl(mCamera.physical.position, mCamera.physical.forward, {0, 1, 0});
 
                 // run the editor (some Imgui and a gizmo to move it around)

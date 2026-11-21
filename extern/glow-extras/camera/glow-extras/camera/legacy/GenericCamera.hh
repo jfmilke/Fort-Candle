@@ -153,8 +153,8 @@ public:
      * vertical FoV will get (implicitly) changed!
      * @param _fovh         New horizontal field of view of the camera.
      */
-    void setHorizontalFieldOfView(tg::angle _fovh);
-    tg::angle getHorizontalFieldOfView() const override { return mHorizontalFieldOfView; }
+    void setHorizontalFieldOfView(tg::horizontal_fov _fovh);
+    tg::horizontal_fov getHorizontalFieldOfView() const override { return mHorizontalFieldOfView; }
     /**
      * Set the vertical field of view of the camera in degree.
      * Horizontal FoV will get changed!
@@ -406,7 +406,7 @@ private:
     /// Current eye
     Eye mCurrentEye = EyeLeft;
     /// Current camera horizontal field of view
-    tg::angle mHorizontalFieldOfView = 75_deg;
+    tg::horizontal_fov mHorizontalFieldOfView = tg::horizontal_fov(75_deg);
     /// Current aspect ratio: width/height.
     float mAspectRatio = 4.f / 3.f;
 

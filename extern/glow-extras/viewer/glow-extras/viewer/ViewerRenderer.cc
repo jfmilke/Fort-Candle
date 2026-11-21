@@ -38,27 +38,46 @@ public:
     glow::SharedTextureRectangle shadowMap;
     glow::SharedTextureRectangle color;
     glow::SharedTextureRectangle normal;
+    glow::SharedTextureRectangle colorOverlay;
     glow::SharedTextureRectangle colorTransparent;
     glow::SharedTextureRectangle normalTransparent;
     glow::SharedTextureRectangle depthTransparent;
 
-    AccumRenderPoolTargets(glow::TexturePool<glow::TextureRectangle>* pool, tg::isize2 size, bool reverse_z_enabled) : mPool(pool)
+    // half-resolution ping-pong targets for the (optional) bloom post-process
+    glow::SharedTextureRectangle bloomA;
+    glow::SharedTextureRectangle bloomB;
+
+    AccumRenderPoolTargets(glow::TexturePool<glow::TextureRectangle>* pool, tg::isize2 size, bool reverse_z_enabled, bool bloom_enabled) : mPool(pool)
     {
         if (reverse_z_enabled)
         {
-            shadowMap = mPool->allocAtLeast({GL_DEPTH_COMPONENT32F, {2048, 2048}});
+            shadowMap = mPool->allocAtLeast({GL_DEPTH_COMPONENT32F, gv::SubViewData::shadowMapSize});
             depthTransparent = mPool->allocAtLeast({GL_DEPTH_COMPONENT32F, size});
         }
         else
         {
-            shadowMap = mPool->allocAtLeast({GL_DEPTH_COMPONENT32, {2048, 2048}});
+            shadowMap = mPool->allocAtLeast({GL_DEPTH_COMPONENT32, gv::SubViewData::shadowMapSize});
             depthTransparent = mPool->allocAtLeast({GL_DEPTH_COMPONENT32, size});
         }
 
         color = mPool->allocAtLeast({GL_RGBA16F, size});
         normal = mPool->allocAtLeast({GL_RGBA16F, size});
+        colorOverlay = mPool->allocAtLeast({GL_RGBA16F, size});
         colorTransparent = mPool->allocAtLeast({GL_RGBA16F, size});
         normalTransparent = mPool->allocAtLeast({GL_RGBA16F, size});
+
+        if (bloom_enabled)
+        {
+            auto const bloomSize = tg::isize2(tg::max(1, size.width / 2), tg::max(1, size.height / 2));
+            bloomA = mPool->allocAtLeast({GL_RGBA16F, bloomSize});
+            bloomB = mPool->allocAtLeast({GL_RGBA16F, bloomSize});
+            for (auto const& t : {bloomA, bloomB})
+            {
+                t->bind().setMinFilter(GL_LINEAR);
+                t->bind().setMagFilter(GL_LINEAR);
+                t->bind().setWrap(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+            }
+        }
     }
 
     ~AccumRenderPoolTargets()
@@ -66,9 +85,14 @@ public:
         mPool->free(&shadowMap);
         mPool->free(&color);
         mPool->free(&normal);
+        mPool->free(&colorOverlay);
         mPool->free(&colorTransparent);
         mPool->free(&normalTransparent);
         mPool->free(&depthTransparent);
+        if (bloomA)
+            mPool->free(&bloomA);
+        if (bloomB)
+            mPool->free(&bloomB);
     }
 };
 }
@@ -92,6 +116,10 @@ glow::viewer::ViewerRenderer::ViewerRenderer()
     mShaderGround = glow::Program::createFromFile("glow-viewer/pp.ground");
     mShaderAccum = glow::Program::createFromFile("glow-viewer/pp.accum");
     mShaderShadow = glow::Program::createFromFile("glow-viewer/pp.shadow");
+    mShaderPickingVis = glow::Program::createFromFile("glow-viewer/pp.pickvis");
+    mShaderBloomExtract = glow::Program::createFromFile("glow-viewer/pp.bloomExtract");
+    mShaderBloomBlur = glow::Program::createFromFile("glow-viewer/pp.bloomBlur");
+    mShaderBloomComposite = glow::Program::createFromFile("glow-viewer/pp.bloomComposite");
 
     // Load meshes
     mMeshQuad = glow::geometry::make_quad();
@@ -99,10 +127,15 @@ glow::viewer::ViewerRenderer::ViewerRenderer()
     // Create framebuffers
     mFramebuffer = Framebuffer::create();
     mFramebufferColor = Framebuffer::create();
+    mFramebufferColorOverlay = Framebuffer::create();
     mFramebufferSSAO = Framebuffer::create();
     mFramebufferOutput = Framebuffer::create();
     mFramebufferShadow = Framebuffer::create();
     mFramebufferShadowSoft = Framebuffer::create();
+    mFramebufferPicking = Framebuffer::create();
+    mFramebufferVisPicking = Framebuffer::create();
+    mFramebufferBloom = Framebuffer::create();
+    mFramebufferBloomComposite = Framebuffer::create();
 
     // Register global fonts
     auto const& globalFonts = detail::internal_global_get_fonts();
@@ -114,7 +147,7 @@ glow::viewer::ViewerRenderer::ViewerRenderer()
         mVectorRenderer.loadFontFromFile(font.first, font.second);
 }
 
-void glow::viewer::ViewerRenderer::beginFrame(tg::color3 const& clearColor)
+void glow::viewer::ViewerRenderer::beginFrame(tg::color3 const& clearColor, bool bSkipOutput)
 {
     if (mReverseZEnabled)
     {
@@ -124,10 +157,15 @@ void glow::viewer::ViewerRenderer::beginFrame(tg::color3 const& clearColor)
         glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
     }
 
-    glClearColor(clearColor.r, clearColor.g, clearColor.b, 1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    if (!bSkipOutput)
+    {
+        glClearColor(clearColor.r, clearColor.g, clearColor.b, 1);
+        glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    }
 
     mIsCurrentFrameFullyConverged = true;
+
+    mAllPickableRenderables.clear();
 }
 
 void glow::viewer::ViewerRenderer::endFrame(float approximateRenderTime)
@@ -147,12 +185,14 @@ void glow::viewer::ViewerRenderer::endFrame(float approximateRenderTime)
     }
     else if (approximateRenderTime > 0.f)
     {
-        auto multiply = [&](float mult) {
+        auto multiply = [&](float mult)
+        {
             mSSAOSamples *= mult;
             mShadowSamplesPerFrame *= mult;
         };
 
-        auto add = [&](int val) {
+        auto add = [&](int val)
+        {
             mSSAOSamples += val;
             mShadowSamplesPerFrame += val;
         };
@@ -180,7 +220,7 @@ void glow::viewer::ViewerRenderer::maximizeSamples()
     mSSAOSamples = 64;
 }
 
-tg::optional<tg::pos3> glow::viewer::ViewerRenderer::query3DPosition(tg::isize2 resolution, tg::ipos2 pixel, const SubViewData& subViewData, const CameraController& cam) const
+cc::optional<tg::pos3> glow::viewer::ViewerRenderer::query3DPosition(tg::isize2 resolution, tg::ipos2 pixel, const SubViewData& subViewData, const CameraController& cam) const
 {
     if (pixel.x >= resolution.width || pixel.y >= resolution.height)
         return {};
@@ -193,7 +233,7 @@ tg::optional<tg::pos3> glow::viewer::ViewerRenderer::query3DPosition(tg::isize2 
     {
         auto fb = mFramebuffer->bind();
         fb.attachDepth(subViewData.targetDepth);
-        glReadPixels(static_cast<int>(pixel.x), static_cast<int>(pixel.y), 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &d);
+        glReadPixels(pixel.x, pixel.y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &d);
     }
 
     if (mReverseZEnabled && d <= 0.0f)
@@ -214,7 +254,100 @@ tg::optional<tg::pos3> glow::viewer::ViewerRenderer::query3DPosition(tg::isize2 
     return tg::inverse(cam.computeViewMatrix()) * pos_vs;
 }
 
-void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos2 const& offset, SubViewData& subViewData, Scene const& scene, glow::viewer::CameraController& cam)
+cc::optional<float> glow::viewer::ViewerRenderer::queryDepth(tg::isize2 resolution, tg::ipos2 pixel, const SubViewData& subViewData) const
+{
+    if (pixel.x >= resolution.width || pixel.y >= resolution.height)
+        return {};
+
+    // remap
+    pixel.y = resolution.height - pixel.y - 1;
+
+    float d;
+
+    {
+        auto fb = mFramebuffer->bind();
+        fb.attachDepth(subViewData.targetDepth);
+        glReadPixels(pixel.x, pixel.y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &d);
+    }
+
+    return d;
+}
+
+void glow::viewer::ViewerRenderer::handlePicking(tg::isize2 resolution, tg::ipos2 pixel, SubViewData& subViewData, CameraController const& cam, bool left_mouse, bool right_mouse)
+{
+    if (pixel.x >= resolution.width || pixel.y >= resolution.height || pixel.x < 0 || pixel.y < 0)
+        return;
+
+    // remap
+    pixel.y = resolution.height - pixel.y - 1;
+
+    // store pixel position in ViewerRenderer (each frame)
+    normal_check_values = pixel;
+
+    tg::ivec2 rg;
+    float d;
+
+    {
+        auto fb = mFramebufferPicking->bind();
+        fb.attachColor("fColor", subViewData.targetPicking);
+        fb.attachDepth(subViewData.targetDepth);
+
+        glReadPixels(pixel.x, pixel.y, 1, 1, GL_RG_INTEGER, GL_INT, &rg);
+        glReadPixels(pixel.x, pixel.y, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &d);
+    }
+
+    // ############## WORLD POS ########################
+    tg::pos3 pos_ndc;
+    pos_ndc.x = pixel.x / float(resolution.width - 1) * 2 - 1;
+    pos_ndc.y = pixel.y / float(resolution.height - 1) * 2 - 1;
+
+    if (mReverseZEnabled)
+        pos_ndc.z = d;
+    else
+        pos_ndc.z = d * 2.0f - 1.0f;
+
+    auto pos_vs = tg::inverse(cam.computeProjMatrix()) * pos_ndc;
+    auto pos_world = tg::inverse(cam.computeViewMatrix()) * pos_vs;
+    // ############ WORLD POS END ########################
+
+    if (rg.x < 0)
+        return;
+
+    if (mAllPickableRenderables.empty())
+        return; // first frame
+
+    auto const& ren = mAllPickableRenderables[rg.x];
+
+    if (!ren->hasPicker())
+    {
+        std::cout << "[ViewerApp] WARNING: This renderable does not have a Picker. Call gv::view() with gv::pick()" << std::endl;
+        return;
+    }
+
+    tg::vec3 normal = tg::vec3(0, 0, 0);
+    auto& p = ren->getPicker();
+    if (current_picked_normal.has_value())
+    {
+        normal = current_picked_normal.value();
+    }
+
+    auto const res = p.handlePicking(pickRes, pos_world, rg, normal, left_mouse, right_mouse);
+
+    if (res.successfulPick && rg.x >= 0 && rg.y >= 0)
+    {
+        pickRes = res;
+        if (mLastPickedRenderable != nullptr && mLastPickedRenderable != ren)
+        {
+            mLastPickedRenderable->setDirty();
+        }
+        current_picked_ID = rg;
+        subViewData.clearAccumBuffer();
+        mLastPickedRenderable = ren;
+    }
+}
+
+void glow::viewer::ViewerRenderer::renderSubview(
+    tg::isize2 const& res, tg::ipos2 const& offset, SubViewData& subViewData, Scene const& scene, glow::viewer::CameraController& cam, bool bSkipOutput)
 {
     if (scene.shouldBeCleared() || scene.queryHash() != subViewData.lastHash)
     {
@@ -227,10 +360,64 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
     auto const& boundingInfo = scene.getBoundingInfo();
 
     auto sunPos = boundingInfo.center
-                  + tg::vec3::unit_y * (0.5f * (boundingInfo.aabb.max.y - boundingInfo.aabb.min.y) + mSunOffsetFactor * boundingInfo.diagonal);
+                  + tg::vec3::unit_y * (0.5f * (boundingInfo.aabb.max.y - boundingInfo.aabb.min.y) + scene.config.sunOffsetFactor * boundingInfo.diagonal);
 
     // pass lambdas
-    auto performOutput = [&]() {
+    auto renderVectorOverlay = [&]()
+    {
+        RenderInfo info{cam.computeViewMatrix(),
+                        cam.computeProjMatrix(),
+                        sunPos,
+                        res,
+                        cam.getPosition(),
+                        normalize(cam.getForwardDir()),
+                        normalize(cam.getUpDir()),
+                        normalize(cam.getRightDir()),
+                        subViewData.accumCount,
+                        mReverseZEnabled,
+                        subViewData.mElapsedSeconds};
+        for (auto const& r : renderables)
+            r->renderOverlay(info, &mVectorRenderer, res, offset);
+
+        mVectorImage.clear();
+        {
+            auto g = graphics(mVectorImage);
+
+            auto const col_fg = scene.config.enablePrintMode ? tg::color3::black : tg::color3::white;
+            auto const col_bg = scene.config.enablePrintMode ? tg::color3::white : tg::color3::black;
+
+            std::string_view name;
+            auto has_unique_name = true;
+            for (auto const& r : renderables)
+            {
+                if (r->name().empty())
+                    continue;
+
+                if (!name.empty() && name != r->name())
+                    has_unique_name = false;
+                name = r->name();
+            }
+
+            if (!name.empty() && has_unique_name)
+            {
+                auto f = glow::vector::font2D("sans", 24);
+                auto const y = res.height - 8.f;
+                f.blur = 4;
+                g.text({8, y}, name, f, col_bg);
+                f.blur = 1;
+                g.text({8, y}, name, f, col_bg);
+                f.blur = 0;
+                g.text({8, y}, name, f, col_fg);
+            }
+        }
+        mVectorRenderer.render(mVectorImage, res.width, res.height);
+    };
+
+    auto performOutput = [&]()
+    {
+        if (bSkipOutput)
+            return;
+
         // output
         {
             GLOW_SCOPED(debugGroup, "output");
@@ -243,49 +430,11 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
         }
 
         // glow-extras-vector overlay
-        {
-            RenderInfo info{cam.computeViewMatrix(), cam.computeProjMatrix(), sunPos,          res,
-                            cam.getPosition(),       subViewData.accumCount,  mReverseZEnabled};
-            for (auto const& r : renderables)
-                r->renderOverlay(info, &mVectorRenderer, res, offset);
-
-            mVectorImage.clear();
-            {
-                auto g = graphics(mVectorImage);
-
-                auto const col_fg = scene.config.enablePrintMode ? tg::color3::black : tg::color3::white;
-                auto const col_bg = scene.config.enablePrintMode ? tg::color3::white : tg::color3::black;
-
-                std::string_view name;
-                auto has_unique_name = true;
-                for (auto const& r : renderables)
-                {
-                    if (r->name().empty())
-                        continue;
-
-                    if (!name.empty())
-                        has_unique_name = false;
-                    name = r->name();
-                }
-
-                if (!name.empty() && has_unique_name)
-                {
-                    auto f = glow::vector::font2D("sans", 24);
-                    auto const y = res.height - 8.f;
-                    f.blur = 4;
-                    g.text({8, y}, name, f, col_bg);
-                    f.blur = 1;
-                    g.text({8, y}, name, f, col_bg);
-                    f.blur = 0;
-                    g.text({8, y}, name, f, col_fg);
-                }
-            }
-            mVectorRenderer.render(mVectorImage, res.width, res.height);
-        }
+        renderVectorOverlay();
     };
 
     // allocate pool targets
-    auto const targets = AccumRenderPoolTargets(&texturePoolRect, res, mReverseZEnabled);
+    auto targets = AccumRenderPoolTargets(&texturePoolRect, res, mReverseZEnabled, scene.config.bloom.enabled);
 
     // adjust camera size
     cam.resize(res.width, res.height);
@@ -339,15 +488,16 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
     auto const groundShadowAabb = tg::aabb3(tg::pos3(boundingInfo.center.x, groundY, boundingInfo.center.z) - tg::vec3(1, 0, 1) * boundingInfo.diagonal * 1,
                                             tg::pos3(boundingInfo.center.x, groundY, boundingInfo.center.z) + tg::vec3(1, 0, 1) * boundingInfo.diagonal * 1);
 
-    for (auto _ = 0; _ < mShadowSamplesPerFrame && subViewData.shadowSampleCount < mMinShadowCnt; ++_)
+    for (auto _ = 0; _ < mShadowSamplesPerFrame && subViewData.shadowSampleCount < scene.config.maxShadowSamples; ++_)
     {
         auto sunPosJitter = sunPos;
         if (subViewData.shadowSampleCount > 0)
         {
-            auto v = uniform_vec(mRng, tg::sphere3::unit) * boundingInfo.diagonal * mSunScaleFactor / 3.f;
+            auto v = uniform_vec(mRng, tg::sphere3::unit) * boundingInfo.diagonal * scene.config.sunScaleFactor / 3.f;
             v.y = 0;
             sunPosJitter += v;
         }
+        CC_ASSERT(boundingInfo.center != sunPos);
         auto sunDir = normalize(boundingInfo.center - sunPosJitter);
         auto sunFov = 1_deg;
         if (volume_of(boundingInfo.aabb) > 0)
@@ -361,27 +511,43 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
                         p.y += s.y * y;
                         p.z += s.z * z;
                         auto pd = normalize(p - sunPosJitter);
-                        sunFov = tg::max(tg::acos(dot(sunDir, pd)) * 2, sunFov);
+                        auto dot = tg::dot(sunDir, pd);
+                        // assure dot is in [-1, 1] so that acos is well defined.
+                        // even though the dot product of two normalized vectors should be in [-1, 1],
+                        // numerical errors can lead to values slightly outside this range.
+                        dot = tg::clamp(dot, -1.0f, 1.0f);
+                        sunFov = tg::max(tg::acos(dot) * 2, sunFov);
                     }
 
         auto sunView = tg::look_at_opengl(sunPosJitter, boundingInfo.center, tg::vec3::unit_x);
         tg::mat4 sunProj;
         if (mReverseZEnabled)
-            sunProj = tg::perspective_reverse_z_opengl(sunFov, 1.0f, cam.getNearPlane());
+            sunProj = tg::perspective_reverse_z_opengl(tg::horizontal_fov(sunFov), 1.0f, cam.getNearPlane());
         else
-            sunProj = tg::perspective_opengl(sunFov, 1.0f, cam.getNearPlane(), cam.getFarPlane());
+            sunProj = tg::perspective_opengl(tg::horizontal_fov(sunFov), 1.0f, cam.getNearPlane(), cam.getFarPlane());
 
         // draw shadow map
         {
             GLOW_SCOPED(debugGroup, "Draw shadow map");
             auto fb = mFramebufferShadow->bind();
             fb.attachDepth(targets.shadowMap);
+            fb.setViewport(SubViewData::shadowMapSize);
 
             GLOW_SCOPED(enable, GL_DEPTH_TEST);
             glClear(GL_DEPTH_BUFFER_BIT);
 
             auto const shadowMapBiasedRes = SubViewData::shadowMapSize / 2;
-            RenderInfo info{sunView, sunProj, sunPos, shadowMapBiasedRes, tg::pos3::zero, subViewData.shadowSampleCount, mReverseZEnabled};
+            RenderInfo info{sunView,
+                            sunProj,
+                            sunPos,
+                            shadowMapBiasedRes,
+                            tg::pos3::zero,
+                            tg::dir3::neg_z,
+                            tg::dir3::pos_y,
+                            tg::dir3::pos_x,
+                            subViewData.shadowSampleCount,
+                            mReverseZEnabled,
+                            subViewData.mElapsedSeconds};
 
             for (auto const& r : renderables)
                 r->renderShadow(info);
@@ -392,6 +558,7 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
             GLOW_SCOPED(debugGroup, "Accumulate soft shadow map");
             auto fb = mFramebufferShadowSoft->bind();
             fb.attachColor("fShadow", subViewData.shadowMapSoft);
+            fb.setViewport(SubViewData::shadowMapSize);
 
             if (subViewData.shadowSampleCount == 0)
             {
@@ -435,6 +602,7 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
             fb.attachColor("fColor", targets.color);
             fb.attachColor("fNormal", targets.normal);
             fb.attachDepth(subViewData.targetDepth);
+            fb.setViewport(res);
 
             GLOW_SCOPED(enable, GL_DEPTH_TEST);
             GLOW_SCOPED(clearColor, 0, 0, 0, 0);
@@ -448,15 +616,65 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
                 shader["uInnerColor"] = tg::vec3(scene.config.bgColorInner);
                 shader["uOuterColor"] = tg::vec3(scene.config.bgColorOuter);
                 shader["uPrintMode"] = scene.config.enablePrintMode;
+                shader["uTexEnvMap"] = scene.config.bgEnvmap;
+                shader["uUseEnvMap"] = scene.config.bgEnvmap != nullptr;
+                shader["uInvProj"] = inverse(proj);
+                shader["uInvView"] = inverse(view);
+                mShaderBackground->setWarnOnUnchangedUniforms(false); // uTexEnvMap
                 mMeshQuad->bind().draw();
             }
 
             // renderjobs
             if (scene.config.enableForwardRendering)
             {
-                RenderInfo info{view, proj, sunPos, res, cam.getPosition(), subViewData.accumCount, mReverseZEnabled};
+                RenderInfo info{view,
+                                proj,
+                                sunPos,
+                                res,
+                                cam.getPosition(),
+                                normalize(cam.getForwardDir()),
+                                normalize(cam.getUpDir()),
+                                normalize(cam.getRightDir()),
+                                subViewData.accumCount,
+                                mReverseZEnabled,
+                                subViewData.mElapsedSeconds};
                 for (auto const& r : renderables)
                     r->renderForward(info);
+            }
+        }
+
+        // picking rendering
+        {
+            auto fb = mFramebufferPicking->bind();
+            fb.attachColor("fColor", subViewData.targetPicking);
+            fb.attachDepth(subViewData.targetDepth);
+            fb.setViewport(res);
+
+            GLOW_SCOPED(depthFunc, mReverseZEnabled ? GL_GEQUAL : GL_LEQUAL);
+            GLOW_SCOPED(enable, GL_DEPTH_TEST);
+            int const clear_color[] = {-1, -1, -1, -1};
+            glClearBufferiv(GL_COLOR, 0, clear_color);
+
+            RenderInfo info{view,
+                            proj,
+                            sunPos,
+                            res,
+                            cam.getPosition(),
+                            normalize(cam.getForwardDir()),
+                            normalize(cam.getUpDir()),
+                            normalize(cam.getRightDir()),
+                            subViewData.accumCount,
+                            mReverseZEnabled,
+                            subViewData.mElapsedSeconds};
+
+            for (auto& r : renderables)
+            {
+                if (r->hasPicker())
+                {
+                    auto const renderableId = int(mAllPickableRenderables.size());
+                    mAllPickableRenderables.push_back(r);
+                    r->renderPicking(info, renderableId);
+                }
             }
         }
 
@@ -464,6 +682,7 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
         {
             GLOW_SCOPED(debugGroup, "ground");
             auto fb = mFramebuffer->bind();
+            fb.setViewport(res);
 
             GLOW_SCOPED(enable, GL_BLEND);
             GLOW_SCOPED(enable, GL_DEPTH_TEST);
@@ -484,12 +703,16 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
             shader["uGridSize"] = scene.config.customGridSize.has_value() ? scene.config.customGridSize.value() : boundingInfo.diagonal / 3;
             shader["uMeshDiag"] = boundingInfo.diagonal;
             shader["uMeshCenter"] = boundingInfo.center;
-            shader["uShadowStrength"] = scene.config.enableShadows ? mShadowStrength : 0.f;
+            shader["uShadowStrength"] = scene.config.enableShadows ? scene.config.shadowStrength : 0.f;
             shader["uGroundShadowMin"] = groundShadowAabb.min;
             shader["uGroundShadowMax"] = groundShadowAabb.max;
             shader["uShadowSamples"] = float(subViewData.shadowSampleCount);
             shader["uShadowMapSoft"] = subViewData.shadowMapSoft;
+            shader["uShadowScreenFadeoutDistance"] = scene.config.shadowScreenFadeoutDistance;
+            shader["uShadowWorldFadeoutFactorInner"] = scene.config.shadowWorldFadeoutFactorInner;
+            shader["uShadowWorldFadeoutFactorOuter"] = scene.config.shadowWorldFadeoutFactorOuter;
             shader["uShowGrid"] = scene.config.enableGrid;
+            shader["uShowBackfacingShadows"] = scene.config.enableBackfacingShadows;
             shader["uTexDepth"] = subViewData.targetDepth;
             mMeshQuad->bind().draw();
         }
@@ -502,6 +725,7 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
             fb.attachColor("fColor", targets.colorTransparent);
             fb.attachColor("fNormal", targets.normalTransparent);
             fb.attachDepth(targets.depthTransparent);
+            fb.setViewport(res);
 
             GLOW_SCOPED(enable, GL_DEPTH_TEST);
             GLOW_SCOPED(clearColor, 0, 0, 0, 0);
@@ -510,18 +734,51 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
             // renderjobs
             if (scene.config.enableTransparentRendering)
             {
-                RenderInfo info{view, proj, sunPos, res, cam.getPosition(), subViewData.accumCount, mReverseZEnabled};
+                RenderInfo info{view,
+                                proj,
+                                sunPos,
+                                res,
+                                cam.getPosition(),
+                                normalize(cam.getForwardDir()),
+                                normalize(cam.getUpDir()),
+                                normalize(cam.getRightDir()),
+                                subViewData.accumCount,
+                                mReverseZEnabled,
+                                subViewData.mElapsedSeconds};
                 for (auto const& r : renderables)
                     r->renderTransparent(info);
             }
+        }
+
+        // update normal according to mouse position
+        if (normal_check_values.has_value())
+        {
+            GLOW_SCOPED(debugGroup, "normal_update");
+            auto const pixel_pos = normal_check_values.value();
+            tg::vec4 n;
+            auto fb = mFramebufferVisPicking->bind();
+            fb.attachColor("fNormal", targets.normal);
+            fb.setViewport(res);
+            glReadPixels(pixel_pos.x, pixel_pos.y, 1, 1, GL_RGBA, GL_FLOAT, &n);
+            current_picked_normal = tg::vec3(n.x, n.y, n.z);
+        }
+
+        // overlay
+        {
+            GLOW_SCOPED(debugGroup, "overlay");
+            auto fb = mFramebufferColorOverlay->bind();
+            fb.attachColor("fColor", targets.colorOverlay);
+            fb.setViewport(res);
+            GLOW_SCOPED(clearColor, 0, 0, 0, 0);
+            glClear(GL_COLOR_BUFFER_BIT);
         }
 
         // outline
         if (scene.config.enableOutlines)
         {
             GLOW_SCOPED(debugGroup, "outline");
-            auto fb = mFramebufferColor->bind();
-            fb.attachColor("fColor", targets.color);
+            auto fb = mFramebufferColorOverlay->bind();
+            fb.setViewport(res);
             GLOW_SCOPED(disable, GL_DEPTH_TEST);
             GLOW_SCOPED(enable, GL_BLEND);
             GLOW_SCOPED(blendFunc, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -541,12 +798,34 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
             mMeshQuad->bind().draw();
         }
 
+        // picking visualization
+        if (current_picked_ID.has_value())
+        {
+            GLOW_SCOPED(debugGroup, "picking_visualization");
+            auto fb = mFramebufferColorOverlay->bind();
+            fb.setViewport(res);
+            GLOW_SCOPED(disable, GL_DEPTH_TEST);
+            GLOW_SCOPED(enable, GL_BLEND);
+            GLOW_SCOPED(blendFunc, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+            auto shader = mShaderPickingVis->use();
+            shader["uTexPick"] = subViewData.targetPicking;
+            shader["uFragID"] = current_picked_ID.value().y;
+            shader["uRenderableID"] = current_picked_ID.value().x;
+            shader["uNeighborhoodSize"] = pickRes.borderWidth;
+            shader["uColor"] = pickRes.pickingColor;
+            shader["uColorBorder"] = pickRes.borderColor;
+
+            mMeshQuad->bind().draw();
+        }
+
         // ssao
         if (ssaoEnabled)
         {
             GLOW_SCOPED(debugGroup, "ssao");
             auto fb = mFramebufferSSAO->bind();
             fb.attachColor("fSSAO", subViewData.targetSsao);
+            fb.setViewport(res);
 
             if (subViewData.ssaoSampleCount == 0)
             {
@@ -584,13 +863,11 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
         {
             GLOW_SCOPED(debugGroup, "accum");
             subViewData.targetAccumRead.swap(subViewData.targetAccumWrite);
-            auto fb = mFramebufferOutput->bind();
-            fb.attachColor("fOutput", subViewData.targetOutput);
-            fb.attachColor("fAccum", subViewData.targetAccumWrite);
 
             auto shader = mShaderAccum->use();
             shader["uReverseZEnabled"] = mReverseZEnabled;
             shader["uTexColor"] = targets.color;
+            shader["uTexColorOverlay"] = targets.colorOverlay;
             shader["uTexSSAO"] = subViewData.targetSsao;
             shader["uTexDepth"] = subViewData.targetDepth;
             shader["uTexColorTransparent"] = targets.colorTransparent;
@@ -601,14 +878,124 @@ void glow::viewer::ViewerRenderer::renderSubview(tg::isize2 const& res, tg::ipos
             shader["uSSAOSamples"] = subViewData.ssaoSampleCount;
             shader["uEnableSSAO"] = ssaoEnabled;
             shader["uSSAOPower"] = scene.config.ssaoPower;
+            shader["uForceAlphaOne"] = false;
 
             shader["uEnableTonemap"] = scene.config.enableTonemap;
             shader["uTonemapExposure"] = scene.config.tonemapExposure;
 
-            mMeshQuad->bind().draw();
+            {
+                auto fb = mFramebufferOutput->bind();
+                fb.attachColor("fOutput", subViewData.targetOutput);
+                fb.attachColor("fAccum", subViewData.targetAccumWrite);
+                fb.setViewport(res);
+                mMeshQuad->bind().draw();
+            }
+
+            if (subViewData.targetOutput2D)
+            {
+                shader["uForceAlphaOne"] = true;
+
+                auto fb = mFramebufferOutput->bind();
+                fb.attachColor("fOutput", subViewData.targetOutput2D);
+                mMeshQuad->bind().draw();
+            }
+        }
+
+        // bloom (optional): extract bright HDR areas, blur them, and re-composite
+        // with the same tonemap as the accum pass so the glow bleeds over its
+        // surroundings. The composite overwrites the (bloom-free) output above.
+        if (scene.config.bloom.enabled && scene.config.bloom.strength > 0.f && targets.bloomA)
+        {
+            GLOW_SCOPED(debugGroup, "bloom");
+            GLOW_SCOPED(disable, GL_DEPTH_TEST);
+            GLOW_SCOPED(disable, GL_BLEND);
+
+            auto const bloomRes = tg::isize2(tg::max(1, res.width / 2), tg::max(1, res.height / 2));
+            auto const bloomSizeF = tg::size2(bloomRes);
+            auto const hdrSizeF = tg::size2(res);
+
+            // 1) bright-pass extract from the accumulated HDR -> bloomA (half res)
+            {
+                auto fb = mFramebufferBloom->bind();
+                fb.attachColor("fBloom", targets.bloomA);
+                fb.setViewport(bloomRes);
+
+                auto shader = mShaderBloomExtract->use();
+                shader["uTexHDR"] = subViewData.targetAccumWrite;
+                shader["uSrcSize"] = hdrSizeF;
+                shader["uThreshold"] = scene.config.bloom.threshold;
+                mMeshQuad->bind().draw();
+            }
+
+            // 2) separable Gaussian blur: a single horizontal + vertical pass.
+            // The wide 35-tap kernel makes one iteration enough; two targets are
+            // still required because the vertical pass must read the fully
+            // horizontally-blurred image.
+            {
+                auto shader = mShaderBloomBlur->use();
+                shader["uTexSize"] = bloomSizeF;
+                auto const step = tg::max(0.f, scene.config.bloom.radius);
+
+                // horizontal: A -> B
+                {
+                    auto fb = mFramebufferBloom->bind();
+                    fb.attachColor("fBloom", targets.bloomB);
+                    fb.setViewport(bloomRes);
+                    shader["uTex"] = targets.bloomA;
+                    shader["uDirection"] = tg::vec2(step, 0.f);
+                    mMeshQuad->bind().draw();
+                }
+                // vertical: B -> A
+                {
+                    auto fb = mFramebufferBloom->bind();
+                    fb.attachColor("fBloom", targets.bloomA);
+                    fb.setViewport(bloomRes);
+                    shader["uTex"] = targets.bloomB;
+                    shader["uDirection"] = tg::vec2(0.f, step);
+                    mMeshQuad->bind().draw();
+                }
+            }
+
+            // 3) composite bloom + accumulated HDR -> output (tonemap + gamma)
+            {
+                auto shader = mShaderBloomComposite->use();
+                shader["uTexAccum"] = subViewData.targetAccumWrite;
+                shader["uTexBloom"] = targets.bloomA;
+                shader["uTexDepth"] = subViewData.targetDepth;
+                shader["uBloomSize"] = bloomSizeF;
+                shader["uBloomStrength"] = scene.config.bloom.strength;
+                shader["uReverseZEnabled"] = mReverseZEnabled;
+                shader["uEnableTonemap"] = scene.config.enableTonemap;
+                shader["uTonemapExposure"] = scene.config.tonemapExposure;
+
+                shader["uForceAlphaOne"] = false;
+                {
+                    auto fb = mFramebufferBloomComposite->bind();
+                    fb.attachColor("fOutput", subViewData.targetOutput);
+                    fb.setViewport(res);
+                    mMeshQuad->bind().draw();
+                }
+
+                if (subViewData.targetOutput2D)
+                {
+                    shader["uForceAlphaOne"] = true;
+                    auto fb = mFramebufferBloomComposite->bind();
+                    fb.attachColor("fOutput", subViewData.targetOutput2D);
+                    fb.setViewport(res);
+                    mMeshQuad->bind().draw();
+                }
+            }
         }
 
         ++subViewData.accumCount;
+    }
+
+    if (bSkipOutput && subViewData.targetOutput2D)
+    {
+        auto fb = mFramebufferOutput->bind();
+        fb.attachColor("fOutput", subViewData.targetOutput2D);
+        fb.setViewport(res);
+        renderVectorOverlay();
     }
 
     performOutput();

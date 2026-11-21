@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include <clean-core/span.hh>
+
 #include <glow/common/log.hh>
 #include <glow/common/non_copyable.hh>
 #include <glow/gl.hh>
@@ -26,20 +28,21 @@ struct BoundArrayBuffer
     /// Works excellent for glm types or user-defined vertex structs
     /// (e.g. struct Vertex { glm::vec3 pos; float f; })
     /// Warns if stride is not equal data size
-    template <typename DataT>
-    void setData(std::vector<DataT> const& data, GLenum usage = GL_STATIC_DRAW)
+    template <class DataRangeT>
+    void setData(DataRangeT&& data, GLenum usage = GL_STATIC_DRAW)
     {
-        implSetData(sizeof(DataT) * data.size(), data.data(), sizeof(DataT), usage);
+        static_assert(cc::is_any_contiguous_range<DataRangeT>, "data must be a contiguous range!");
+        auto data_span = cc::span(data);
+        using DataT = std::decay_t<decltype(data_span[0])>;
+        static_assert(std::is_trivially_copyable_v<DataT>, "data must be trivially copyable");
+        implSetData(sizeof(DataT) * data_span.size(), data_span.data(), sizeof(DataT), usage);
     }
-
-    /// Same as above
-    /// Usage:
-    ///   Vertex vertices[] = { ... }
-    ///   setData(vertices);
-    template <typename DataT, std::size_t N>
-    void setData(const DataT (&data)[N], GLenum usage = GL_STATIC_DRAW)
+    /// Same as above for initializer lists
+    template <class DataT>
+    void setData(std::initializer_list<DataT> data, GLenum usage = GL_STATIC_DRAW)
     {
-        implSetData(sizeof(DataT) * N, data, sizeof(DataT), usage);
+        static_assert(std::is_trivially_copyable_v<DataT>, "data must be trivially copyable");
+        implSetData(sizeof(DataT) * data.size(), data.begin(), sizeof(DataT), usage);
     }
 
 private:

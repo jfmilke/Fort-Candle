@@ -1,5 +1,6 @@
 #pragma once
 
+#include <typed-geometry/detail/scalar_traits.hh>
 #include <typed-geometry/detail/utility.hh>
 #include <typed-geometry/types/scalars/default.hh>
 
@@ -14,12 +15,18 @@ using i128 = fixed_int<2>;
 using i192 = fixed_int<3>;
 using i256 = fixed_int<4>;
 
+TG_IMPL_ADD_TRAIT(type_name_prefix, char const*, i128, "i128");
+TG_IMPL_ADD_TRAIT(type_name_prefix, char const*, i192, "i192");
+TG_IMPL_ADD_TRAIT(type_name_prefix, char const*, i256, "i256");
+
 template <int words>
 struct fixed_int
 {
     static_assert(words <= 4, "only up to 256 bit supported");
 
-    u64 d[words] = {};
+    using word_t = uint64_t; // intrinsics parameter type
+
+    word_t d[words] = {};
 
     // ctors
     constexpr fixed_int() = default;
@@ -30,13 +37,13 @@ struct fixed_int
 
     constexpr fixed_int(i64 rhs)
     {
-        d[0] = u64(rhs);
+        d[0] = word_t(rhs);
         if constexpr (words > 1)
-            d[1] = rhs < 0 ? u64(-1) : 0;
+            d[1] = rhs < 0 ? word_t(-1) : 0;
         if constexpr (words > 2)
-            d[2] = rhs < 0 ? u64(-1) : 0;
+            d[2] = rhs < 0 ? word_t(-1) : 0;
         if constexpr (words > 3)
-            d[3] = rhs < 0 ? u64(-1) : 0;
+            d[3] = rhs < 0 ? word_t(-1) : 0;
     }
 
     template <int rhs_words>

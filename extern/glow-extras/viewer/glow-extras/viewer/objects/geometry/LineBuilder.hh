@@ -88,10 +88,18 @@ public:
     {
         addAttribute(detail::make_mesh_attribute("aNormal", val));
         mOwnNormals = true;
-        if (mScreenSpaceSize)
-            glow::warning() << "screen space sized lines cannot have normals";
         if (mCameraFacing)
             glow::warning() << "camera facing lines cannot have normals";
+        return *this;
+    }
+
+    // Makes the lines two-colored (i.e. left-right separate color)
+    // Requires normals in the 3D case
+    template <class T>
+    LineBuilder& two_colored(T const& val)
+    {
+        addAttribute(detail::make_mesh_attribute("aColor", val));
+        mForceTwoColored = true;
         return *this;
     }
 
@@ -150,6 +158,7 @@ private:
     bool mWorldSpaceSize = false;
     bool mScreenSpaceSize = false;
     bool mDashSizeWorld = false;
+    bool mForceTwoColored = false;
 
     std::shared_ptr<detail::PolyMeshDefinition> mMeshDef;
 

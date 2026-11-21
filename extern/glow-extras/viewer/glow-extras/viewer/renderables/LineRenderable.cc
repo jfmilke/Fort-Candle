@@ -40,7 +40,8 @@ void LineRenderable::renderShadow(RenderInfo const& info)
     shader.setUniform("uInvProj", inverse(info.proj));
     shader.setUniform("uProj", info.proj);
     shader.setUniform("uCamPos", info.camPos);
-    shader["uClipPlane"] = getClipPlane();
+    shader["uFragmentClipPlane"] = getFragmentClipPlane();
+    shader["uPrimitiveClipPlane"] = getPrimitiveClipPlane();
     if (m3D)
     {
         auto const tanHalfFovY = 1.f / tg::abs(info.proj[1][1]);
@@ -76,7 +77,11 @@ void LineRenderable::renderForward(RenderInfo const& info)
     shader["uInvProj"] = inverse(info.proj);
     shader["uProj"] = info.proj;
     shader["uCamPos"] = info.camPos;
-    shader["uClipPlane"] = getClipPlane();
+    shader["uFragmentClipPlane"] = getFragmentClipPlane();
+    shader["uPrimitiveClipPlane"] = getPrimitiveClipPlane();
+    shader["uSeed"] = tg::u32(info.accumulationCount);
+    shader["uIsTransparent"] = getRenderMode() == GeometricRenderable::RenderMode::Transparent;
+
     if (m3D)
     {
         auto const tanHalfFovY = 1.f / tg::abs(info.proj[1][1]);
@@ -87,6 +92,44 @@ void LineRenderable::renderForward(RenderInfo const& info)
         getColorMapping()->prepareShader(shader);
     if (getTexturing())
         getTexturing()->prepareShader(shader);
+    if (getMasking())
+        getMasking()->prepareShader(shader);
+    for (auto const& a : getAttributes())
+        a->prepareShader(shader);
+
+    mVertexArray->bind().draw();
+}
+
+void glow::viewer::LineRenderable::renderPicking(RenderInfo const& info, int32_t renderableID)
+{
+    if (mVertexArray->getVertexCount() == 0 || !hasPicker())
+        return; // empty
+
+    auto shader = mPickingShader->use();
+
+    shader["uIsReverseZEnabled"] = info.reverseZEnabled;
+    shader["uIsShadingEnabled"] = getShadingEnabled();
+    shader["uModel"] = transform();
+    shader["uInvModel"] = inverse(transform());
+    shader["uNoCaps"] = mNoCaps;
+    shader["uExtrapolate"] = mExtrapolate;
+    shader["uWorldSpaceSize"] = mWorldSpaceSize;
+    shader["uCameraFacing"] = mCameraFacing;
+    shader["uScreenSize"] = tg::vec2(info.resolution);
+    shader["uView"] = info.view;
+    shader["uInvView"] = inverse(info.view);
+    shader["uInvProj"] = inverse(info.proj);
+    shader["uProj"] = info.proj;
+    shader["uCamPos"] = info.camPos;
+    shader["uFragmentClipPlane"] = getFragmentClipPlane();
+    shader["uPrimitiveClipPlane"] = getPrimitiveClipPlane();
+    shader["uRenderableID"] = renderableID;
+    if (m3D)
+    {
+        auto const tanHalfFovY = 1.f / tg::abs(info.proj[1][1]);
+        shader["uTanFov2"] = tanHalfFovY;
+    }
+
     if (getMasking())
         getMasking()->prepareShader(shader);
     for (auto const& a : getAttributes())
@@ -164,6 +207,7 @@ void LineRenderable::initFromBuilder(const builder::LineBuilder& builder)
     else
         mWorldSpaceSize = false; // default
 
+    mForceTwoColored = builder.mForceTwoColored;
     mDashSizeWorld = builder.mDashSizeWorld;
 
     if (builder.mOwnNormals && !m3D && !builder.mWorldSpaceSize && !builder.mScreenSpaceSize)
@@ -183,7 +227,7 @@ void LineRenderable::init()
         addAttribute(detail::make_mesh_attribute("aColor", tg::color4(tg::color3(mCameraFacing ? 0.1f : 0.25f), 1.0f)));
 
     const auto aColor = getAttribute("aColor");
-    const auto twoColored = aColor && aColor->hasTwoColoredLines();
+    const auto twoColored = aColor && (mForceTwoColored || aColor->hasTwoColoredLines());
 
     if (!hasAttribute("aLineWidth"))
         addAttribute(detail::make_mesh_attribute("aLineWidth", 5.0f));
@@ -193,6 +237,28 @@ void LineRenderable::init()
 
         if (twoColored && m3D)
             glow::warning() << "Two colored 3D lines need normal information. Please add them using normals(...) and then force3D() render mode.";
+    }
+    if (hasPicker() && !hasAttribute("aPickID"))
+    {
+        int32_t vID = 0;
+        auto& p = this->getPicker();
+        pm::edge_attribute<int32_t> IDs;
+
+        auto pm = std::dynamic_pointer_cast<detail::PolyMeshDefinition>(getMeshDefinition());
+        TG_ASSERT(pm);
+
+        IDs = pm::edge_attribute<int32_t>(pm->mesh);
+        std::vector<pm::edge_index> edge_indices;
+        edge_indices.reserve(IDs.size());
+        for (auto e : pm->mesh.edges())
+        {
+            IDs[e] = vID;
+            vID++;
+            edge_indices.push_back(e.idx); // offers ability to map back the read IDs to face_indices
+        }
+
+        addAttribute(detail::make_mesh_attribute("aPickID", IDs));
+        p.init(edge_indices);
     }
 
     // build meshes
@@ -216,7 +282,8 @@ void LineRenderable::init()
         auto const use_gAlpha = !m3D && (mRoundCaps || twoColored);
 
         // Shared functionality
-        const auto createCommonShaderParts = [&](detail::MeshShaderBuilder& sb) {
+        const auto createCommonShaderParts = [&](detail::MeshShaderBuilder& sb)
+        {
             sb.addUniform("mat4", "uModel");
             sb.addUniform("mat4", "uInvModel");
             sb.addUniform("bool", "uWorldSpaceSize");
@@ -232,7 +299,8 @@ void LineRenderable::init()
             sb.addUniform("mat4", "uInvProj");
             sb.addUniform("vec3", "uCamPos");
             sb.addUniform("bool", "uIsReverseZEnabled");
-            sb.addUniform("vec4", "uClipPlane");
+            sb.addUniform("vec4", "uFragmentClipPlane");
+            sb.addUniform("vec4", "uPrimitiveClipPlane");
 
             sb.addPassthrough("vec3", "Position");
             sb.addPassthrough("vec3", "Normal");
@@ -284,6 +352,9 @@ void LineRenderable::init()
     vec3 pos0 = vec3(uModel * vec4(vIn[0].Position, 1.0));
     vec3 pos1 = vec3(uModel * vec4(vIn[1].Position, 1.0));
 
+    if (dot(uPrimitiveClipPlane.xyz, pos0) > uPrimitiveClipPlane.w || dot(uPrimitiveClipPlane.xyz, pos1) > uPrimitiveClipPlane.w)
+        return;
+
     float s;
     if(uWorldSpaceSize) { // 3D world space lines
         s = vIn[0].LineWidth * 0.5;
@@ -293,7 +364,18 @@ void LineRenderable::init()
         vOut.LineWidth = 2 * s;
     }
 
-    vec3 viewDir = normalize(pos0 - uCamPos);
+    vec4 pos0VS = uView * vec4(pos0, 1);
+    vec4 pos0CS = uProj * pos0VS;
+    vec3 pos0NDC = pos0CS.xyz / pos0CS.w;
+
+    // clip position to near plane in NDC and get ray origin by transforming into WS (required for orthographic rendering)
+    vec4 p0NearNDC = vec4(pos0NDC.xy, -1, 1);
+    vec4 p0NearCS = p0NearNDC * pos0CS.w;
+    vec4 p0NearVS = uInvProj * p0NearCS;
+    p0NearVS /= p0NearVS.w;
+    vec4 p0NearWS = uInvView * p0NearVS;
+
+    vec3 viewDir = normalize(pos0 - p0NearWS.xyz);
     vec3 diff = pos1 - pos0;
     vec3 right = normalize(diff);
     vec3 up = normalize(cross(right, viewDir));
@@ -331,7 +413,18 @@ void LineRenderable::init()
         vOut.LineWidth = 2 * s;
     }
 
-    viewDir = normalize(pos1 - uCamPos);
+    vec4 pos1VS = uView * vec4(pos1, 1);
+    vec4 pos1CS = uProj * pos1VS;
+    vec3 pos1NDC = pos1CS.xyz / pos1CS.w;
+
+    // clip position to near plane in NDC and get ray origin by transforming into WS (required for orthographic rendering)
+    vec4 p1NearNDC = vec4(pos1NDC.xy, -1, 1);
+    vec4 p1NearCS = p1NearNDC * pos1CS.w;
+    vec4 p1NearVS = uInvProj * p1NearCS;
+    p1NearVS /= p1NearVS.w;
+    vec4 p1NearWS = uInvView * p1NearVS;
+
+    viewDir = normalize(pos1 - p1NearWS.xyz);
     up = normalize(cross(right, viewDir));
     back = normalize(cross(right, up));
     r = s * right;
@@ -358,6 +451,10 @@ void LineRenderable::init()
 
     vec3 pos0 = vec3(uModel * vec4(vIn[0].Position, 1.0));
     vec3 pos1 = vec3(uModel * vec4(vIn[1].Position, 1.0));
+
+    if (dot(uPrimitiveClipPlane.xyz, pos0) > uPrimitiveClipPlane.w || dot(uPrimitiveClipPlane.xyz, pos1) > uPrimitiveClipPlane.w)
+        return;
+
     vec3 normal0 = uCameraFacing ? normalize(uCamPos - pos0) : normalize(mat3(uModel) * vIn[0].Normal); // TODO: Correct?
     vec3 normal1 = uCameraFacing ? normalize(uCamPos - pos1) : normalize(mat3(uModel) * vIn[1].Normal);
 
@@ -400,8 +497,15 @@ void LineRenderable::init()
 
     // it only makes sense if uCameraFacing is true for screenSpaceSize lines
     vec3 n = vec3(0,0,0);
-    vec4 spos0 = uProj * uView * uModel * vec4(vIn[0].Position, 1.0);
-    vec4 spos1 = uProj * uView * uModel * vec4(vIn[1].Position, 1.0);
+
+    vec3 pos0 = vec3(uModel * vec4(vIn[0].Position, 1.0));
+    vec3 pos1 = vec3(uModel * vec4(vIn[1].Position, 1.0));
+
+    if (dot(uPrimitiveClipPlane.xyz, pos0) > uPrimitiveClipPlane.w || dot(uPrimitiveClipPlane.xyz, pos1) > uPrimitiveClipPlane.w)
+        return;
+
+    vec4 spos0 = uProj * uView * vec4(pos0, 1.0);
+    vec4 spos1 = uProj * uView * vec4(pos1, 1.0);
 
     if(spos0.w < 0 || spos1.w < 0) return; // Fix for lines nearer than the near plane
 
@@ -458,8 +562,14 @@ float distance2(vec3 a, vec3 b)
                 // s: the amount to go back on the ray dir to get to the intersection point
                 // TODO in this shader code
                 sb.addFragmentShaderCode(R"(
-    vec3 rayOrigin = uCamPos;
-    vec3 rayDir = normalize(vIn.fragPosWS - uCamPos);
+    // clip FragCoord to near plane in NDC and transform back into WS (required for orhtographic rendering)
+    vec3 rayOriginNDC = vec3((gl_FragCoord.x / uScreenSize.x) * 2 - 1, (gl_FragCoord.y / uScreenSize.y) * 2 - 1, uIsReverseZEnabled ? 1 : -1);
+
+    vec4 rayOriginCS = vec4(rayOriginNDC,1) / gl_FragCoord.w;
+    vec4 rayOriginVS = (uInvProj * rayOriginCS);
+    rayOriginVS /= rayOriginVS.w;
+    vec3 rayOrigin = (uInvView * rayOriginVS).xyz;
+    vec3 rayDir = normalize(vIn.fragPosWS - rayOrigin);
 
     float cosA = dot(gLineDir, rayDir);
     float sinA2 = 1 - cosA * cosA;
@@ -521,7 +631,7 @@ float distance2(vec3 a, vec3 b)
 
     vec3 newPos = rayOrigin + max(tRayCyl, tRaySphere) * rayDir;
 
-    if (dot(uClipPlane.xyz, newPos) > uClipPlane.w)
+    if (dot(uFragmentClipPlane.xyz, newPos) > uFragmentClipPlane.w)
         discard;
 
     vec4 newPosCS = uProj * uView * vec4(newPos, 1);
@@ -538,7 +648,7 @@ float distance2(vec3 a, vec3 b)
                 if (mRoundCaps)
                 {
                     sb.addFragmentShaderCode(R"(
-    if (dot(uClipPlane.xyz, vIn.fragPosWS) > uClipPlane.w)
+    if (dot(uFragmentClipPlane.xyz, vIn.fragPosWS) > uFragmentClipPlane.w)
         discard;
     if(gAlpha.x < 0 && distance(gAlpha, vec2(0, 0)) > 1) discard;
     if(gAlpha.x > 1 && distance(gAlpha, vec2(1, 0)) > 1) discard;)");
@@ -562,13 +672,15 @@ float distance2(vec3 a, vec3 b)
 
             sbForward.addUniform("bool", "uExtrapolate");
             sbForward.addUniform("bool", "uIsShadingEnabled");
+            sbForward.addUniform("uint", "uSeed");
+            sbForward.addUniform("bool", "uIsTransparent");
 
             sbForward.addFragmentLocation("vec4", "fColor");
             sbForward.addFragmentLocation("vec3", "fNormal");
 
             // colored mesh
             if (aColor)
-                sbForward.addPassthrough(aColor->typeInShader(), "Color");
+                sbForward.addPassthrough(aColor->typeInShader(), "Color", detail::MeshShaderBuilder::TypeHandling::ExtendToVec4Color);
 
             if (twoColored)
             {
@@ -647,19 +759,29 @@ float distance2(vec3 a, vec3 b)
                 sbForward.addFragmentShaderCode(R"(
     vec3 leftDir = normalize(cross(vNormal, gLineDir));
     vNormal = normalize(newPos - closestOnSegment);
-    vColor = dot(leftDir, vNormal) > 0 ? gLeftColor : gRightColor;)");
+    vColor = padColor(dot(leftDir, vNormal) > 0 ? gLeftColor : gRightColor);)");
 
             else if (m3D)
                 sbForward.addFragmentShaderCode("    vNormal = normalize(newPos - closestOnSegment);");
 
             else if (twoColored) // implies use of gAlpha
-                sbForward.addFragmentShaderCode("    vColor = gAlpha.y > 0 ? gLeftColor : gRightColor;");
+                sbForward.addFragmentShaderCode("    vColor = padColor(gAlpha.y > 0 ? gLeftColor : gRightColor);");
 
             // Rest is same for all versions
             sbForward.addFragmentShaderCode(R"(
     fNormal = vNormal == vec3(0) ? vNormal : normalize(vNormal);
-    fColor.rgb = vColor.rgb * (uIsShadingEnabled ? fNormal.y * .5 + .5 : 1.0);
+    fColor.rgb = vColor.rgb * (uIsShadingEnabled ? fNormal.y * .4 + .6 : 1.0);
     fColor.a = 1;)");
+
+            if (getRenderMode() == GeometricRenderable::RenderMode::Transparent)
+                sbForward.addFragmentShaderCode(R"(
+                                         if (uIsTransparent)
+                                         {
+                                            float a = vColor.a;
+
+                                            if (a < make_hashed_threshold(gl_FragCoord.z, uSeed))
+                                                discard;
+                                         })");
 
             mForwardShader = sbForward.createProgram();
         }
@@ -709,6 +831,88 @@ float distance2(vec3 a, vec3 b)
             sbShadow.addGeometryShaderDecl(createVertexInverseShadow);
 
             mShadowShader = sbShadow.createProgram();
+        }
+
+        // picking shader
+        if (hasPicker())
+        {
+            detail::MeshShaderBuilder sbPicking;
+
+            createCommonShaderParts(sbPicking);
+
+            sbPicking.addUniform("bool", "uExtrapolate");
+            sbPicking.addUniform("bool", "uIsShadingEnabled");
+
+            sbPicking.addFragmentLocation("ivec2", "fPickIDs");
+
+            sbPicking.addUniform("int", "uRenderableID");
+            sbPicking.addPassthrough("int", "FragmentID");
+            sbPicking.addPassthrough("int", "RenderableID");
+
+            // Helper functions to emit vertices from the given relative line coordinates
+            std::string createVertexForward = "void createVertex(vec3 basePos, float ea, vec3 n, vec3 r, vec3 u, float relX, float relY) \n{\n";
+            if (use_gAlpha)
+                createVertexForward += "    gAlpha = vec2(relX, relY); // Relative line position for fragment shader\n";
+            createVertexForward += R"(
+    if (uExtrapolate)
+    {
+        if (relX < 0)
+            passthroughMix01(relX * ea);
+        if (relX > 1)
+            passthroughMix01((relX - 1) * ea + 1);
+    }
+    if (relX > 0)
+        relX -= 1; // This sets the factor for the r vector to the right value in case of the second half
+
+    vec3 outPos = basePos + relX * r + relY * u;
+    gl_Position = uProj * uView * vec4(outPos, 1.0);
+
+    vOut.fragPosWS = outPos;
+    vOut.Normal = n; // Set normal again as it might have been overwritten by passthrough
+    EmitVertex();
+}
+            )";
+            sbPicking.addGeometryShaderDecl(createVertexForward);
+
+            std::string createVertexInverseForward
+                = "void createVertexInverse(vec4 basePos, float ea, vec3 n, vec4 r, vec4 u, float relX, float relY) \n{\n";
+            if (use_gAlpha)
+                createVertexInverseForward += "    gAlpha = vec2(relX, relY);\n";
+            createVertexInverseForward += R"(
+    if (uExtrapolate)
+    {
+        if (relX < 0)
+            passthroughMix01(relX * ea);
+        if (relX > 1)
+            passthroughMix01((relX - 1) * ea + 1);
+    }
+    if (relX > 0)
+        relX -= 1;
+
+    vec4 outPos = basePos + relX * r + relY * u;
+    gl_Position = outPos;
+
+    outPos = uInvProj * outPos;
+    outPos /= outPos.w;
+    outPos = uInvView * outPos;
+
+    vOut.fragPosWS = vec3(outPos);
+    vOut.Normal = n;
+    EmitVertex();
+}
+            )";
+            sbPicking.addGeometryShaderDecl(createVertexInverseForward);
+
+            sbPicking.addVertexShaderCode(R"(
+									vOut.FragmentID = aPickID;
+									vOut.RenderableID = uRenderableID;
+                                   )");
+
+            sbPicking.addFragmentShaderCode(R"(							
+                                  fPickIDs = ivec2((vIn.RenderableID), (vIn.FragmentID));
+                                 )");
+
+            mPickingShader = sbPicking.createProgram();
         }
     }
 }

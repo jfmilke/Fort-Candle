@@ -16,6 +16,7 @@ class MeshShaderBuilder;
 
 GLOW_SHARED(class, Scene);
 struct SceneConfig;
+struct BloomConfig;
 
 GLOW_SHARED(class, Renderable);
 GLOW_SHARED(class, GeometricRenderable);
@@ -25,6 +26,7 @@ GLOW_SHARED(class, LineRenderable);
 GLOW_SHARED(class, Vector2DRenderable);
 GLOW_SHARED(class, TextureRenderable);
 GLOW_SHARED(class, LabelRenderable);
+GLOW_SHARED(class, QuadricRenderable);
 
 class ColorMapping;
 class Texturing;

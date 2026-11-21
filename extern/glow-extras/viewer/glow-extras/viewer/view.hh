@@ -124,6 +124,14 @@ struct raii_config
     static std::vector<config_func> sConfigStack;
     static std::vector<bool*> sConfigUsedStack;
 
+    static void applyConfigStack(Renderable& r)
+    {
+        for (auto b : detail::raii_config::sConfigUsedStack)
+            *b = true;
+        for (auto const& cf : detail::raii_config::sConfigStack)
+            cf(r);
+    }
+
     bool was_used = false;
 
 public:
@@ -258,7 +266,15 @@ GLOW_NODISCARD detail::raii_config config(Args const&... args)
     return detail::raii_config(funcs);
 }
 
-inline detail::raii_view_closer view() { return detail::getOrCreateView(); }
+inline detail::raii_view_closer view()
+{
+    auto v = detail::getOrCreateView();
+
+    NullRenderable r;
+    detail::raii_config::applyConfigStack(r);
+
+    return v;
+}
 
 template <class ObjT, class... Args>
 detail::raii_view_closer view(ObjT const& obj, Args const&... args)
@@ -270,10 +286,7 @@ detail::raii_view_closer view(ObjT const& obj, Args const&... args)
     auto r = make_renderable(obj);
     submit_command(detail::command::addRenderjob(r));
 
-    for (auto b : detail::raii_config::sConfigUsedStack)
-        *b = true;
-    for (auto const& cf : detail::raii_config::sConfigStack)
-        cf(*r);
+    detail::raii_config::applyConfigStack(*r);
 
     (glow::viewer::execute_configure(*r, args), ...);
 
@@ -315,11 +328,19 @@ inline detail::raii_view_closer grid(float aspect)
 
 inline detail::raii_view_closer nothing() { return detail::raii_view_closer{detail::raii_view_closer::blank_tag{}}; }
 
-inline detail::raii_view_closer interactive(std::function<void(float)> func)
+/// F: () -> void
+/// or (float dt) -> void
+template <class F>
+detail::raii_view_closer interactive(F&& func)
 {
     // Never integrates, always a new top-level subview
     detail::initAndBeginSubview();
-    detail::submit_command(detail::command::interactive(std::move(func)));
+    if constexpr (std::is_invocable_v<F, float>)
+        detail::submit_command(detail::command::interactive(func));
+    else if constexpr (std::is_invocable_v<F>)
+        detail::submit_command(detail::command::interactive([func = std::forward<F>(func)](float) { func(); }));
+    else
+        static_assert(tg::always_false<F>, "func must be () -> void or (float dt) -> void");
     return detail::raii_view_closer{true};
 }
 

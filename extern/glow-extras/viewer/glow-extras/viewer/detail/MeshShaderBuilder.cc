@@ -70,9 +70,9 @@ void MeshShaderBuilder::addFragmentShaderDecl(const std::string& code)
     mFragmentShaderDecl += "\n";
 }
 
-void MeshShaderBuilder::addPassthrough(std::string const& type, std::string const& nameWithoutPrefix)
+void MeshShaderBuilder::addPassthrough(std::string const& type, std::string const& nameWithoutPrefix, TypeHandling typeHandling)
 {
-    mInterfaceBlockVars.push_back({type, nameWithoutPrefix});
+    mInterfaceBlockVars.push_back({type, nameWithoutPrefix, typeHandling});
 }
 
 MeshShaderBuilder::Variable const* MeshShaderBuilder::findMatchingAttrOrUniform(Variable const& toSearch)
@@ -97,6 +97,8 @@ glow::SharedProgram MeshShaderBuilder::createProgram()
     };
 
     // Passthroughs
+    addFragmentShaderDecl("vec4 padColor(vec3 v) { return vec4(v, 1); }");
+    addFragmentShaderDecl("vec4 padColor(vec4 v) { return v; }");
     std::string vsPassthroughCode;
     std::string gsPassthroughFunc = "#define PASSTHROUGH(vInIndex) "; // Function to call to pass the data for the vertex with the given index through
     std::string gsPassthroughMixFunc = "void passthroughMix01(float alpha) {\n"; // Function to call to mix the data of the two vertices for passthrough
@@ -119,7 +121,20 @@ glow::SharedProgram MeshShaderBuilder::createProgram()
             gsPassthroughMixFunc += "    vOut." + v.name + " = mix(vIn[0]." + v.name + ", vIn[1]." + v.name + ", alpha);\n";
 
         // Copy interface block to local variables so that they can be overridden by modular components
-        fsPassthroughCode += "    " + v.type + " v" + v.name + " = vIn." + v.name + ";\n";
+        switch (v.typeHandling)
+        {
+            case TypeHandling::Default:
+            {
+                fsPassthroughCode += "    " + v.type + " v" + v.name + " = vIn." + v.name + ";\n";
+                break;
+            }
+            case TypeHandling::ExtendToVec4Color:
+            {
+                // Special handling for color variables: Extend to vec4.
+                fsPassthroughCode += "    vec4 v" + v.name + " = padColor(vIn." + v.name + ");\n";
+                break;
+            }
+        }
     }
     mVertexShaderDecl = "out " + interfaceBlockContent + "} vOut;\n\n" + mVertexShaderDecl;
     mFragmentShaderDecl = "in " + interfaceBlockContent + "} vIn;\n\n" + mFragmentShaderDecl;
@@ -173,23 +188,31 @@ glow::SharedProgram MeshShaderBuilder::createProgram()
         fsCode += mFragmentLocations + "\n";
         fsCode += mFragmentShaderDecl + "\n";
         fsCode += R"(
-uint hash_combine(uint seed, uint h) {
-    return seed ^ h + uint(0x9e3779b9) + (seed << 6) + (seed >> 2);
+
+// see https://nullprogram.com/blog/2018/07/31/
+uint hash_triple32(uint x) {
+    x ^= x >> 17;
+    x *= 0xed5ad4bbU;
+    x ^= x >> 11;
+    x *= 0xac4c1b51U;
+    x ^= x >> 15;
+    x *= 0x31848babU;
+    x ^= x >> 14;
+    return x;
 }
 
-uint wang_hash(uint seed) {
-    seed = (seed ^ uint(61)) ^ (seed >> 16);
-    seed *= 9;
-    seed = seed ^ (seed >> 4);
-    seed *= 0x27d4eb2d;
-    seed = seed ^ (seed >> 15);
-    return seed;
-}
-
-float wang_float(uint hash) {
+// full u32 to [0..1]
+float hash_u32_to_float(uint hash) {
     return hash / float(0x7FFFFFFF) / 2.0;
 }
 
+float make_hashed_threshold(float vertex_id, uint seed) {
+    uint h = hash_triple32(floatBitsToUint(vertex_id));
+    h = h * 4111 + uint(gl_FragCoord.x);
+    h = h * 4099 + uint(gl_FragCoord.y);
+    h = h * 5003 + uint(seed);
+    return hash_u32_to_float(hash_triple32(h));
+}
 
 )";
         fsCode += "void main() {\n";
@@ -197,11 +220,6 @@ float wang_float(uint hash) {
         fsCode += mFragmentShaderBody;
         fsCode += "}\n";
     }
-
-    // glow::info() << "Vertex Shader:\n" << vsCode;
-    // if (mGeometryShaderUsed)
-    //     glow::info() << "Geometry Shader:\n" << gsCode;
-    // glow::info() << "Fragment Shader:\n" << fsCode;
 
     auto vs = Shader::createFromSource(GL_VERTEX_SHADER, vsCode);
     auto fs = Shader::createFromSource(GL_FRAGMENT_SHADER, fsCode);

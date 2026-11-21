@@ -11,6 +11,8 @@
 
 #include <vector>
 
+#include <clean-core/span.hh>
+
 #include <typed-geometry/tg-lean.hh>
 
 namespace glow
@@ -84,31 +86,27 @@ public:
         /// Changes internal format, size, and data
         void setData(GLenum internalFormat, int size, GLenum format, GLenum type, const GLvoid* data);
         /// Data upload via glm, tg, or c++ type (see gltypeinfo)
-        template <typename DataT>
-        void setData(GLenum internalFormat, int size, std::vector<DataT> const& data)
+        template <typename DataRangeT>
+        void setData(GLenum internalFormat, int size, DataRangeT&& data)
         {
-            if ((int)data.size() != size)
+            static_assert(cc::is_any_contiguous_range<DataRangeT>, "data must be a contiguous range!");
+            auto data_span = cc::span(data);
+            using DataT = std::decay_t<decltype(data_span[0])>;
+            static_assert(std::is_trivially_copyable_v<DataT>, "data must be trivially copyable");
+
+            if (int(data_span.size()) != size)
             {
-                error() << "Texture size is " << size << " = " << size << " but " << data.size()
+                error() << "Texture size is " << size << " = " << size << " but " << data_span.size()
                         << " pixels are provided. " << to_string(texture);
                 return;
             }
-            setData(internalFormat, size, glTypeOf<DataT>::format, glTypeOf<DataT>::type, data.data());
+            setData(internalFormat, size, glTypeOf<DataT>::format, glTypeOf<DataT>::type, data_span.data());
         }
-        /// Same as above
-        /// Usage:
-        ///   tg::vec3 texData[] = { ... }
-        ///   setData(iFormat, size, texData);
-        template <typename DataT, std::size_t N>
-        void setData(GLenum internalFormat, int size, const DataT(&data)[N])
+        /// same as above for initializer lists
+        template <class DataT>
+        void setData(GLenum internalFormat, int size, std::initializer_list<DataT> data)
         {
-            if (N != size)
-            {
-                error() << "Texture size is " << size << " = " << size << " but " << N
-                        << " pixels are provided. " << to_string(texture);
-                return;
-            }
-            setData(internalFormat, size, glTypeOf<DataT>::format, glTypeOf<DataT>::type, data);
+            setData(internalFormat, size, cc::span<std::add_const_t<DataT>>(data.begin(), data.size()));
         }
         /// Same as above
         /// Usage:
@@ -125,31 +123,21 @@ public:
         /// Only changes data. Offset and size must be inside original bounds.
         void setSubData(int offset, int size, GLenum format, GLenum type, const GLvoid* data);
         /// Partial data upload via glm, tg, or c++ type (see gltypeinfo)
-        template <typename DataT>
-        void setSubData(int offset, int size, std::vector<DataT> const& data)
+        template <typename DataRangeT>
+        void setSubData(int offset, int size, DataRangeT&& data)
         {
-            if ((int)data.size() != size)
+            static_assert(cc::is_any_contiguous_range<DataRangeT>, "data must be a contiguous range!");
+            auto data_span = cc::span(data);
+            using DataT = std::decay_t<decltype(data_span[0])>;
+            static_assert(std::is_trivially_copyable_v<DataT>, "data must be trivially copyable");
+
+            if (int(data_span.size()) != size)
             {
-                error() << "Texture size is " << size << " = " << size << " but " << data.size()
+                error() << "Texture size is " << size << " = " << size << " but " << data_span.size()
                         << " pixels are provided. " << to_string(texture);
                 return;
             }
-            setSubData(offset, size, glTypeOf<DataT>::format, glTypeOf<DataT>::type, data.data());
-        }
-        /// Same as above
-        /// Usage:
-        ///   tg::vec3 texData[] = { ... }
-        ///   setSubData(offset, size, texData);
-        template <typename DataT, std::size_t N>
-        void setSubData(int offset, int size, const DataT(&data)[N])
-        {
-            if (N != size)
-            {
-                error() << "Texture size is " << size << " = " << size << " but " << N
-                        << " pixels are provided. " << to_string(texture);
-                return;
-            }
-            setSubData(offset, size, glTypeOf<DataT>::format, glTypeOf<DataT>::type, data);
+            setSubData(offset, size, glTypeOf<DataT>::format, glTypeOf<DataT>::type, data_span.data());
         }
         /// Same as above
         /// Usage:

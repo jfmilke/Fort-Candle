@@ -46,4 +46,8 @@ SharedLabelRenderable make_renderable(const label& label) { return LabelRenderab
 
 SharedLabelRenderable make_renderable(glow::array_view<const label> labels) { return LabelRenderable::create(labels); }
 
+SharedQuadricRenderable make_renderable(const boxed_quadric& q) { return QuadricRenderable::create(array_view<boxed_quadric const>{&q, 1}); }
+
+SharedQuadricRenderable make_renderable(array_view<const boxed_quadric> qs) { return QuadricRenderable::create(qs); }
+
 } // namespace viewer

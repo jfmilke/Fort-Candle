@@ -6,33 +6,14 @@
 #include <cstdlib>
 #include <iostream>
 
-#ifdef _WIN32
-#include <intrin.h>
-#endif
+#include <clean-core/intrinsics.hh>
 
 namespace glow
 {
 namespace timing
 {
-//  Windows
-#ifdef _WIN32
 
-inline uint64_t cycles()
-{
-    return __rdtsc();
-}
-
-//  Linux/GCC
-#else
-
-inline uint64_t cycles()
-{
-    unsigned int lo, hi;
-    __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
-    return ((uint64_t)hi << 32) | lo;
-}
-
-#endif
+inline uint64_t cycles() { return cc::intrin_rdtsc(); }
 
 /**
  * Usage:

@@ -554,7 +554,8 @@ Pos3 barycoords_of(face_handle f, vertex_attribute<Pos3> const& positions, Pos3 
 
     auto n = field3<Pos3>::cross(e10, e21);
 
-    auto signed_area = [&](Pos3 const& v0, Pos3 const& v1, Pos3 const& v2) {
+    auto signed_area = [&](Pos3 const& v0, Pos3 const& v1, Pos3 const& v2)
+    {
         auto d1 = v1 - v0;
         auto d2 = v2 - v0;
 
@@ -764,6 +765,16 @@ inline bool can_flip(edge_handle e)
         return false;
 
     if (e.halfedgeB().next().next().next() != e.halfedgeB())
+        return false;
+
+    auto const v0 = e.halfedgeA().next().vertex_to();
+    auto const v1 = e.halfedgeB().next().vertex_to();
+
+    if (v0 == v1) // this is generally a bad sign
+        return false;
+
+    // check if the flipped edge is already present
+    if (v0.adjacent_vertices().contains(v1))
         return false;
 
     return true;

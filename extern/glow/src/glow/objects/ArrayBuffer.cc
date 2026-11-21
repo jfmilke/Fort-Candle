@@ -39,7 +39,7 @@ void ArrayBuffer::defineAttribute(const ArrayBufferAttribute& a)
     }
 }
 
-void ArrayBuffer::defineAttributes(const std::vector<ArrayBufferAttribute>& attrs)
+void ArrayBuffer::defineAttributes(cc::span<ArrayBufferAttribute const> attrs)
 {
     for (auto const& a : attrs)
         defineAttribute(a);
@@ -65,7 +65,7 @@ ArrayBuffer::ArrayBuffer() : Buffer(GL_ARRAY_BUFFER) {}
 
 SharedArrayBuffer ArrayBuffer::create() { return std::make_shared<ArrayBuffer>(); }
 
-SharedArrayBuffer ArrayBuffer::create(const std::vector<ArrayBufferAttribute>& attrs)
+SharedArrayBuffer ArrayBuffer::create(cc::span<ArrayBufferAttribute const> attrs)
 {
     auto ab = create();
     ab->defineAttributes(attrs);

@@ -130,6 +130,8 @@ private:
     bool mUsePipelineConfigGui = false; ///< if true, enables the pipeline scen configuration gui (only if pipeline is used, requires ImGui)
 
     bool mCacheWindowSize = false; ///< if true, saves window size and position on close, and restores on next launch
+    std::string mCacheWindowSizeFilename = "glfwapp.ini";       /// Default -> cwd
+    std::string mCacheWindowSizeFilenameImGui = "imgui.ini";    /// Default -> cwd
 
     double mCurrentTime = 0.0;            ///< current frame time (starts with 0)
     double mCurrentRenderDeltaTime = 0.0; ///< current delta time for the render(dt) call
@@ -142,6 +144,7 @@ private:
     int mClickButton = -1;          ///< last clicked button
     tg::pos2 mClickPos;             ///< last clicked position
     timing::CpuTimer mClickTimer;   ///< click timing
+    double mMouseMoveDistance = 0;  ///< distance the curser was moved since the last click
 
     bool mMinimized = false; ///< is true while the application is minimized
 
@@ -190,6 +193,7 @@ public:
     GLOW_PROPERTY(WindowHeight);
     tg::isize2 getWindowSize() const { return {mWindowWidth, mWindowHeight}; }
     GLOW_PROPERTY(DumpTimingsOnShutdown);
+    GLOW_PROPERTY(CursorMode);
     GLOW_PROPERTY(VSync);
     GLOW_PROPERTY(SwapInterval);
     GLOW_PROPERTY(OutputStatsInterval);
@@ -197,9 +201,6 @@ public:
     GLOW_PROPERTY(WarnOnFrameskip);
     GLOW_PROPERTY(CreateSecondaryContext);
     GLOW_PROPERTY(DoubleClickTime);
-
-    void setCursorMode(CursorMode newMode);
-    CursorMode getCursorMode() const { return mCursorMode; }
 
     float getCurrentTime() const { return float(mCurrentTime); }
     double getCurrentTimeD() const { return mCurrentTime; }
@@ -227,6 +228,8 @@ public:
     GLOW_PROPERTY(UseDefaultCameraHandlingRight);
 
     GLOW_PROPERTY(CacheWindowSize);
+    GLOW_PROPERTY(CacheWindowSizeFilename);
+    GLOW_PROPERTY(CacheWindowSizeFilenameImGui);
 
     void setTitle(std::string const& title);
 
@@ -254,6 +257,9 @@ public:
     bool isKeyDown(int key) const { return mInputState.isKeyDown(key); }
 
     tg::pos2 getMousePosition() const { return tg::pos2(mInputState.getMousePosition()); }
+
+    /// check if the current click is an proper click, i.e. opposed to a mouse dragging
+    bool isRealMouseClick() const { return mMouseMoveDistance < 5 && mClickTimer.elapsedMilliseconds() < 350; }
 
     /// Returns true iff the app should be closed
     /// Defaults to glfw window closed
@@ -317,8 +323,6 @@ public:
 protected:
     /// Called once GLOW is initialized. Allocated your resources and init your logic here.
     virtual void init();
-    /// Called at the start of a frame
-    virtual void onFrameStart() {}
     /// Called with at 1 / getUpdateRate() Hz (timestep)
     virtual void update(float elapsedSeconds);
     /// Called as fast as possible for rendering (elapsedSeconds is not fixed here)
@@ -405,5 +409,10 @@ public:
 public:
     virtual ~GlfwApp(); // virtual dtor
 };
+
+namespace detail
+{
+GlfwApp* current_app();
+}
 }
 }

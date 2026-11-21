@@ -1,5 +1,6 @@
 #include "command_queue.hh"
 
+#include <filesystem>
 #include <variant>
 
 #include <glow-extras/viewer/ViewerApp.hh>
@@ -33,7 +34,11 @@ glow::viewer::detail::shared_command_queue createQueue()
     }
 }
 
-void poolQueue(glow::viewer::detail::shared_command_queue&& queue) { sUnusedCommandQueuePool.push_back(std::move(queue)); }
+void poolQueue(glow::viewer::detail::shared_command_queue&& queue)
+{
+    queue->clear();
+    sUnusedCommandQueuePool.push_back(std::move(queue));
+}
 
 glow::viewer::detail::global_settings sGlobalSettings{};
 
@@ -93,7 +98,7 @@ void glow::viewer::detail::on_last_command()
     }
 }
 
-bool glow::viewer::detail::is_interactive(const glow::viewer::detail::command_queue& commands)
+bool glow::viewer::detail::is_interactive(glow::viewer::detail::command_queue const& commands)
 {
     for (auto const& cmd : commands)
         if (cmd.instr == detail::command::instruction::InteractiveSubview)
@@ -102,7 +107,7 @@ bool glow::viewer::detail::is_interactive(const glow::viewer::detail::command_qu
     return false;
 }
 
-void glow::viewer::detail::create_layout_tree(glow::viewer::layout::tree_node& rootNode, const glow::viewer::detail::command_queue& commands, float deltaTime, bool allowInteractiveExecute)
+void glow::viewer::detail::create_layout_tree(glow::viewer::layout::tree_node& rootNode, glow::viewer::detail::command_queue const& commands, float deltaTime, bool allowInteractiveExecute)
 {
     using cmd_t = detail::command;
 
@@ -112,7 +117,7 @@ void glow::viewer::detail::create_layout_tree(glow::viewer::layout::tree_node& r
         if (cmd.instr == cmd_t::instruction::AddRenderjob)
         {
             TG_ASSERT(currentNode != nullptr);
-            const auto renderable = cmd.data_renderable;
+            auto const renderable = cmd.data_renderable;
             TG_ASSERT(renderable);
             renderable->runLazyInit();
             currentNode->scene.add(renderable);
@@ -120,7 +125,7 @@ void glow::viewer::detail::create_layout_tree(glow::viewer::layout::tree_node& r
         else if (cmd.instr == cmd_t::instruction::ModifyScene)
         {
             TG_ASSERT(currentNode != nullptr);
-            const auto funcp = cmd.data_scene;
+            auto const funcp = cmd.data_scene;
             TG_ASSERT(funcp);
             funcp(currentNode->scene);
         }
@@ -155,7 +160,7 @@ void glow::viewer::detail::create_layout_tree(glow::viewer::layout::tree_node& r
         else if (cmd.instr == cmd_t::instruction::ModifyLayout)
         {
             TG_ASSERT(currentNode != nullptr);
-            const auto layoutSettings = cmd.data_settings;
+            auto const layoutSettings = cmd.data_settings;
             currentNode->layoutSettings = layoutSettings;
         }
         else if (TG_LIKELY(cmd.instr == cmd_t::instruction::InteractiveSubview && allowInteractiveExecute))
@@ -169,7 +174,7 @@ void glow::viewer::detail::create_layout_tree(glow::viewer::layout::tree_node& r
             // Run the interactive lambda to fill innerCommandQueue
             {
                 sCommandQueueStack.push_back(innerCommandQueue);
-                const auto funcp = cmd.data_interactive;
+                auto const funcp = cmd.data_interactive;
                 TG_ASSERT(funcp);
                 funcp(deltaTime);
                 sCommandQueueStack.pop_back();
@@ -185,7 +190,9 @@ void glow::viewer::detail::create_layout_tree(glow::viewer::layout::tree_node& r
 
 void glow::viewer::detail::set_left_mouse_control(bool active) { sGlobalSettings.leftMouseControlEnabled = active; }
 void glow::viewer::detail::set_right_mouse_control(bool active) { sGlobalSettings.rightMouseControlEnabled = active; }
+void glow::viewer::detail::set_ui_enabled(bool active) { sGlobalSettings.enableViewerUI = active; }
 void glow::viewer::detail::set_2d_controls(bool active) { sGlobalSettings.controls2d_enabled = active; }
+void glow::viewer::detail::set_has_3d_content(bool active) { sGlobalSettings.has3D = active; }
 void glow::viewer::detail::set_ui_darkmode(bool active) { sGlobalSettings.imguiDarkMode = active; }
 void glow::viewer::detail::set_subview_margin(int margin) { sGlobalSettings.subviewMargin = margin; }
 void glow::viewer::detail::set_subview_margin_color(tg::color3 color) { sGlobalSettings.subviewMarginColor = color; }
@@ -207,7 +214,7 @@ void glow::viewer::detail::make_screenshot(std::string const& filename, int w, i
         return sCurrentViewerApp->renderScreenshotNextFrame(filename, w, h, accumulationCount, format);
 }
 
-tg::optional<tg::pos3> glow::viewer::detail::query_current_viewer_3d_position(int x, int y)
+cc::optional<tg::pos3> glow::viewer::detail::query_current_viewer_3d_position(int x, int y)
 {
     if (sCurrentViewerApp == nullptr)
     {
@@ -218,10 +225,43 @@ tg::optional<tg::pos3> glow::viewer::detail::query_current_viewer_3d_position(in
         return sCurrentViewerApp->query3DPosition(x, y);
 }
 
+cc::optional<float> glow::viewer::detail::query_current_viewer_depth(int x, int y)
+{
+    if (sCurrentViewerApp == nullptr)
+    {
+        glow::warning() << "Only use inside interactive viewers!";
+        return {};
+    }
+    else
+        return sCurrentViewerApp->queryDepth(x, y);
+}
+
+cc::optional<tg::mat4> glow::viewer::detail::query_current_viewer_cam_view(int x, int y)
+{
+    if (sCurrentViewerApp == nullptr)
+    {
+        glow::warning() << "Only use inside interactive viewers!";
+        return {};
+    }
+    else
+        return sCurrentViewerApp->queryCamView(x, y);
+}
+
+cc::optional<tg::mat4> glow::viewer::detail::query_current_viewer_cam_proj_no_reverse_z(int x, int y)
+{
+    if (sCurrentViewerApp == nullptr)
+    {
+        glow::warning() << "Only use inside interactive viewers!";
+        return {};
+    }
+    else
+        return sCurrentViewerApp->queryCamProjNoReverseZ(x, y);
+}
+
 
 tg::isize2 glow::viewer::detail::query_current_viewer_window_size()
 {
-    if (nullptr == sCurrentViewerApp)
+    if (sCurrentViewerApp == nullptr)
     {
         glow::warning() << "Only use inside interactive viewers!";
         return {};
@@ -232,7 +272,7 @@ tg::isize2 glow::viewer::detail::query_current_viewer_window_size()
 
 tg::pos2 glow::viewer::detail::query_mouse_position()
 {
-    if (nullptr == sCurrentViewerApp)
+    if (sCurrentViewerApp == nullptr)
     {
         glow::warning() << "Only use inside interactive viewers!";
         return {};
@@ -243,16 +283,15 @@ tg::pos2 glow::viewer::detail::query_mouse_position()
 
 void glow::viewer::detail::reset_camera_to_scene(bool clip_cam)
 {
-    if (nullptr == sCurrentViewerApp)
+    if (sCurrentViewerApp == nullptr)
         glow::warning() << "Only use inside interactive viewers!";
     else
         sCurrentViewerApp->resetCameraToSceneNextFrame(clip_cam);
 }
 
-
 bool glow::viewer::detail::is_fullscreen()
 {
-    if (nullptr == sCurrentViewerApp)
+    if (sCurrentViewerApp == nullptr)
     {
         glow::warning() << "Only use inside interactive viewers!";
         return false;
@@ -261,11 +300,33 @@ bool glow::viewer::detail::is_fullscreen()
         return sCurrentViewerApp->isFullscreen();
 }
 
+bool glow::viewer::detail::is_in_viewer() { return sCurrentViewerApp != nullptr; }
 
 void glow::viewer::detail::toggle_fullscreen()
 {
-    if (nullptr == sCurrentViewerApp)
+    if (sCurrentViewerApp == nullptr)
         glow::warning() << "Only use inside interactive viewers!";
     else
         return sCurrentViewerApp->toggleFullscreen();
+}
+
+void glow::viewer::detail::set_file_drop_handler(std::function<void(std::vector<std::string> const&)> callback)
+{
+    sGlobalSettings.onDropFiles = std::move(callback);
+}
+
+void glow::viewer::detail::set_cache_window_size_folder(std::string_view s)
+{
+    auto& folder = sGlobalSettings.cacheWindowSizeFolder;
+    folder = s;
+    if (folder.empty())
+        return;
+
+    if (folder.back() != '/')
+        folder.append("/");
+    if (!std::filesystem::exists(folder))
+    {
+        glow::warning() << "Target folder for window size caching does not exist! Defaulting to working directory.";
+        folder = "./";
+    }
 }

@@ -5,6 +5,8 @@
 #include <string_view>
 #include <vector>
 
+#include <clean-core/span.hh>
+
 #include <glow/common/gltypeinfo.hh>
 #include <glow/common/nodiscard.hh>
 #include <glow/common/non_copyable.hh>
@@ -243,7 +245,11 @@ public:
 
     /// Configures this shader for use with transform feedback
     /// NOTE: cannot be done while shader is in use
-    void configureTransformFeedback(std::vector<std::string> const& varyings, GLenum bufferMode = GL_INTERLEAVED_ATTRIBS);
+    void configureTransformFeedback(cc::span<std::string const> varyings, GLenum bufferMode = GL_INTERLEAVED_ATTRIBS);
+    void configureTransformFeedback(std::initializer_list<std::string> varyings, GLenum bufferMode = GL_INTERLEAVED_ATTRIBS)
+    {
+        configureTransformFeedback(cc::span(varyings.begin(), varyings.size()), bufferMode);
+    }
     /// Returns true if transform feedback can be used
     bool isConfiguredForTransformFeedback() const { return mTransformFeedbackVaryings.size() > 0; }
     /// Extracts all active uniforms and saves them into a UniformState object
@@ -274,8 +280,9 @@ public: // static construction
     /// Creates a shader program from a list of shaders
     /// Attaches shader and links the program
     /// Program can be used directly after this
-    static SharedProgram create(std::vector<SharedShader> const& shader);
-    static SharedProgram create(SharedShader const& shader) { return create(std::vector<SharedShader>({shader})); }
+    static SharedProgram create(cc::span<SharedShader const> shader);
+    static SharedProgram create(std::initializer_list<SharedShader> shader) { return create(cc::span(shader.begin(), shader.size())); }
+    static SharedProgram create(SharedShader const& shader) { return create(cc::span(shader)); }
     /// Creates a program from either a single file or auto-discovered shader files
     /// E.g. createFromFile("mesh");
     ///   will use mesh.vsh as vertex shader and mesh.fsh as fragment shader if available

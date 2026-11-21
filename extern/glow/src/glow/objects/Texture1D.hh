@@ -11,6 +11,8 @@
 
 #include <vector>
 
+#include <clean-core/span.hh>
+
 #include <typed-geometry/tg-lean.hh>
 
 namespace glow
@@ -172,31 +174,27 @@ public:
         /// Changes internal format, width, and data
         void setData(GLenum internalFormat, int width, GLenum format, GLenum type, const GLvoid* data, int mipmapLevel = 0);
         /// Data upload via glm, tg, or c++ type (see gltypeinfo)
-        template <typename DataT>
-        void setData(GLenum internalFormat, int width, std::vector<DataT> const& data, int mipmapLevel = 0)
+        template <typename DataRangeT>
+        void setData(GLenum internalFormat, int width, DataRangeT&& data, int mipmapLevel = 0)
         {
-            if ((int)data.size() != width)
+            static_assert(cc::is_any_contiguous_range<DataRangeT>, "data must be a contiguous range!");
+            auto data_span = cc::span(data);
+            using DataT = std::decay_t<decltype(data_span[0])>;
+            static_assert(std::is_trivially_copyable_v<DataT>, "data must be trivially copyable");
+
+            if (int(data_span.size()) != width)
             {
-                error() << "Texture size is " << width << " = " << width << " but " << data.size()
+                error() << "Texture size is " << width << " = " << width << " but " << data_span.size()
                         << " pixels are provided. " << to_string(texture);
                 return;
             }
-            setData(internalFormat, width, glTypeOf<DataT>::format, glTypeOf<DataT>::type, data.data(), mipmapLevel);
+            setData(internalFormat, width, glTypeOf<DataT>::format, glTypeOf<DataT>::type, data_span.data(), mipmapLevel);
         }
-        /// Same as above
-        /// Usage:
-        ///   tg::vec3 texData[] = { ... }
-        ///   setData(iFormat, width, texData);
-        template <typename DataT, std::size_t N>
-        void setData(GLenum internalFormat, int width, const DataT(&data)[N], int mipmapLevel = 0)
+        /// same as above for initializer lists
+        template <class DataT>
+        void setData(GLenum internalFormat, int width, std::initializer_list<DataT> data, int mipmapLevel = 0)
         {
-            if (N != width)
-            {
-                error() << "Texture size is " << width << " = " << width << " but " << N
-                        << " pixels are provided. " << to_string(texture);
-                return;
-            }
-            setData(internalFormat, width, glTypeOf<DataT>::format, glTypeOf<DataT>::type, data, mipmapLevel);
+            setData(internalFormat, width, cc::span<std::add_const_t<DataT>>(data.begin(), data.size()), mipmapLevel);
         }
         /// Same as above
         /// Usage:
@@ -213,31 +211,21 @@ public:
         /// Only changes data. Offset and size must be inside original bounds.
         void setSubData(int x, int width, GLenum format, GLenum type, const GLvoid* data, int mipmapLevel = 0);
         /// Partial data upload via glm, tg, or c++ type (see gltypeinfo)
-        template <typename DataT>
-        void setSubData(int x, int width, std::vector<DataT> const& data, int mipmapLevel = 0)
+        template <typename DataRangeT>
+        void setSubData(int x, int width, DataRangeT&& data, int mipmapLevel = 0)
         {
-            if ((int)data.size() != width)
+            static_assert(cc::is_any_contiguous_range<DataRangeT>, "data must be a contiguous range!");
+            auto data_span = cc::span(data);
+            using DataT = std::decay_t<decltype(data_span[0])>;
+            static_assert(std::is_trivially_copyable_v<DataT>, "data must be trivially copyable");
+
+            if (int(data_span.size()) != width)
             {
-                error() << "Texture size is " << width << " = " << width << " but " << data.size()
+                error() << "Texture size is " << width << " = " << width << " but " << data_span.size()
                         << " pixels are provided. " << to_string(texture);
                 return;
             }
-            setSubData(x, width, glTypeOf<DataT>::format, glTypeOf<DataT>::type, data.data(), mipmapLevel);
-        }
-        /// Same as above
-        /// Usage:
-        ///   tg::vec3 texData[] = { ... }
-        ///   setSubData(x, width, texData);
-        template <typename DataT, std::size_t N>
-        void setSubData(int x, int width, const DataT(&data)[N], int mipmapLevel = 0)
-        {
-            if (N != width)
-            {
-                error() << "Texture size is " << width << " = " << width << " but " << N
-                        << " pixels are provided. " << to_string(texture);
-                return;
-            }
-            setSubData(x, width, glTypeOf<DataT>::format, glTypeOf<DataT>::type, data, mipmapLevel);
+            setSubData(x, width, glTypeOf<DataT>::format, glTypeOf<DataT>::type, data_span.data(), mipmapLevel);
         }
         /// Same as above
         /// Usage:

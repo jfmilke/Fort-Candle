@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include <clean-core/span.hh>
+
 #include <glow/common/non_copyable.hh>
 #include <glow/fwd.hh>
 #include <glow/gl.hh>
@@ -24,12 +26,12 @@ struct BoundElementArrayBuffer
     /// This enables the GL implementation to make more intelligent decisions that may significantly impact buffer
     /// object performance. It does not, however, constrain the actual usage of the data store.
     /// (see https://www.opengl.org/sdk/docs/man/html/glBufferData.xhtml)
-    void setIndices(std::vector<int8_t> const& indices, GLenum usage = GL_STATIC_DRAW);
-    void setIndices(std::vector<uint8_t> const& indices, GLenum usage = GL_STATIC_DRAW);
-    void setIndices(std::vector<int16_t> const& indices, GLenum usage = GL_STATIC_DRAW);
-    void setIndices(std::vector<uint16_t> const& indices, GLenum usage = GL_STATIC_DRAW);
-    void setIndices(std::vector<int32_t> const& indices, GLenum usage = GL_STATIC_DRAW);
-    void setIndices(std::vector<uint32_t> const& indices, GLenum usage = GL_STATIC_DRAW);
+    void setIndices(cc::span<int8_t const> indices, GLenum usage = GL_STATIC_DRAW) { setIndices(int(indices.size()), indices.data(), usage); }
+    void setIndices(cc::span<uint8_t const> indices, GLenum usage = GL_STATIC_DRAW) { setIndices(int(indices.size()), indices.data(), usage); }
+    void setIndices(cc::span<int16_t const> indices, GLenum usage = GL_STATIC_DRAW) { setIndices(int(indices.size()), indices.data(), usage); }
+    void setIndices(cc::span<uint16_t const> indices, GLenum usage = GL_STATIC_DRAW) { setIndices(int(indices.size()), indices.data(), usage); }
+    void setIndices(cc::span<int32_t const> indices, GLenum usage = GL_STATIC_DRAW) { setIndices(int(indices.size()), indices.data(), usage); }
+    void setIndices(cc::span<uint32_t const> indices, GLenum usage = GL_STATIC_DRAW) { setIndices(int(indices.size()), indices.data(), usage); }
     void setIndices(int indexCount, const int8_t* data = nullptr, GLenum usage = GL_STATIC_DRAW);
     void setIndices(int indexCount, const uint8_t* data = nullptr, GLenum usage = GL_STATIC_DRAW);
     void setIndices(int indexCount, const int16_t* data = nullptr, GLenum usage = GL_STATIC_DRAW);
@@ -37,11 +39,6 @@ struct BoundElementArrayBuffer
     void setIndices(int indexCount, const int32_t* data = nullptr, GLenum usage = GL_STATIC_DRAW);
     void setIndices(int indexCount, const uint32_t* data = nullptr, GLenum usage = GL_STATIC_DRAW);
     void setIndices(int indexCount, GLenum indexType, const void* data = nullptr, GLenum usage = GL_STATIC_DRAW);
-    template <typename IndexT, size_t N>
-    void setIndices(const IndexT (&data)[N], GLenum usage = GL_STATIC_DRAW)
-    {
-        setIndices((int)N, data, usage);
-    }
 
 private:
     GLint previousBuffer;                       ///< previously bound buffer

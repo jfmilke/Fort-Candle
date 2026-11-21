@@ -10,6 +10,8 @@
 
 #include "raii/BoundFramebuffer.hh"
 
+#include <clean-core/span.hh>
+
 #include <array>
 #include <string>
 #include <vector>
@@ -35,7 +37,7 @@ private:
     /// Location mapping from fragment output name to loc
     /// At any point, the mapping saved here must be consistent (i.e. a superset) of the GPU mapping
     SharedLocationMapping mFragmentMapping;
-    friend class VertexArray; // for negotiation
+    friend class VertexArray;       // for negotiation
     friend struct BoundVertexArray; // for negotiation
 
     /// List of color a.
@@ -86,11 +88,19 @@ public: // static construction
     /// Creates a framebuffer with given color, depth, and stencil attachements
     /// The order of colors matches the target indices (e.g. for glClearBuffer or GL_DRAW_BUFFERi)
     /// CAUTION: This framebuffer is checked for completeness!
-    static SharedFramebuffer create(std::vector<FramebufferAttachment> const& colors,
+    static SharedFramebuffer create(cc::span<FramebufferAttachment const> colors,
                                     SharedTexture const& depth = nullptr,
                                     SharedTexture const& stencil = nullptr,
                                     int depthStencilMipmapLevel = 0,
                                     int depthStencilLayer = 0);
+    static SharedFramebuffer create(std::initializer_list<FramebufferAttachment> colors,
+                                    SharedTexture const& depth = nullptr,
+                                    SharedTexture const& stencil = nullptr,
+                                    int depthStencilMipmapLevel = 0,
+                                    int depthStencilLayer = 0)
+    {
+        return create(cc::span(colors.begin(), colors.size()), depth, stencil, depthStencilMipmapLevel, depthStencilLayer);
+    }
     /// Shortcut for create({{fragmentName, color}}, ...)
     static SharedFramebuffer create(std::string const& fragmentName,
                                     SharedTexture const& color,
@@ -100,9 +110,6 @@ public: // static construction
                                     int depthStencilLayer = 0);
     /// Creates a framebuffer without attached colors
     /// CAUTION: This framebuffer is checked for completeness!
-    static SharedFramebuffer createDepthOnly(SharedTexture const& depth,
-                                             SharedTexture const& stencil = nullptr,
-                                             int depthStencilMipmapLevel = 0,
-                                             int depthStencilLayer = 0);
+    static SharedFramebuffer createDepthOnly(SharedTexture const& depth, SharedTexture const& stencil = nullptr, int depthStencilMipmapLevel = 0, int depthStencilLayer = 0);
 };
 }

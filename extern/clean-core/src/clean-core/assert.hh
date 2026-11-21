@@ -11,23 +11,39 @@
 // CC_ENABLE_BOUND_CHECKING enables bound checking
 
 
-// the debugger should break on-site, so this cannot hide in a function call
-// comma expression: abort must still be called (if no debugger is attached), and do/while(0) doesn't work in the ternary
+// the debugger should break right in the assert macro, so this cannot hide in a function call
 
 #ifdef CC_COMPILER_MSVC
-#define CC_BREAK_AND_ABORT() (__debugbreak(), ::cc::detail::perform_abort())
-#elif defined(CC_COMPILER_POSIX)
-#define CC_BREAK_AND_ABORT() (__builtin_trap(), ::cc::detail::perform_abort())
+// __debugbreak() terminates immediately without an attached debugger
+#if _MSC_VER >= 1400
+#define CC_DEBUG_BREAK() (::cc::detail::is_debugger_connected() ? __debugbreak() : void(0))
 #else
-#define CC_BREAK_AND_ABORT() ::cc::detail::perform_abort()
+#define CC_DEBUG_BREAK() (::cc::detail::is_debugger_connected() ? _asm int 0x03 : void(0))
 #endif
+#elif defined(CC_COMPILER_POSIX)
+// __builtin_trap() causes an illegal instruction and crashes without an attached debugger
+// we use a SIGTRAP to signal a trace/breakpoint
+// the _trap is technically not correct because a BREAKpoint is recoverable
+// the use in CC_ASSERT is simply to provide a cleaner debugging experience
+// and is followed by an abort anyways
+// NOTE: we don't want to pull in any posix header here, so we simply declare raise
+//       SIGTRAP is 5 according to https://man7.org/linux/man-pages/man7/signal.7.html
+extern "C" int raise(int);
+#define CC_DEBUG_BREAK() (::cc::detail::is_debugger_connected() ? (void)::raise(5) : void(0))
+#else
+#define CC_DEBUG_BREAK() void(0)
+#endif
+
+#define CC_BREAK_AND_ABORT() (CC_DEBUG_BREAK(), ::cc::detail::perform_abort())
 
 // least overhead assertion macros
 // see https://godbolt.org/z/aWW1f8
 // assertion handler is customizable
 
-#define CC_DETAIL_EXECUTE_ASSERT(condition, msg) \
-    (CC_UNLIKELY(!(condition)) ? (::cc::detail::assertion_failed({#condition, CC_PRETTY_FUNC, __FILE__, msg, __LINE__}), CC_BREAK_AND_ABORT()) : void(0)) // force ;
+#define CC_DETAIL_EXECUTE_ASSERT(condition, msg)                                                                                                    \
+    (CC_UNLIKELY(!(condition))                                                                                                                      \
+         ? (::cc::detail::assertion_failed({#condition, CC_PRETTY_FUNC, __FILE__, msg, __LINE__}), CC_DEBUG_BREAK(), ::cc::detail::perform_abort()) \
+         : void(0)) // force ;
 
 #define CC_RUNTIME_ASSERT(condition) CC_DETAIL_EXECUTE_ASSERT(condition, nullptr)
 #define CC_RUNTIME_ASSERT_MSG(condition, msg) CC_DETAIL_EXECUTE_ASSERT(condition, msg)
@@ -61,8 +77,9 @@
 #endif
 
 #ifdef CC_ENABLE_ASSERTIONS
-#define CC_UNREACHABLE(msg) \
-    (::cc::detail::assertion_failed({"unreachable code reached: " msg, CC_PRETTY_FUNC, __FILE__, nullptr, __LINE__}), CC_BREAK_AND_ABORT(), CC_BUILTIN_UNREACHABLE)
+#define CC_UNREACHABLE(msg)                                                                                                             \
+    (::cc::detail::assertion_failed({"unreachable code reached: " msg, CC_PRETTY_FUNC, __FILE__, nullptr, __LINE__}), CC_DEBUG_BREAK(), \
+     ::cc::detail::perform_abort(), CC_BUILTIN_UNREACHABLE)
 #else
 #define CC_UNREACHABLE(msg) CC_BUILTIN_UNREACHABLE
 #endif
@@ -91,9 +108,11 @@ struct assertion_info
 
 CC_COLD_FUNC CC_DONT_INLINE void assertion_failed(assertion_info const& info);
 
+CC_COLD_FUNC CC_DONT_INLINE bool is_debugger_connected();
+
 /// calls std::abort(), avoids includes
 [[noreturn]] CC_COLD_FUNC CC_DONT_INLINE void perform_abort();
-}
+} // namespace cc::detail
 
 namespace cc
 {
@@ -102,4 +121,4 @@ namespace cc
 /// this is a thread_local handler
 /// the handler must be replaced before it is deleted (non-owning view)
 void set_assertion_handler(void (*handler)(detail::assertion_info const& info));
-}
+} // namespace cc

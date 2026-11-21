@@ -7,25 +7,34 @@
 #include <typed-geometry/feature/assert.hh>
 #include <typed-geometry/functions/basic/scalar_math.hh>
 
+namespace tg::detail
+{
+template <class ScalarT>
+ScalarT x_scale_from_horizontal_fov(horizontal_fov_t<ScalarT> horizontal_fov)
+{
+    TG_CONTRACT(horizontal_fov.angle > degree(0));
+    TG_CONTRACT(horizontal_fov.angle < degree(180));
+    return ScalarT(1) / tg::tan(horizontal_fov.angle / ScalarT(2));
+}
+}
+
 namespace tg
 {
 /// aspect ratio is width / height
 template <class ScalarT>
-[[nodiscard]] mat<4, 4, ScalarT> perspective_reverse_z_opengl(angle_t<ScalarT> horizontal_fov, ScalarT aspect_ratio, ScalarT near_plane)
+[[nodiscard]] mat<4, 4, ScalarT> perspective_reverse_z_opengl(horizontal_fov_t<ScalarT> horizontal_fov, ScalarT aspect_ratio, ScalarT near_plane)
 {
     TG_CONTRACT(near_plane > 0);
     TG_CONTRACT(aspect_ratio > 0);
-    TG_CONTRACT(horizontal_fov > degree(0));
-    TG_CONTRACT(horizontal_fov < degree(180));
 
     // adapted from glm for reverse Z and infinite far
     // see https://nlguillemot.wordpress.com/2016/12/07/reversed-z-in-opengl/
 
-    auto const tan_half_hfov = tan(horizontal_fov / ScalarT(2));
-
     auto m = mat<4, 4, ScalarT>::zero;
-    m[0][0] = ScalarT(1) / (aspect_ratio * tan_half_hfov);
-    m[1][1] = ScalarT(1) / tan_half_hfov;
+
+    auto const x_scale = tg::detail::x_scale_from_horizontal_fov(horizontal_fov);
+    m[0][0] = x_scale;
+    m[1][1] = x_scale * aspect_ratio;
     m[2][3] = -ScalarT(1);
     m[3][2] = near_plane;
 
@@ -33,18 +42,16 @@ template <class ScalarT>
 }
 
 template <class ScalarT>
-[[nodiscard]] mat<4, 4, ScalarT> perspective_reverse_z_directx(angle_t<ScalarT> horizontal_fov, ScalarT aspect_ratio, ScalarT near_plane)
+[[nodiscard]] mat<4, 4, ScalarT> perspective_reverse_z_directx(horizontal_fov_t<ScalarT> horizontal_fov, ScalarT aspect_ratio, ScalarT near_plane)
 {
     TG_CONTRACT(near_plane > 0);
     TG_CONTRACT(aspect_ratio > 0);
-    TG_CONTRACT(horizontal_fov > degree(0));
-    TG_CONTRACT(horizontal_fov < degree(180));
-
-    auto const tan_half_hfov = tan(horizontal_fov / ScalarT(2));
 
     auto m = mat<4, 4, ScalarT>::zero;
-    m[0][0] = ScalarT(1) / (aspect_ratio * tan_half_hfov);
-    m[1][1] = ScalarT(1) / tan_half_hfov;
+
+    auto const x_scale = tg::detail::x_scale_from_horizontal_fov(horizontal_fov);
+    m[0][0] = x_scale;
+    m[1][1] = x_scale * aspect_ratio;
     m[2][3] = ScalarT(1);
     m[3][2] = near_plane;
 
@@ -52,21 +59,17 @@ template <class ScalarT>
 }
 
 template <class ScalarT>
-[[nodiscard]] mat<4, 4, ScalarT> perspective_directx(angle_t<ScalarT> horizontal_fov, ScalarT aspect_ratio, ScalarT near_plane, ScalarT far_plane)
+[[nodiscard]] mat<4, 4, ScalarT> perspective_directx(horizontal_fov_t<ScalarT> horizontal_fov, ScalarT aspect_ratio, ScalarT near_plane, ScalarT far_plane)
 {
     TG_CONTRACT(near_plane > 0);
     TG_CONTRACT(far_plane > 0);
     TG_CONTRACT(aspect_ratio > 0);
-    TG_CONTRACT(horizontal_fov > degree(0));
-    TG_CONTRACT(horizontal_fov < degree(180));
-
-    auto const tan_half_hfov = tan(horizontal_fov / ScalarT(2));
-    auto const y_scale = ScalarT(1) / tan_half_hfov;
-    auto const x_scale = y_scale / aspect_ratio;
 
     auto m = mat<4, 4, ScalarT>::zero;
+
+    auto const x_scale = tg::detail::x_scale_from_horizontal_fov(horizontal_fov);
     m[0][0] = x_scale;
-    m[1][1] = y_scale;
+    m[1][1] = x_scale * aspect_ratio;
     m[2][2] = far_plane / (far_plane - near_plane);
     m[3][2] = -near_plane * far_plane / (far_plane - near_plane);
     m[2][3] = ScalarT(1);
@@ -75,21 +78,17 @@ template <class ScalarT>
 }
 
 template <class ScalarT>
-[[nodiscard]] mat<4, 4, ScalarT> perspective_opengl(angle_t<ScalarT> horizontal_fov, ScalarT aspect_ratio, ScalarT near_plane, ScalarT far_plane)
+[[nodiscard]] mat<4, 4, ScalarT> perspective_opengl(horizontal_fov_t<ScalarT> horizontal_fov, ScalarT aspect_ratio, ScalarT near_plane, ScalarT far_plane)
 {
     TG_CONTRACT(near_plane > 0);
     TG_CONTRACT(far_plane > 0);
     TG_CONTRACT(aspect_ratio > 0);
-    TG_CONTRACT(horizontal_fov > degree(0));
-    TG_CONTRACT(horizontal_fov < degree(180));
-
-    auto const tan_half_hfov = tan(horizontal_fov / ScalarT(2));
-    auto const y_scale = ScalarT(1) / tan_half_hfov;
-    auto const x_scale = y_scale / aspect_ratio;
 
     auto m = mat<4, 4, ScalarT>::zero;
+
+    auto const x_scale = tg::detail::x_scale_from_horizontal_fov(horizontal_fov);
     m[0][0] = x_scale;
-    m[1][1] = y_scale;
+    m[1][1] = x_scale * aspect_ratio;
     m[2][2] = -(far_plane + near_plane) / (far_plane - near_plane);
     m[3][2] = ScalarT(-2) * near_plane * far_plane / (far_plane - near_plane);
     m[2][3] = ScalarT(-1);
@@ -105,7 +104,7 @@ template <class ScalarT>
 }
 
 template <class ScalarT>
-[[deprecated("use explicit _opengl or _directx version")]] [[nodiscard]] mat<4, 4, ScalarT> perspective(angle_t<ScalarT> horizontal_fov,
+[[deprecated("use explicit _opengl or _directx version")]] [[nodiscard]] mat<4, 4, ScalarT> perspective(horizontal_fov_t<ScalarT> horizontal_fov,
                                                                                                         ScalarT aspect_ratio,
                                                                                                         ScalarT near_plane,
                                                                                                         ScalarT far_plane)
@@ -114,7 +113,7 @@ template <class ScalarT>
 }
 
 template <class ScalarT>
-[[deprecated("use explicit _opengl or _directx version")]] [[nodiscard]] mat<4, 4, ScalarT> perspective_reverse_z(angle_t<ScalarT> horizontal_fov,
+[[deprecated("use explicit _opengl or _directx version")]] [[nodiscard]] mat<4, 4, ScalarT> perspective_reverse_z(horizontal_fov_t<ScalarT> horizontal_fov,
                                                                                                                   ScalarT aspect_ratio,
                                                                                                                   ScalarT near_plane)
 {

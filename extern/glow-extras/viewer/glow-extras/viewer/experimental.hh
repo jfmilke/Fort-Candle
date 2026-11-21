@@ -5,10 +5,16 @@
 namespace glow::viewer::experimental
 {
 /// Query the 3D position at the given pixel, only usable in interactive viewers
-inline tg::optional<tg::pos3> interactive_get_position(int x, int y) { return detail::query_current_viewer_3d_position(x, y); }
+inline cc::optional<tg::pos3> interactive_get_position(int x, int y) { return detail::query_current_viewer_3d_position(x, y); }
 
 /// Query the 3D position at the given pixel, only usable in interactive viewers
-inline tg::optional<tg::pos3> interactive_get_position(tg::pos2 const pos) { return interactive_get_position(pos.x, pos.y); }
+inline cc::optional<tg::pos3> interactive_get_position(tg::pos2 const pos) { return interactive_get_position(pos.x, pos.y); }
+
+/// Query the camera view matrix, only usable in interactive viewers
+inline cc::optional<tg::mat4> interactive_get_cam_view(int x, int y) { return detail::query_current_viewer_cam_view(x, y); }
+
+/// Query the camera projection matrix (without reverse-z), only usable in interactive viewers
+inline cc::optional<tg::mat4> interactive_get_cam_proj_no_reverse_z(int x, int y) { return detail::query_current_viewer_cam_proj_no_reverse_z(x, y); }
 
 /// Get the window size, only usable in interactive viewers
 inline tg::isize2 interactive_get_window_size() { return detail::query_current_viewer_window_size(); }
@@ -24,4 +30,7 @@ inline bool interactive_is_fullscreen() { return detail::is_fullscreen(); }
 
 /// Toggles fullscreen mode of the viewer, only usable in interactive viewers.
 inline void interactive_toggle_fullscreen() { return detail::toggle_fullscreen(); }
+
+/// Returns true iff we are currently inside an interactive viewer
+inline bool is_in_interactive() { return detail::is_in_viewer(); }
 }

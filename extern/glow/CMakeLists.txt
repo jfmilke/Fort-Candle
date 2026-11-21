@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.10)
 project(glow)
 
 # ==================================
@@ -13,7 +13,8 @@ set(GLOW_USE_OWN_GLAD ON CACHE BOOL "If true, extern/glad is used")
 
 # build options
 set(GLOW_LINK_TYPE SHARED CACHE STRING "Defines the build type of libraries (shared is default)")
-set(GLOW_USE_GOLD_LINKER ON CACHE BOOL "If true, ld.gold is used for linking")
+set(GLOW_USE_MOLD_LINKER ON CACHE BOOL "If true, ld.mold is used for linking")
+set(GLOW_USE_GOLD_LINKER OFF CACHE BOOL "If true, ld.gold is used for linking")
 set(GLOW_ENABLE_MARCH_NATIVE ON CACHE BOOL "If true, adds -march=native")
 
 # misc
@@ -110,10 +111,13 @@ if(NOT MSVC)
 
     target_link_libraries(glow PUBLIC pthread)
 
+    # mold linker
+    if(GLOW_USE_MOLD_LINKER)
+        target_link_libraries(glow PUBLIC $<$<PLATFORM_ID:Linux>:-fuse-ld=mold>)
     # gold linker
-    if(GLOW_USE_GOLD_LINKER)
+    elseif(GLOW_USE_GOLD_LINKER)
         # WRONG: target_compile_options(glow PUBLIC -fuse-ld=gold )
-        target_link_libraries(glow PUBLIC  -fuse-ld=gold)
+        target_link_libraries(glow PUBLIC $<$<PLATFORM_ID:Linux>:-fuse-ld=gold>)
     endif()
 
     # arch-dependend optimization
@@ -126,7 +130,8 @@ if(NOT MSVC)
     endif()
 else() # MSVC
     target_compile_options(glow PUBLIC
-        /MP # multi processor compilation
+        # /MP is an MSVC-only flag; clang-cl reports it as an unused argument
+        $<$<CXX_COMPILER_ID:MSVC>:/MP> # multi processor compilation
         /FC # proper absolute paths from __FILE__
         )
     target_compile_definitions(glow PUBLIC
@@ -208,6 +213,12 @@ if(TARGET glm)
     target_compile_definitions(glow PUBLIC GLOW_USE_GLM)
     target_compile_definitions(glow PUBLIC GLOW_HAS_GLM)
 endif()
+
+# clean-core
+if (NOT TARGET clean-core)
+    message(FATAL_ERROR "[glow] requires clean-core")
+endif()
+target_link_libraries(glow PUBLIC clean-core)
 
 # typed geometry
 if(TARGET typed-geometry)

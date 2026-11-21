@@ -29,6 +29,14 @@ struct global_settings
     GLenum screenshotFormat = GL_RGB8;
     bool leftMouseControlEnabled = true;
     bool rightMouseControlEnabled = true;
+    bool enableViewerUI = true;
+
+    std::string cacheWindowSizeFolder = "./";
+    bool has3D = false; ///< True iff we have 3D content (this is set automatically)
+
+    bool use_2d_controls() const { return controls2d_enabled || !has3D; }
+
+    std::function<void(std::vector<std::string> const&)> onDropFiles;
 };
 
 struct command
@@ -104,6 +112,13 @@ public:
     {
         command res{instruction::ModifyScene};
         res.data_scene = [](Scene& s) { s.config.enableShadows = false; };
+        return res;
+    }
+
+    static command sceneNoBackfacingShadow()
+    {
+        command res{instruction::ModifyScene};
+        res.data_scene = [](Scene& s) { s.config.enableBackfacingShadows = false; };
         return res;
     }
 
@@ -187,6 +202,13 @@ public:
         return res;
     }
 
+    static command sceneCameraFov(tg::horizontal_fov fov)
+    {
+        command res{instruction::ModifyScene};
+        res.data_scene = [fov](Scene& s) { s.config.cameraFov = fov; };
+        return res;
+    }
+
     static command sceneOrthogonalProjection(tg::aabb3 bounds)
     {
         command res{instruction::ModifyScene};
@@ -245,11 +267,15 @@ void on_last_command();
 
 void set_left_mouse_control(bool active);
 void set_right_mouse_control(bool active);
+void set_ui_enabled(bool active);
 void set_2d_controls(bool active);
+void set_has_3d_content(bool active);
 void set_ui_darkmode(bool active);
 void set_subview_margin(int margin);
 void set_subview_margin_color(tg::color3 color);
 void set_headless_screenshot(tg::ivec2 resolution, int accum, std::string const& filename, GLenum format);
+void set_file_drop_handler(std::function<void(std::vector<std::string> const&)> callback);
+void set_cache_window_size_folder(std::string_view s);
 
 // Returns true if the given command list contains one or more interactive instructions (and whose tree therefore must be rebuilt each frame)
 bool is_interactive(command_queue const& commands);
@@ -258,11 +284,15 @@ bool is_interactive(command_queue const& commands);
 // deltaTime required to call interactive lambdas
 void create_layout_tree(layout::tree_node& rootNode, command_queue const& commands, float deltaTime, bool allowInteractiveExecute = true);
 
-tg::optional<tg::pos3> query_current_viewer_3d_position(int x, int y);
+cc::optional<tg::mat4> query_current_viewer_cam_view(int x, int y);
+cc::optional<tg::mat4> query_current_viewer_cam_proj_no_reverse_z(int x, int y);
+cc::optional<tg::pos3> query_current_viewer_3d_position(int x, int y);
+cc::optional<float> query_current_viewer_depth(int x, int y);
 tg::isize2 query_current_viewer_window_size();
 tg::pos2 query_mouse_position();
 void reset_camera_to_scene(bool clip_cam);
 bool is_fullscreen();
+bool is_in_viewer();
 void toggle_fullscreen();
 
 void make_screenshot(std::string const& filename, int w, int h, int accumulationCount, GLenum format);

@@ -30,8 +30,8 @@ SOFTWARE.
 #include <algorithm>
 #include <typed-geometry/feature/assert.hh>
 
-#include <imgui/imgui.h>
 #define IMGUI_DEFINE_MATH_OPERATORS
+#include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
 
 namespace
@@ -466,7 +466,7 @@ void DrawMetrics(ImguiMetricPlot* plot, std::vector<ImguiMetric*> const& metrics
 
     auto textHeight = ImGui::GetTextLineHeight();
 
-    auto plotWidth = std::max(0.f, ImGui::GetContentRegionAvailWidth() - window->WindowPadding.x - plot->mWidthInfo->mLegendWidth - PLOT_LEGEND_PADDING);
+    auto plotWidth = std::max(0.f, ImGui::GetContentRegionAvail().x - window->WindowPadding.x - plot->mWidthInfo->mLegendWidth - PLOT_LEGEND_PADDING);
     auto plotHeight = std::max(0.f, (textHeight + LEGEND_TEXT_VERTICAL_SPACING) * plotRowCount);
 
     ImRect frame_bb(window->DC.CursorPos, window->DC.CursorPos + ImVec2(plotWidth, plotHeight));
@@ -721,7 +721,7 @@ void ImguiMetricPlot::DrawList()
 
     auto window = ImGui::GetCurrentWindow();
     auto height = ImGui::GetTextLineHeight();
-    auto valueX = ImGui::GetContentRegionAvailWidth() - window->WindowPadding.x - mWidthInfo->mValueWidth;
+    auto valueX = ImGui::GetContentRegionAvail().x - window->WindowPadding.x - mWidthInfo->mValueWidth;
     auto barStartX = mWidthInfo->mDescWidth + DESC_HBAR_PADDING;
     auto barEndX = valueX - HBAR_VALUE_PADDING;
 

@@ -3,7 +3,6 @@
 #include <map>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include <glow/common/nodiscard.hh>
 #include <glow/common/property.hh>
@@ -70,7 +69,12 @@ public:
         {
         }
     };
-    void addVerification(std::vector<VerificationPair> const& members)
+    void addVerification(cc::span<VerificationPair const> members)
+    {
+        for (auto const& p : members)
+            addVerification(p.offset, p.name);
+    }
+    void addVerification(std::initializer_list<VerificationPair> members)
     {
         for (auto const& p : members)
             addVerification(p.offset, p.name);

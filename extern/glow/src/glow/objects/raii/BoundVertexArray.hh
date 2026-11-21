@@ -1,6 +1,8 @@
 #pragma once
 
-#include <vector>
+#include <initializer_list>
+
+#include <clean-core/span.hh>
 
 #include <glow/common/non_copyable.hh>
 #include <glow/fwd.hh>
@@ -43,7 +45,8 @@ public: // gl function that require binding
 
     /// Attaches all attributes of the given array buffers
     /// Override attributes with the same name
-    void attach(std::vector<SharedArrayBuffer> const& abs);
+    void attach(cc::span<SharedArrayBuffer const> abs);
+    void attach(std::initializer_list<SharedArrayBuffer> abs) { attach(cc::span(abs.begin(), abs.size())); }
 
     /// Re-attaches array buffers with current locations
     /// Probably not required by an end-user

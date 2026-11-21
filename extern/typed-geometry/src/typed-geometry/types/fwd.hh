@@ -1,14 +1,22 @@
 #pragma once
 
+#include <cstdint>
+
 namespace tg
 {
-using u64 = unsigned long long;
+using u64 = std::uint64_t;
 
 // general purpose types:
 template <class T, u64 N>
 struct array;
 template <class T>
 struct span;
+
+// scalar types
+template <class T>
+struct angle_t;
+template <class ScalarT>
+struct horizontal_fov_t;
 
 // component-like types:
 template <int D, class ScalarT>
@@ -37,6 +45,10 @@ template <int D, class ScalarT>
 struct ray;
 template <int D, class ScalarT>
 struct segment;
+template <int D, class ScalarT>
+struct plane;
+template <int D, class ScalarT>
+struct halfspace;
 
 // special types:
 struct splitmix;

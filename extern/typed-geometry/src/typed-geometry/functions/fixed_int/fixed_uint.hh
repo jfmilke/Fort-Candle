@@ -1,11 +1,9 @@
 #pragma once
 
-#ifdef _MSC_VER
-#include <intrin.h>
-#else
-#include <x86intrin.h>
-#endif
+#include <clean-core/bits.hh>
+#include <clean-core/intrinsics.hh>
 
+#include <typed-geometry/feature/fixed_int.hh>
 #include <typed-geometry/functions/basic/minmax.hh>
 #include <typed-geometry/types/scalars/fixed_uint.hh>
 
@@ -45,15 +43,15 @@ constexpr bool operator>=(fixed_uint<w> const& lhs, u64 rhs) noexcept;
 // standard arithmetics
 
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator+(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
+constexpr auto operator+(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator-(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
+constexpr auto operator-(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator*(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
+constexpr auto operator*(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator/(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
+constexpr auto operator/(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator%(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
+constexpr auto operator%(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
 
 template <int w>
 constexpr fixed_uint<w> operator+(u64 lhs, fixed_uint<w> const& rhs) noexcept;
@@ -115,11 +113,11 @@ constexpr fixed_uint<w> operator--(fixed_uint<w>& lhs, int) noexcept;
 // bitwise logic
 
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator|(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
+constexpr auto operator|(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator&(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
+constexpr auto operator&(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator^(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
+constexpr auto operator^(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept;
 template <int w>
 constexpr fixed_uint<w> operator~(fixed_uint<w> const& lhs) noexcept;
 
@@ -185,22 +183,22 @@ fixed_uint<w_res> mul(T0 lhs, T1 rhs);
 // utility
 
 template <int w>
-[[nodiscard]] constexpr u64 leading_zeros_count(fixed_uint<w> const& v);
+[[nodiscard]] u64 leading_zeros_count(fixed_uint<w> const& v);
 
 template <int w>
-[[nodiscard]] constexpr u64 leading_ones_count(fixed_uint<w> const& v);
+[[nodiscard]] u64 leading_ones_count(fixed_uint<w> const& v);
 
 template <int w>
-[[nodiscard]] constexpr u64 trailing_zeros_count(fixed_uint<w> const& v);
+[[nodiscard]] u64 trailing_zeros_count(fixed_uint<w> const& v);
 
 template <int w>
-[[nodiscard]] constexpr u64 trailing_ones_count(fixed_uint<w> const& v);
+[[nodiscard]] u64 trailing_ones_count(fixed_uint<w> const& v);
 
 template <int w>
 [[nodiscard]] constexpr bool is_zero(fixed_int<w> const& v);
 
 template <int w0, int w1>
-[[nodiscard]] fixed_uint<max(w0, w1)> gcd(fixed_uint<w0> const& a, fixed_uint<w1> const& b);
+[[nodiscard]] auto gcd(fixed_uint<w0> const& a, fixed_uint<w1> const& b);
 
 template <int w>
 [[nodiscard]] fixed_uint<w> gcd(u64 a, fixed_uint<w> const& b);
@@ -208,9 +206,9 @@ template <int w>
 template <int w>
 [[nodiscard]] fixed_uint<w> gcd(fixed_uint<w> const& a, u64 b);
 
-//#############################################################################
-//#                             implemenation                                 #
-//#############################################################################
+// #############################################################################
+// #                             implemenation                                 #
+// #############################################################################
 
 template <int words>
 template <int rhs_words, class, class>
@@ -412,21 +410,21 @@ constexpr bool operator>=(fixed_uint<w> const& lhs, u64 rhs) noexcept
 //
 
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator+(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
+constexpr auto operator+(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
 {
     constexpr int w_out = max(w0, w1);
     fixed_uint<w_out> res;
     fixed_uint<w_out> l = lhs;
     fixed_uint<w_out> r = rhs;
-    decltype(_addcarry_u64(0, 0, 0, nullptr)) c = 0;
+    decltype(cc::add_with_carry(0, 0, 0, nullptr)) c = 0;
 
-    c = _addcarry_u64(c, l.d[0], r.d[0], &res.d[0]);
+    c = cc::add_with_carry(c, l.d[0], r.d[0], &res.d[0]);
     if constexpr (w_out > 1)
-        c = _addcarry_u64(c, l.d[1], r.d[1], &res.d[1]);
+        c = cc::add_with_carry(c, l.d[1], r.d[1], &res.d[1]);
     if constexpr (w_out > 2)
-        c = _addcarry_u64(c, l.d[2], r.d[2], &res.d[2]);
+        c = cc::add_with_carry(c, l.d[2], r.d[2], &res.d[2]);
     if constexpr (w_out > 3)
-        c = _addcarry_u64(c, l.d[3], r.d[3], &res.d[3]);
+        c = cc::add_with_carry(c, l.d[3], r.d[3], &res.d[3]);
 
     return res;
 }
@@ -444,21 +442,21 @@ constexpr fixed_uint<w> operator+(fixed_uint<w> const& lhs, u64 rhs) noexcept
 }
 
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator-(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
+constexpr auto operator-(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
 {
     constexpr int w_out = max(w0, w1);
     fixed_uint<w_out> res;
     fixed_uint<w_out> l = lhs;
     fixed_uint<w_out> r = rhs;
-    decltype(_subborrow_u64(0, 0, 0, nullptr)) c = 0;
+    decltype(cc::sub_with_borrow(0, 0, 0, nullptr)) c = 0;
 
-    c = _subborrow_u64(c, l.d[0], r.d[0], &res.d[0]);
+    c = cc::sub_with_borrow(c, l.d[0], r.d[0], &res.d[0]);
     if constexpr (w_out > 1)
-        c = _subborrow_u64(c, l.d[1], r.d[1], &res.d[1]);
+        c = cc::sub_with_borrow(c, l.d[1], r.d[1], &res.d[1]);
     if constexpr (w_out > 2)
-        c = _subborrow_u64(c, l.d[2], r.d[2], &res.d[2]);
+        c = cc::sub_with_borrow(c, l.d[2], r.d[2], &res.d[2]);
     if constexpr (w_out > 3)
-        c = _subborrow_u64(c, l.d[3], r.d[3], &res.d[3]);
+        c = cc::sub_with_borrow(c, l.d[3], r.d[3], &res.d[3]);
 
     return res;
 }
@@ -476,7 +474,7 @@ constexpr fixed_uint<w> operator-(fixed_uint<w> const& lhs, u64 rhs) noexcept
 }
 
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator*(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
+constexpr auto operator*(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
 {
     constexpr int w_out = max(w0, w1);
     fixed_uint<w_out> l = lhs;
@@ -497,7 +495,7 @@ constexpr fixed_uint<w> operator*(fixed_uint<w> const& lhs, u64 rhs) noexcept
 }
 
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator/(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
+constexpr auto operator/(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
 {
     TG_ASSERT(rhs != 0 && "division by zero!");
 
@@ -536,7 +534,7 @@ constexpr fixed_uint<w> operator/(fixed_uint<w> const& lhs, u64 rhs) noexcept
 }
 
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator%(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
+constexpr auto operator%(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
 {
     TG_ASSERT(rhs != 0 && "division by zero!");
     constexpr int w_out = max(w0, w1);
@@ -718,10 +716,10 @@ constexpr fixed_uint<w> operator--(fixed_uint<w>& lhs, int) noexcept
 // bitwise logic
 
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator|(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
+constexpr auto operator|(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
 {
     fixed_uint<max(w0, w1)> res;
-    fixed_uint<max(w0, w1)> l = lhs;
+    fixed_uint<max(w0, w1)> l = lhs; // NOTE: promotion is important
     fixed_uint<max(w0, w1)> r = rhs;
 
     res.d[0] = l.d[0] | r.d[0];
@@ -752,10 +750,10 @@ constexpr fixed_uint<w> operator|(fixed_uint<w> const& lhs, u64 rhs) noexcept
 }
 
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator&(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
+constexpr auto operator&(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
 {
     fixed_uint<max(w0, w1)> res;
-    fixed_uint<max(w0, w1)> l = lhs;
+    fixed_uint<max(w0, w1)> l = lhs; // NOTE: promotion is important
     fixed_uint<max(w0, w1)> r = rhs;
 
     res.d[0] = l.d[0] & r.d[0];
@@ -800,10 +798,10 @@ constexpr fixed_uint<w> operator&(fixed_uint<w> const& lhs, u64 rhs) noexcept
 }
 
 template <int w0, int w1>
-constexpr fixed_uint<max(w0, w1)> operator^(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
+constexpr auto operator^(fixed_uint<w0> const& lhs, fixed_uint<w1> const& rhs) noexcept
 {
     fixed_uint<max(w0, w1)> res;
-    fixed_uint<max(w0, w1)> l = lhs;
+    fixed_uint<max(w0, w1)> l = lhs; // NOTE: promotion is important
     fixed_uint<max(w0, w1)> r = rhs;
 
     res.d[0] = l.d[0] ^ r.d[0];
@@ -1301,103 +1299,103 @@ constexpr fixed_uint<w>& operator<<=(fixed_uint<w>& lhs, int shift) noexcept
 // utility
 
 template <int w>
-constexpr u64 leading_zeros_count(fixed_uint<w> const& v)
+u64 leading_zeros_count(fixed_uint<w> const& v)
 {
     u64 zeros = 0;
     if constexpr (w > 3)
     {
-        zeros += _lzcnt_u64(v.d[3]);
+        zeros += cc::count_leading_zeros(v.d[3]);
         if (zeros < 64)
             return zeros;
     }
     if constexpr (w > 2)
     {
-        zeros += _lzcnt_u64(v.d[2]);
+        zeros += cc::count_leading_zeros(v.d[2]);
         if (zeros < ((w - 2) * 64))
             return zeros;
     }
     if constexpr (w > 1)
     {
-        zeros += _lzcnt_u64(v.d[1]);
+        zeros += cc::count_leading_zeros(v.d[1]);
         if (zeros < ((w - 1) * 64))
             return zeros;
     }
-    return zeros + _lzcnt_u64(v.d[0]);
+    return zeros + cc::count_leading_zeros(v.d[0]);
 }
 
 template <int w>
-constexpr u64 leading_ones_count(fixed_uint<w> const& v)
+u64 leading_ones_count(fixed_uint<w> const& v)
 {
     u64 ones = 0;
     if constexpr (w > 3)
     {
-        ones += _lzcnt_u64(~v.d[3]);
+        ones += cc::count_leading_zeros(~v.d[3]);
         if (ones < 64)
             return ones;
     }
     if constexpr (w > 2)
     {
-        ones += _lzcnt_u64(~v.d[2]);
+        ones += cc::count_leading_zeros(~v.d[2]);
         if (ones < ((w - 2) * 64))
             return ones;
     }
     if constexpr (w > 1)
     {
-        ones += _lzcnt_u64(~v.d[1]);
+        ones += cc::count_leading_zeros(~v.d[1]);
         if (ones < ((w - 1) * 64))
             return ones;
     }
-    return ones + _lzcnt_u64(~v.d[0]);
+    return ones + cc::count_leading_zeros(~v.d[0]);
 }
 
 template <int w>
-constexpr u64 trailing_zeros_count(fixed_uint<w> const& v)
+u64 trailing_zeros_count(fixed_uint<w> const& v)
 {
     u64 zeros = 0;
-    zeros += _tzcnt_u64(v.d[0]);
+    zeros += cc::count_trailing_zeros(v.d[0]);
     if constexpr (w > 1)
     {
         if (zeros < 64)
             return zeros;
-        zeros += _tzcnt_u64(v.d[1]);
+        zeros += cc::count_trailing_zeros(v.d[1]);
     }
     if constexpr (w > 2)
     {
         if (zeros < (2 * 64))
             return zeros;
-        zeros += _tzcnt_u64(v.d[2]);
+        zeros += cc::count_trailing_zeros(v.d[2]);
     }
     if constexpr (w > 3)
     {
         if (zeros < (3 * 64))
             return zeros;
-        zeros += _tzcnt_u64(v.d[3]);
+        zeros += cc::count_trailing_zeros(v.d[3]);
     }
     return zeros;
 }
 
 template <int w>
-constexpr u64 trailing_ones_count(fixed_uint<w> const& v)
+u64 trailing_ones_count(fixed_uint<w> const& v)
 {
     u64 ones = 0;
-    ones += _tzcnt_u64(~v.d[0]);
+    ones += cc::count_trailing_zeros(~v.d[0]);
     if constexpr (w > 1)
     {
         if (ones < 64)
             return ones;
-        ones += _tzcnt_u64(~v.d[1]);
+        ones += cc::count_trailing_zeros(~v.d[1]);
     }
     if constexpr (w > 2)
     {
         if (ones < (2 * 64))
             return ones;
-        ones += _tzcnt_u64(~v.d[2]);
+        ones += cc::count_trailing_zeros(~v.d[2]);
     }
     if constexpr (w > 3)
     {
         if (ones < (3 * 64))
             return ones;
-        ones += _tzcnt_u64(~v.d[3]);
+        ones += cc::count_trailing_zeros(~v.d[3]);
     }
     return ones;
 }
@@ -1432,19 +1430,23 @@ template <int w>
 }
 
 template <int w0, int w1>
-[[nodiscard]] fixed_uint<max(w0, w1)> gcd(fixed_uint<w0> const& a, fixed_uint<w1> const& b)
+[[nodiscard]] auto gcd(fixed_uint<w0> const& a, fixed_uint<w1> const& b)
 {
     // todo: I think we can return fixed_uint<min(w0, w1)> (note the min instead of the max)
+    //       I think not because the two is_zero clauses
+    using ret_t = fixed_uint<max(w0, w1)>;
 
     // https://lemire.me/blog/2013/12/26/fastest-way-to-compute-the-greatest-common-divisor/
-    fixed_uint<max(w0, w1)> u = a;
-    fixed_uint<max(w0, w1)> v = b;
+    // NOTE: for now we promote to bigger type
+    auto u = ret_t(a);
+    auto v = ret_t(b);
 
-    int shift;
     if (is_zero(u))
         return v;
     if (is_zero(v))
         return u;
+
+    int shift;
     shift = int(trailing_zeros_count(u | v));
     u >>= int(trailing_zeros_count(u));
     do
@@ -1452,12 +1454,13 @@ template <int w0, int w1>
         v >>= int(trailing_zeros_count(v));
         if (u > v)
         {
-            fixed_uint<max(w0, w1)> t = v;
+            auto t = v;
             v = u;
             u = t;
         }
         v = v - u;
     } while (!is_zero(v));
+
     return u << shift;
 }
 

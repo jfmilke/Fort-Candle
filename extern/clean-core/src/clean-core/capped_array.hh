@@ -17,7 +17,7 @@ namespace cc
 {
 /// Array type with compile time memory footprint but runtime size
 template <class T, size_t N>
-struct capped_array
+struct [[deprecated("deprecated container type, consider capped_vector (2021-05-05)")]] capped_array
 {
     // properties
 public:
@@ -54,7 +54,15 @@ public:
     constexpr capped_array(size_t size) : _size(compact_size_t(size))
     {
         CC_CONTRACT(size <= N);
-        new (placement_new, &_u.value[0]) T[size]();
+
+        // NOTE: DO NOT use array-placement new!
+        //       it stores the array size in the first 8 bytes
+        //       (at least on MSVC, the standard simply allows a padding on the return value)
+        // NOTE: default constructor default-initializes all members
+        //       this means zero-init if no user ctor is provided
+        //       if the overhead is too big, use capped_array::uninitialized
+        for (compact_size_t i = 0; i < _size; ++i)
+            new (placement_new, &_u.value[i]) T();
     }
 
     constexpr capped_array(std::initializer_list<T> data)
@@ -72,7 +80,7 @@ public:
         CC_CONTRACT(size <= N);
         capped_array a;
         a._size = static_cast<compact_size_t>(size);
-        new (&a._u.value[0]) T[size];
+        // no ctors called
         return a;
     }
 
@@ -87,7 +95,7 @@ public:
     }
 
     template <class... Args>
-    void emplace(size_t new_size, Args&&... init_args)
+    void emplace(size_t new_size, Args && ... init_args)
     {
         CC_CONTRACT(new_size <= N);
 
@@ -103,7 +111,7 @@ public:
     {
         detail::container_copy_construct_range<T, compact_size_t>(&rhs._u.value[0], _size, &_u.value[0]);
     }
-    capped_array(capped_array&& rhs) noexcept : _size(rhs._size)
+    capped_array(capped_array && rhs) noexcept : _size(rhs._size)
     {
         detail::container_move_construct_range<T, compact_size_t>(&rhs._u.value[0], _size, &_u.value[0]);
         rhs._size = 0;

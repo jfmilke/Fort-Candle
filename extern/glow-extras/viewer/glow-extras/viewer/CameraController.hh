@@ -16,8 +16,8 @@ struct CameraSettings
     tg::angle NumpadRotateDegree = 30_deg;
 
     // smoothing halftimes in ms
-    float TranslationalSmoothingHalfTime = 40;
-    float RotationalSmoothingHalfTime = 30;
+    float TranslationalSmoothingHalfTimeMillis = 40;
+    float RotationalSmoothingHalfTimeMillis = 30;
 
     float FocusRefDistance = 30 * 1000;
 
@@ -31,7 +31,7 @@ struct CameraSettings
     bool InvertHorizontal = false;
     bool InvertVertical = false;
 
-    tg::angle HorizontalFov = 90_deg;
+    tg::horizontal_fov HorizontalFov = tg::horizontal_fov(60_deg);
     float NearPlane = 0.001f;
     float FarPlane = 10.0f;
 };
@@ -119,11 +119,13 @@ public:
     // setter
 public:
     void setReverseZEnabled(bool v) { mReverseZEnabled = v; }
+    void setMoveSpeed(float speed) { mMoveSpeed = speed; }
 
     // queries
 public:
     tg::mat4 computeViewMatrix() const;
     tg::mat4 computeProjMatrix() const;
+    tg::mat4 computeProjMatrixNoReverseZ() const;
 
     // behaviors / input methods
 public:
@@ -140,7 +142,7 @@ public:
 
     void zoom(float delta);
 
-    void moveCamera(float dRight, float dFwd, float dUp, float elapsedSeconds);
+    void moveCamera(float dRight, float dFwd, float dUp, float dUpAbsolute, float elapsedSeconds);
 
     void rotate(float unitsRight, float unitsUp);
 

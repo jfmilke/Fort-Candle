@@ -16,12 +16,14 @@
 #include <typed-geometry/functions/objects/distance.hh>
 #include <typed-geometry/functions/objects/edges.hh>
 #include <typed-geometry/functions/objects/faces.hh>
+#include <typed-geometry/functions/objects/frustum.hh>
 #include <typed-geometry/functions/objects/intersection.hh>
 #include <typed-geometry/functions/objects/normal.hh>
 #include <typed-geometry/functions/objects/perimeter.hh>
 #include <typed-geometry/functions/objects/plane.hh>
 #include <typed-geometry/functions/objects/project.hh>
 #include <typed-geometry/functions/objects/rasterize.hh>
+#include <typed-geometry/functions/objects/segmentize.hh>
 #include <typed-geometry/functions/objects/size.hh>
 #include <typed-geometry/functions/objects/tangent.hh>
 #include <typed-geometry/functions/objects/triangle.hh>

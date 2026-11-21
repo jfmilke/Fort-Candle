@@ -26,7 +26,6 @@ void ColorMapping::buildShader(glow::viewer::detail::MeshShaderBuilder& shader) 
     }
 
     shader.addPassthrough(mDataAttribute->typeInShader(), "Data");
-    shader.addPassthrough("vec4", "Color");
 
     shader.addUniform("sampler1D", "uTexMapping");
     shader.addUniform("vec3", "uDataMin");

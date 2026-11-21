@@ -11,6 +11,8 @@
 
 #include <vector>
 
+#include <clean-core/span.hh>
+
 #include <typed-geometry/tg-lean.hh>
 
 namespace glow

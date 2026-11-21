@@ -1,25 +1,26 @@
 #pragma once
 
 #include <iosfwd>
-#include <string>
 
-#include "../Mesh.hh"
+#include <clean-core/string_view.hh>
+
+#include <polymesh/Mesh.hh>
 
 namespace polymesh
 {
 template <class ScalarT>
-void write_obj(std::string const& filename, vertex_attribute<std::array<ScalarT, 3>> const& position);
+void write_obj(cc::string_view filename, vertex_attribute<std::array<ScalarT, 3>> const& position);
 template <class ScalarT>
-bool read_obj(std::string const& filename, Mesh& mesh, vertex_attribute<std::array<ScalarT, 3>>& position);
+bool read_obj(cc::string_view filename, Mesh& mesh, vertex_attribute<std::array<ScalarT, 3>>& position);
 
 template <class ScalarT>
 struct obj_writer
 {
-    obj_writer(std::string const& filename);
+    obj_writer(cc::string_view filename);
     obj_writer(std::ostream& out);
     ~obj_writer();
 
-    void write_object_name(std::string object_name);
+    void write_object_name(cc::string_view object_name);
     void write_mesh(vertex_attribute<std::array<ScalarT, 4>> const& position,
                     halfedge_attribute<std::array<ScalarT, 3>> const* tex_coord = nullptr,
                     halfedge_attribute<std::array<ScalarT, 3>> const* normal = nullptr);
@@ -44,7 +45,7 @@ private:
 template <class ScalarT>
 struct obj_reader
 {
-    obj_reader(std::string const& filename, Mesh& mesh);
+    obj_reader(cc::string_view filename, Mesh& mesh);
     obj_reader(std::istream& in, Mesh& mesh);
 
     // get properties of the obj
@@ -56,12 +57,6 @@ public:
     /// Number of faces that could not be added
     int error_faces() const { return n_error_faces; }
 
-    /// Whether or not this mesh has texture coordinates
-    bool has_valid_texcoords() const { return has_texcoords; }
-
-    /// Whether or not this mesh has vertex normals
-    bool has_valid_normals() const { return has_normals; }
-
 private:
     void parse(std::istream& in, Mesh& mesh);
 
@@ -70,7 +65,5 @@ private:
     halfedge_attribute<std::array<ScalarT, 3>> normals;
 
     int n_error_faces = 0;
-    bool has_texcoords = false;
-    bool has_normals = false;
 };
 } // namespace polymesh

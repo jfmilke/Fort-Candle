@@ -43,7 +43,7 @@ public:
     template <class Pos3>
     PolygonBuilder& smooth_normals(polymesh::vertex_attribute<Pos3> const& pos)
     {
-        addAttribute(detail::make_mesh_attribute("aNormal", polymesh::vertex_normals_by_area(pos.mesh(), pos)));
+        addAttribute(detail::make_mesh_attribute("aNormal", polymesh::vertex_normals_by_area(pos)));
         mHasNormals = true;
         return *this;
     }

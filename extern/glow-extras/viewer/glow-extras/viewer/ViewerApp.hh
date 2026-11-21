@@ -42,6 +42,9 @@ private:
     bool mKeyE = false;
     double mLastX = 0;
     double mLastY = 0;
+    // mMouseLeftButtonPressed and mMouseRightPressed true iff isRealMouseClick() && mMouseLeft (resp. mMouseRight) && Action == RELEASE
+    bool mMouseButtonLeftPicking = false;
+    bool mMouseButtonRightPicking = false;
 
     // UI
 private:
@@ -78,6 +81,9 @@ private:
     bool const mIsInteractive;
     detail::global_settings const& mSettings;
 
+    /// total elapsed time in sec
+    double elapsedSeconds = 0.;
+
     /// A subview data cache, keys are the aabb on the screen
     std::unordered_map<tg::iaabb2, SubViewData> mSubViewDataCache;
 
@@ -104,8 +110,14 @@ public:
     ViewerApp(detail::shared_command_queue queue, detail::global_settings const& settings);
 
     // NOTE: xy in window coords, i.e. y is 0 at the top
-    tg::optional<tg::pos3> query3DPosition(int x, int y);
+    cc::optional<tg::pos3> query3DPosition(int x, int y);
+    cc::optional<float> queryDepth(int x, int y);
+    cc::optional<tg::mat4> queryCamView(int x, int y);
+    cc::optional<tg::mat4> queryCamProjNoReverseZ(int x, int y);
     void renderScreenshotNextFrame(std::string const& filename, int w, int h, int accumulationCount, GLenum format);
+
+    // picking functionality, NOTE: xy in window coords, i.e. y is 0 at the top
+    void handlePicking(int x, int y);
 
 
     void resetCameraToSceneNextFrame(bool clipCam = true);
@@ -132,6 +144,8 @@ protected:
     bool onMouseButton(double x, double y, int button, int action, int mods, int clickCount) override;
     bool onKey(int key, int scancode, int action, int mods) override;
     bool onMouseScroll(double sx, double sy) override;
+
+    bool onFileDrop(std::vector<std::string> const& files) override;
 
     void onResize(int w, int h) override;
     void onGui() override;

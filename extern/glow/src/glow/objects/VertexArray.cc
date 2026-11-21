@@ -68,7 +68,7 @@ SharedVertexArray VertexArray::create(const SharedArrayBuffer& ab, GLenum primit
     return vao;
 }
 
-SharedVertexArray VertexArray::create(const std::vector<SharedArrayBuffer>& abs, const SharedElementArrayBuffer& eab, GLenum primitiveMode)
+SharedVertexArray VertexArray::create(cc::span<SharedArrayBuffer const> abs, const SharedElementArrayBuffer& eab, GLenum primitiveMode)
 {
     auto vao = create(primitiveMode);
     auto bvao = vao->bind();
@@ -186,8 +186,8 @@ void BoundVertexArray::drawTransformFeedback(const SharedTransformFeedback& feed
 
     updatePatchParameters();
 
-    GLOW_RUNTIME_ASSERT(vao->mElementArrayBuffer == nullptr, "Cannot use drawFeedback with an index buffer " << to_string(vao), return );
-    GLOW_RUNTIME_ASSERT(!feedback->isBound(), "Cannot use drawFeedback when feedback is still bound " << to_string(vao), return );
+    GLOW_RUNTIME_ASSERT(vao->mElementArrayBuffer == nullptr, "Cannot use drawFeedback with an index buffer " << to_string(vao), return);
+    GLOW_RUNTIME_ASSERT(!feedback->isBound(), "Cannot use drawFeedback when feedback is still bound " << to_string(vao), return);
 
     glDrawTransformFeedback(vao->mPrimitiveMode, feedback->getObjectName());
 
@@ -319,7 +319,7 @@ void BoundVertexArray::attach(const SharedArrayBuffer& ab)
     }
 }
 
-void BoundVertexArray::attach(const std::vector<SharedArrayBuffer>& abs)
+void BoundVertexArray::attach(cc::span<SharedArrayBuffer const> abs)
 {
     if (!isCurrent())
         return;
@@ -433,7 +433,7 @@ BoundVertexArray::BoundVertexArray(VertexArray* vao) : vao(vao)
     GLOW_RUNTIME_ASSERT(ElementArrayBuffer::getCurrentBuffer() == nullptr,
                         "Cannot bind a VAO while an EAB is bound! (this has unintended side-effects in OpenGL) "
                             << to_string(vao) << ", " << to_string(ElementArrayBuffer::getCurrentBuffer()->buffer),
-                        return );
+                        return);
 
     glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previousVAO);
     glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &previousEAB);

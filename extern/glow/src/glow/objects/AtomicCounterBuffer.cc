@@ -21,7 +21,7 @@ SharedAtomicCounterBuffer AtomicCounterBuffer::create(uint32_t value, int count)
     return b;
 }
 
-SharedAtomicCounterBuffer AtomicCounterBuffer::create(const std::vector<uint32_t>& values)
+SharedAtomicCounterBuffer AtomicCounterBuffer::create(cc::span<uint32_t const> values)
 {
     auto b = std::make_shared<AtomicCounterBuffer>();
     b->bind().setCounters(values);
@@ -34,7 +34,7 @@ bool BoundAtomicCounterBuffer::isCurrent() const
     return true;
 }
 
-void BoundAtomicCounterBuffer::setCounters(const std::vector<uint32_t>& values, GLenum usage)
+void BoundAtomicCounterBuffer::setCounters(cc::span<uint32_t const> values, GLenum usage)
 {
     if (!isCurrent())
         return;

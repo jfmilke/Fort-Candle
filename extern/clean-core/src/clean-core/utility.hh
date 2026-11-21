@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef> // size_t
+
 #include <clean-core/assert.hh>
 
 namespace _external_cc_detail
@@ -60,6 +62,7 @@ template <class T>
 template <class T>
 [[nodiscard]] constexpr T int_div_ceil(T nom, T denom)
 {
+    CC_CONTRACT(nom > 0 && denom > 0);
     return 1 + ((nom - 1) / denom);
 }
 
@@ -79,6 +82,14 @@ template <class T>
     }
 } constexpr swap; // implemented as functor so it cannot be found by ADL
 
+// straightforward swap that does not respect custom overloads
+template <class T>
+constexpr void simple_swap(T& a, T& b)
+{
+    T tmp = static_cast<T&&>(a);
+    a = static_cast<T&&>(b);
+    b = static_cast<T&&>(tmp);
+}
 
 /// increment the value (pointer or integer) to align to the given mask
 template <class T>
@@ -87,11 +98,31 @@ template <class T>
     return (T)(((size_t)value + mask) & ~mask);
 }
 
+/// decrement the value (pointer or integer) to align to the given mask
+template <class T>
+[[nodiscard]] T align_down_masked(T value, size_t mask)
+{
+    return (T)((size_t)value & ~mask);
+}
+
 /// increment the value (pointer or integer) to align at the given boundary
+/// use with ints: align_up(300, 16) = 304
+/// or with ptrs: align_up(0x5ACE, 256) = 0x5B00
+/// alignment must be a power of 2
 template <class T>
 [[nodiscard]] T align_up(T value, size_t alignment)
 {
     return align_up_masked(value, alignment - 1);
+}
+
+/// decrement the value (pointer or integer) to align at the given boundary
+/// use with ints: align_down(300, 16) = 288
+/// or with ptrs: align_down(0x5ACE, 256) = 0x5A00
+/// alignment must be a power of 2
+template <class T>
+[[nodiscard]] T align_down(T value, size_t alignment)
+{
+    return align_down_masked(value, alignment - 1);
 }
 
 /// returns true if the value (pointer or integer) is aligned at the given boundary

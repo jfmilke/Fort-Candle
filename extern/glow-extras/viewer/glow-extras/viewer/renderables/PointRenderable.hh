@@ -26,6 +26,7 @@ private:
     glow::SharedVertexArray mVertexArray;
     glow::SharedProgram mForwardShader;
     glow::SharedProgram mShadowShader;
+    glow::SharedProgram mPickingShader;
 
 public:
     aabb computeAabb() override;
@@ -34,6 +35,7 @@ public:
     void renderShadow(RenderInfo const& info) override;
     void renderForward(RenderInfo const& info) override;
     void renderTransparent(RenderInfo const& info) override;
+    void renderPicking(RenderInfo const& info, int32_t renderableID) override;
 
 public:
     static SharedPointRenderable create(builder::PointBuilder const& builder);

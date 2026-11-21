@@ -36,6 +36,8 @@ public:
     /// Note that OpenGL errors always make the overlay visible
     static void ToggleVisibility();
 
+    static void Supress();
+
     /// ImGui call
     static void OnGui();
 

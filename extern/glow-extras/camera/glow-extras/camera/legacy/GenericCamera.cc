@@ -120,10 +120,10 @@ void GenericCamera::rotateAroundTarget_helper(tg::angle _x, tg::angle _y, tg::an
 }
 
 
-void GenericCamera::setHorizontalFieldOfView(tg::angle _fovh)
+void GenericCamera::setHorizontalFieldOfView(tg::horizontal_fov _fovh)
 {
-    TG_ASSERT(_fovh < 180_deg);
-    TG_ASSERT(_fovh > 0_deg);
+    TG_ASSERT(_fovh.angle < 180_deg);
+    TG_ASSERT(_fovh.angle > 0_deg);
     mHorizontalFieldOfView = _fovh;
 }
 
@@ -138,10 +138,10 @@ void GenericCamera::setVerticalFieldOfView(tg::angle _fovv)
     // mAspectRatio = tan( glm::radians(0.5f * mHorizontalFieldOfView) ) / tan( glm::radians(0.5f * _fovv) );
 
     float x = tan(0.5f * _fovv) * mAspectRatio;
-    mHorizontalFieldOfView = 2.0f * tg::atan(x);
+    mHorizontalFieldOfView = tg::horizontal_fov(2.0f * tg::atan(x));
 }
 
-tg::angle GenericCamera::getVerticalFieldOfView() const { return tg::atan(tan(0.5f * mHorizontalFieldOfView) / mAspectRatio) * 2.0f; }
+tg::angle GenericCamera::getVerticalFieldOfView() const { return tg::atan(tan(0.5f * mHorizontalFieldOfView.angle) / mAspectRatio) * 2.0f; }
 
 void GenericCamera::setNearClippingPlane(float _plane)
 {
@@ -243,7 +243,7 @@ tg::mat4 GenericCamera::getMonoProjectionMatrix() const
     {
         // we don't set the left/right/top/bottom values explicitly, so we want that
         // all object at our focal distance appear the same in perspective and isometric view
-        float right = tan(getHorizontalFieldOfView() * 0.5f) * mLookAtDistance;
+        float right = tan(getHorizontalFieldOfView().angle * 0.5f) * mLookAtDistance;
         float left = -right;
         float top = tan(getVerticalFieldOfView() * 0.5f) * mLookAtDistance;
         float bottom = -top;
@@ -443,12 +443,12 @@ void GenericCamera::setStateFromString(const std::string& _state)
     mViewportSize = toUvec2(token[pos++]);*/
 }
 
-float GenericCamera::getFocalLenghtInPixel() const { return ((float)mViewportSize.width) / (2.0f * tan(0.5f * mHorizontalFieldOfView)); }
+float GenericCamera::getFocalLenghtInPixel() const { return ((float)mViewportSize.width) / (2.0f * tan(0.5f * mHorizontalFieldOfView.angle)); }
 
 void GenericCamera::setFocalLengthInPixel(float _focalLengthInPixel)
 {
     auto hFoVrad = 2.0f * tg::atan((0.5f * mViewportSize.width) * (1.0f / _focalLengthInPixel));
-    setHorizontalFieldOfView(hFoVrad);
+    setHorizontalFieldOfView(tg::horizontal_fov(hFoVrad));
 }
 
 

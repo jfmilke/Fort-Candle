@@ -12,7 +12,7 @@ void GeometricRenderable::addAttribute(viewer::detail::SharedMeshAttribute attr)
         glow::error() << "Attribute " << attr->name() << " already added";
         return;
     }
-    mAttributes.emplace_back(move(attr));
+    mAttributes.emplace_back(std::move(attr));
 }
 
 bool GeometricRenderable::hasAttribute(const std::string& name) const
@@ -37,13 +37,13 @@ void GeometricRenderable::initGeometry(viewer::detail::SharedMeshDefinition def,
 {
     TG_ASSERT(def != nullptr);
 
-    mAttributes = move(attributes);
+    mAttributes = std::move(attributes);
 
     addAttribute(def->computePositionAttribute());
 
     mIndexBuffer = def->computeIndexBuffer();
     mMeshAABB = def->computeAABB();
-    mMeshDefinition = move(def);
+    mMeshDefinition = std::move(def);
 }
 
 size_t GeometricRenderable::computeGenericGeometryHash() const
@@ -51,7 +51,8 @@ size_t GeometricRenderable::computeGenericGeometryHash() const
     size_t h = 0x741231;
     h = glow::hash_xxh3(as_byte_view(transform()), h);
     h = glow::hash_xxh3(as_byte_view(mRenderMode), h);
-    h = glow::hash_xxh3(as_byte_view(mClipPlane), h);
+    h = glow::hash_xxh3(as_byte_view(mPrimitiveClipPlane), h);
+    h = glow::hash_xxh3(as_byte_view(mFragmentClipPlane), h);
     h = glow::hash_xxh3(as_byte_view(mFresnel), h);
     h = glow::hash_xxh3(as_byte_view(mBackfaceCullingEnabled), h);
     h = glow::hash_xxh3(as_byte_view(mShadingEnabled), h);

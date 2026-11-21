@@ -31,17 +31,19 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${BIN_DIR})
 # ==============================================================================
 # dependencies
 
-# Most vendored libraries still declare cmake_minimum_required(VERSION 3.0), which
-# CMake >= 4.0 refuses. Raise their policy version for the add_subdirectory calls
-# below without modifying the third-party code.
-set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
+# Add foundations lib (containers, basic utility / STL replacement).
+# It must come first: typed-geometry, polymesh, glow and glow-extras require the clean-core target,
+# and typed-geometry and polymesh are set up with its CMake helpers (arcana_add_library).
+# Those helpers link every arcana library with ld.mold on Linux unless this is off.
+set(CC_LINKER_MOLD OFF CACHE BOOL "If true, uses the mold linker (default, must be installed)")
+add_subdirectory(extern/clean-core)
 
 # Add math library
 add_subdirectory(extern/typed-geometry)
 
 # Add OpenGL wrapper lib (both options only affect non-MSVC builds)
-# GNU gold was removed from binutils 2.44+, so -fuse-ld=gold fails on current distros
-set(GLOW_USE_GOLD_LINKER OFF CACHE BOOL "If true, ld.gold is used for linking")
+# glow links with ld.mold on Linux unless this is off
+set(GLOW_USE_MOLD_LINKER OFF CACHE BOOL "If true, ld.mold is used for linking")
 # -march=native ties the binary to the build machine's CPU; glow falls back to -msse4.2
 set(GLOW_ENABLE_MARCH_NATIVE OFF CACHE BOOL "If true, adds -march=native")
 add_subdirectory(extern/glow)
@@ -53,7 +55,8 @@ set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 add_subdirectory(extern/glfw)
 
-# Add UI library
+# Add UI library (Dear ImGui + ImGuizmo; the game does not use ImPlot)
+set(IMGUI_USE_IMPLOT OFF CACHE BOOL "add implot")
 add_subdirectory(extern/imgui)
 
 # Add mesh library
@@ -61,9 +64,6 @@ add_subdirectory(extern/polymesh)
 
 # Add GLOW Extras lib
 add_subdirectory(extern/glow-extras)
-
-# Add foundations lib (containers, basic utility / STL replacement)
-add_subdirectory(extern/clean-core)
 
 # Add audio library (only the library itself, no tools/examples/install rules)
 set(ALSOFT_UTILS OFF CACHE BOOL "" FORCE)
@@ -76,8 +76,6 @@ set(ALSOFT_INSTALL_AMBDEC_PRESETS OFF CACHE BOOL "" FORCE)
 # (undefined symbol: jack_error_callback); not tested with the current version.
 set(ALSOFT_BACKEND_JACK OFF CACHE BOOL "Enable JACK backend")
 add_subdirectory(extern/openal)
-
-unset(CMAKE_POLICY_VERSION_MINIMUM)
 
 # Folder grouping
 foreach(TARGET_NAME

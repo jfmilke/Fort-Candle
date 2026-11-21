@@ -545,7 +545,7 @@ void Program::checkUnchangedUniforms()
     mCheckedUnchangedUniforms = true;
 }
 
-void Program::configureTransformFeedback(const std::vector<std::string>& varyings, GLenum bufferMode)
+void Program::configureTransformFeedback(cc::span<std::string const> varyings, GLenum bufferMode)
 {
     if (sCurrentProgram != nullptr && sCurrentProgram->program == this)
     {
@@ -555,7 +555,7 @@ void Program::configureTransformFeedback(const std::vector<std::string>& varying
     }
 
     mTransformFeedbackMode = bufferMode;
-    mTransformFeedbackVaryings = varyings;
+    mTransformFeedbackVaryings = std::vector(varyings.begin(), varyings.end());
     mIsLinkedForTransformFeedback = false;
 }
 
@@ -608,7 +608,7 @@ void UsedProgram::endTransformFeedback()
     // TODO: error handling!
 }
 
-SharedProgram Program::create(const std::vector<SharedShader>& shader)
+SharedProgram Program::create(cc::span<SharedShader const> shader)
 {
     auto program = std::make_shared<Program>();
     for (auto const& s : shader)

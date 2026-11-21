@@ -4,10 +4,12 @@
 
 #include <vector>
 
-#include <glow/fwd.hh>
+#include <clean-core/span.hh>
+
 #include <glow/common/gltypeinfo.hh>
 #include <glow/common/log.hh>
 #include <glow/common/nodiscard.hh>
+#include <glow/fwd.hh>
 
 #include "ArrayBufferAttribute.hh"
 #include "raii/BoundArrayBuffer.hh"
@@ -100,37 +102,27 @@ public: // unbound functions
     void defineAttribute(ArrayBufferAttribute const& a);
 
     /// Adds a set of fully specified attributes
-    void defineAttributes(std::vector<ArrayBufferAttribute> const& attrs);
+    void defineAttributes(cc::span<ArrayBufferAttribute const> attrs);
+    void defineAttributes(std::initializer_list<ArrayBufferAttribute> attrs) { defineAttributes(cc::span(attrs.begin(), attrs.size())); }
 
     /// Adds the attribute at the end of the existing attributes, stride gets computed automatically
     void defineAttribute(std::string const& name, GLenum type, GLint size, AttributeMode mode = AttributeMode::Float, GLuint divisor = 0);
 
     /// Adds the attribute at the end of the existing attributes, stride gets computed automatically
     /// + extra padding in bytes at the end
-    void defineAttributeWithPadding(std::string const& name,
-                                    GLenum type,
-                                    GLint size,
-                                    GLuint padding,
-                                    AttributeMode mode = AttributeMode::Float,
-                                    GLuint divisor = 0);
+    void defineAttributeWithPadding(std::string const& name, GLenum type, GLint size, GLuint padding, AttributeMode mode = AttributeMode::Float, GLuint divisor = 0);
 
     /// Adds an attribute defined by an offset: this way an attribute can get added at arbitrary
     /// locations in the stride. If it's added at the end, the stride gets resized.
     /// This way attributes can even overlap, hope you know what you're doing...
-    void defineAttributeWithOffset(std::string const& name,
-                                   GLenum type,
-                                   GLint size,
-                                   GLuint offset,
-                                   AttributeMode mode = AttributeMode::Float,
-                                   GLuint divisor = 0);
+    void defineAttributeWithOffset(std::string const& name, GLenum type, GLint size, GLuint offset, AttributeMode mode = AttributeMode::Float, GLuint divisor = 0);
 
     /// Attribute definition via template
     /// e.g. defineAttribute<glm::vec3>("aPosition");
     template <typename DataT>
     void defineAttribute(std::string const& name)
     {
-        defineAttribute(name, glTypeOf<DataT>::type, glTypeOf<DataT>::size,
-                        ArrayBufferAttribute::naturalModeOf(glTypeOf<DataT>::type), 0);
+        defineAttribute(name, glTypeOf<DataT>::type, glTypeOf<DataT>::size, ArrayBufferAttribute::naturalModeOf(glTypeOf<DataT>::type), 0);
     }
     template <typename DataT>
     void defineAttribute(std::string const& name, AttributeMode mode, GLuint divisor = 0)
@@ -141,8 +133,7 @@ public: // unbound functions
     template <typename DataT>
     void defineAttributeWithPadding(std::string const& name, GLuint padding)
     {
-        defineAttributeWithPadding(name, glTypeOf<DataT>::type, glTypeOf<DataT>::size, padding,
-                                   ArrayBufferAttribute::naturalModeOf(glTypeOf<DataT>::type), 0);
+        defineAttributeWithPadding(name, glTypeOf<DataT>::type, glTypeOf<DataT>::size, padding, ArrayBufferAttribute::naturalModeOf(glTypeOf<DataT>::type), 0);
     }
     template <typename DataT>
     void defineAttributeWithPadding(std::string const& name, GLuint padding, AttributeMode mode, GLuint divisor = 0)
@@ -153,8 +144,7 @@ public: // unbound functions
     template <typename DataT>
     void defineAttributeWithOffset(std::string const& name, GLuint offset)
     {
-        defineAttributeWithOffset(name, glTypeOf<DataT>::type, glTypeOf<DataT>::size, offset,
-                                  ArrayBufferAttribute::naturalModeOf(glTypeOf<DataT>::type), 0);
+        defineAttributeWithOffset(name, glTypeOf<DataT>::type, glTypeOf<DataT>::size, offset, ArrayBufferAttribute::naturalModeOf(glTypeOf<DataT>::type), 0);
     }
     template <typename DataT>
     void defineAttributeWithOffset(std::string const& name, GLuint offset, AttributeMode mode, GLuint divisor = 0)
@@ -172,20 +162,17 @@ public: // unbound functions
     void defineAttribute(DataT VertexT::*member, std::string const& name)
     {
         if (getStride() > 0 && getStride() != sizeof(VertexT))
-            ::glow::warning() << "Stride mismatch! Expected " << sizeof(VertexT) << ", got " << getStride() << " "
-                              << to_string(this);
+            ::glow::warning() << "Stride mismatch! Expected " << sizeof(VertexT) << ", got " << getStride() << " " << to_string(this);
         setStride(sizeof(VertexT));
 
         auto offset = reinterpret_cast<std::ptrdiff_t>(&(reinterpret_cast<VertexT const volatile*>(0)->*member));
-        defineAttributeWithOffset(name, glTypeOf<DataT>::type, glTypeOf<DataT>::size, offset,
-                                  ArrayBufferAttribute::naturalModeOf(glTypeOf<DataT>::type), 0);
+        defineAttributeWithOffset(name, glTypeOf<DataT>::type, glTypeOf<DataT>::size, offset, ArrayBufferAttribute::naturalModeOf(glTypeOf<DataT>::type), 0);
     }
     template <class DataT, class VertexT>
     void defineAttribute(DataT VertexT::*member, std::string const& name, AttributeMode mode, GLuint divisor = 0)
     {
         if (getStride() > 0 && getStride() != sizeof(VertexT))
-            ::glow::warning() << "Stride mismatch! Expected " << sizeof(VertexT) << ", got " << getStride() << " "
-                              << to_string(this);
+            ::glow::warning() << "Stride mismatch! Expected " << sizeof(VertexT) << ", got " << getStride() << " " << to_string(this);
         setStride(sizeof(VertexT));
 
         auto offset = reinterpret_cast<std::ptrdiff_t>(&(reinterpret_cast<VertexT const volatile*>(0)->*member));
@@ -195,8 +182,7 @@ public: // unbound functions
     void defineAttribute(DataT VertexT::*member, std::string const& name, GLenum type, int elements, AttributeMode mode, GLuint divisor = 0)
     {
         if (getStride() > 0 && getStride() != sizeof(VertexT))
-            ::glow::warning() << "Stride mismatch! Expected " << sizeof(VertexT) << ", got " << getStride() << " "
-                              << to_string(this);
+            ::glow::warning() << "Stride mismatch! Expected " << sizeof(VertexT) << ", got " << getStride() << " " << to_string(this);
         setStride(sizeof(VertexT));
 
         auto offset = reinterpret_cast<std::ptrdiff_t>(&(reinterpret_cast<VertexT const volatile*>(0)->*member));
@@ -223,21 +209,32 @@ public: // static construction
     /// Example:
     ///   ArrayBuffer::create({{&MyVertex::aPosition, "aPosition"},
     ///                        {&MyVertex::texCoord, "aTexCoord"}});
-    static SharedArrayBuffer create(std::vector<ArrayBufferAttribute> const& attrs);
+    static SharedArrayBuffer create(std::initializer_list<ArrayBufferAttribute> attrs) { return create(cc::span(attrs.begin(), attrs.size())); }
+    static SharedArrayBuffer create(cc::span<ArrayBufferAttribute const> attrs);
     /// Same as create(attrs) but also sets vertices immediately
-    template <typename DataT>
-    static SharedArrayBuffer create(std::vector<ArrayBufferAttribute> const& attrs, std::vector<DataT> const& vertices)
+    template <class DataRangeT>
+    static SharedArrayBuffer create(cc::span<ArrayBufferAttribute const> attrs, DataRangeT&& vertices)
     {
         auto ab = create(attrs);
         ab->bind().setData(vertices);
         return ab;
     }
-    template <typename DataT>
-    static SharedArrayBuffer create(std::string const& name, std::vector<DataT> const& vertices)
+    template <class DataRangeT>
+    static SharedArrayBuffer create(std::initializer_list<ArrayBufferAttribute> attrs, DataRangeT&& vertices)
     {
+        return create(cc::span(attrs.begin(), attrs.size()), vertices);
+    }
+    template <typename DataRangeT>
+    static SharedArrayBuffer create(std::string const& name, DataRangeT&& vertices)
+    {
+        static_assert(cc::is_any_contiguous_range<DataRangeT>, "data must be a contiguous range!");
+        auto data_span = cc::span(vertices);
+        using DataT = std::decay_t<decltype(data_span[0])>;
+        static_assert(std::is_trivially_copyable_v<DataT>, "data must be trivially copyable");
+
         auto ab = create();
         ab->defineAttribute<DataT>(name);
-        ab->bind().setData(vertices);
+        ab->bind().setData(data_span);
         return ab;
     }
 };

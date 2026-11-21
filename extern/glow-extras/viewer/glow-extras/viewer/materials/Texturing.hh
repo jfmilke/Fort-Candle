@@ -20,7 +20,7 @@ class Texturing
     {
         SharedTexture mTexture;
 
-        ExplicitTexture(SharedTexture tex) : mTexture(move(tex)) {}
+        ExplicitTexture(SharedTexture tex) : mTexture(std::move(tex)) {}
 
         SharedTexture queryTexture() const override { return mTexture; }
     };
@@ -38,7 +38,7 @@ public:
 
     Texturing& texture(SharedTexture t)
     {
-        mTexture = std::make_shared<ExplicitTexture>(move(t));
+        mTexture = std::make_shared<ExplicitTexture>(std::move(t));
         return *this;
     }
     template <class T>

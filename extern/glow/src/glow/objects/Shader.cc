@@ -5,6 +5,7 @@
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <limits>
 
 #include <glow/glow.hh>
 #include <glow/util/DefaultShaderParser.hh>
@@ -111,15 +112,15 @@ void Shader::reload()
     compile();
 }
 
-void Shader::setSource(std::string_view source) { setSource(std::vector<std::string>({std::string(source)})); }
+void Shader::setSource(std::string_view source) { setSource({std::string(source)}); }
 
-void Shader::setSource(const std::vector<std::string>& sources)
+void Shader::setSource(cc::span<std::string const> sources)
 {
     checkValidGLOW();
     mDependencyFlags.clear();
-    mSources = sources;
+    mSources = std::vector(sources.begin(), sources.end());
 
-    auto parsedSources = sParser ? sParser->parse(this, sources) : sources;
+    auto parsedSources = sParser ? sParser->parse(this, mSources) : mSources;
 
     std::vector<const GLchar*> srcs;
     srcs.resize(parsedSources.size());
@@ -138,7 +139,7 @@ SharedShader Shader::createFromSource(GLenum shaderType, std::string_view source
     return shader;
 }
 
-SharedShader Shader::createFromSource(GLenum shaderType, const std::vector<std::string>& sources)
+SharedShader Shader::createFromSource(GLenum shaderType, cc::span<std::string const> sources)
 {
     GLOW_ACTION();
 

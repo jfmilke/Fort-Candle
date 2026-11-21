@@ -1,8 +1,15 @@
 #pragma once
 
+#include <memory> // std::shared_ptr
+#include <vector>
+
+#include <clean-core/span.hh>
+#include <clean-core/string_view.hh>
+
 #include <glow-extras/viewer/objects/other/labels.hh>
 #include <glow-extras/viewer/traits.hh>
 #include <glow-extras/viewer/view.hh>
+#include <typed-geometry/feature/bezier.hh>
 
 namespace glow::viewer
 {
@@ -161,15 +168,45 @@ protected:
         }
 
         /// adds a label to each point
-        point_ref& label(std::string_view text, label_style const& style = {})
+        point_ref& label(cc::string_view text, label_style const& style = {})
         {
             for (auto& p : _points)
                 _canvas.add_label(p.pos, text, style);
             return *this;
         }
 
+        template <class F>
+        point_ref& on_left_click(F&& f)
+        {
+            // todo: can we assume that the range is always non-empty?
+            int id = _canvas._internal_add_on_left_click(_points[0].pick_id, std::forward<F>(f));
+            for (auto& p : _points)
+                p.pick_id = id;
+            return *this;
+        }
+
+        template <class F>
+        point_ref& on_right_click(F&& f)
+        {
+            // todo: can we assume that the range is always non-empty?
+            int id = _canvas._internal_add_on_right_click(_points[0].pick_id, std::forward<F>(f));
+            for (auto& p : _points)
+                p.pick_id = id;
+            return *this;
+        }
+
+        template <class F>
+        point_ref& on_hover(F&& f)
+        {
+            int id = _canvas._internal_add_on_hover(_points[0].pick_id, std::forward<F>(f));
+            for (auto& p : _points)
+                p.pick_id = id;
+            return *this;
+        }
+
+
     public:
-        point_ref(array_view<point> points, canvas_data& canvas) : _points(points), _canvas(canvas) {}
+        point_ref(cc::span<point> points, canvas_data& canvas) : _points(points), _canvas(canvas) {}
 
         point_ref(point_ref const&) = delete;
         point_ref(point_ref&&) = delete;
@@ -177,7 +214,7 @@ protected:
         point_ref& operator=(point_ref&&) = delete;
 
     private:
-        array_view<point> _points;
+        cc::span<point> _points;
         canvas_data& _canvas;
     };
 
@@ -292,8 +329,37 @@ protected:
             return *this;
         }
 
+        template <class F>
+        splat_ref& on_left_click(F&& f)
+        {
+            // todo: can we assume that the range is always non-empty?
+            int id = _canvas._internal_add_on_left_click(_splats[0].pick_id, std::forward<F>(f));
+            for (auto& p : _splats)
+                p.pick_id = id;
+            return *this;
+        }
+
+        template <class F>
+        splat_ref& on_right_click(F&& f)
+        {
+            // todo: can we assume that the range is always non-empty?
+            int id = _canvas._internal_add_on_right_click(_splats[0].pick_id, std::forward<F>(f));
+            for (auto& p : _splats)
+                p.pick_id = id;
+            return *this;
+        }
+
+        template <class F>
+        splat_ref& on_hover(F&& f)
+        {
+            int id = _canvas._internal_add_on_hover(_splats[0].pick_id, std::forward<F>(f));
+            for (auto& p : _splats)
+                p.pick_id = id;
+            return *this;
+        }
+
     public:
-        splat_ref(array_view<splat> splats) : _splats(splats) {}
+        splat_ref(cc::span<splat> splats, canvas_data& canvas) : _splats(splats), _canvas(canvas) {}
 
         splat_ref(splat_ref const&) = delete;
         splat_ref(splat_ref&&) = delete;
@@ -301,12 +367,13 @@ protected:
         splat_ref& operator=(splat_ref&&) = delete;
 
     private:
-        array_view<splat> _splats;
+        cc::span<splat> _splats;
+        canvas_data& _canvas;
     };
 
     struct line_ref
     {
-        /// sets the normal of all added lines
+        /// sets the color of all added lines
         line_ref& color(tg::color4 const& c)
         {
             for (auto& l : _lines)
@@ -318,6 +385,41 @@ protected:
         }
         line_ref& color(float r, float g, float b, float a = 1) { return color(tg::color4(r, g, b, a)); }
         line_ref& color(std::string_view color_str);
+
+        /// sets the two vertex colors (for all lines, probably only useful for add_line(line))
+        line_ref& colors(tg::color4 const& c0, tg::color4 const& c1)
+        {
+            for (auto& l : _lines)
+            {
+                l.p0.color = c0;
+                l.p1.color = c1;
+            }
+            return *this;
+        }
+
+        /// sets the normal of all added lines
+        line_ref& normal(tg::vec3 const& n)
+        {
+            for (auto& l : _lines)
+            {
+                l.p0.normal = n;
+                l.p1.normal = n;
+            }
+            return *this;
+        }
+
+        line_ref& normal(float x, float y, float z) { return normal(tg::vec3(x, y, z)); }
+
+        /// sets the two vertex normals (for all lines, probably only useful for add_line(line))
+        line_ref& normals(tg::vec3 const& n0, tg::vec3 const& n1)
+        {
+            for (auto& l : _lines)
+            {
+                l.p0.normal = n0;
+                l.p1.normal = n1;
+            }
+            return *this;
+        }
 
         /// sets the size of all added lines
         /// NOTE: world size or px size is determined by canvas state and cannot be changed!
@@ -377,8 +479,37 @@ protected:
             return *this;
         }
 
+        template <class F>
+        line_ref& on_left_click(F&& f)
+        {
+            // todo: can we assume that the range is always non-empty?
+            int id = _canvas._internal_add_on_left_click(_lines[0].pick_id, std::forward<F>(f));
+            for (auto& p : _lines)
+                p.pick_id = id;
+            return *this;
+        }
+
+        template <class F>
+        line_ref& on_right_click(F&& f)
+        {
+            // todo: can we assume that the range is always non-empty?
+            int id = _canvas._internal_add_on_right_click(_lines[0].pick_id, std::forward<F>(f));
+            for (auto& p : _lines)
+                p.pick_id = id;
+            return *this;
+        }
+
+        template <class F>
+        line_ref& on_hover(F&& f)
+        {
+            int id = _canvas._internal_add_on_hover(_lines[0].pick_id, std::forward<F>(f));
+            for (auto& p : _lines)
+                p.pick_id = id;
+            return *this;
+        }
+
     public:
-        line_ref(array_view<line> lines) : _lines(lines) {}
+        line_ref(cc::span<line> lines, canvas_data& canvas) : _canvas(canvas), _lines(lines) {}
 
         line_ref(line_ref const&) = delete;
         line_ref(line_ref&&) = delete;
@@ -386,7 +517,8 @@ protected:
         line_ref& operator=(line_ref&&) = delete;
 
     private:
-        array_view<line> _lines;
+        canvas_data& _canvas;
+        cc::span<line> _lines;
     };
 
     struct triangle_ref
@@ -404,6 +536,18 @@ protected:
         }
         triangle_ref& color(float r, float g, float b, float a = 1) { return color(tg::color4(r, g, b, a)); }
         triangle_ref& color(std::string_view color_str);
+
+        /// sets the three vertex colors (for all triangles, probably only useful for add_face(tri))
+        triangle_ref& colors(tg::color4 const& c0, tg::color4 const& c1, tg::color4 const& c2)
+        {
+            for (auto& t : _triangles)
+            {
+                t.color[0] = c0;
+                t.color[1] = c1;
+                t.color[2] = c2;
+            }
+            return *this;
+        }
 
         /// sets the triangle normal of all triangles
         triangle_ref& normal(tg::vec3 const& n)
@@ -472,8 +616,37 @@ protected:
             return *this;
         }
 
+        template <class F>
+        triangle_ref& on_left_click(F&& f)
+        {
+            // todo: can we assume that the range is always non-empty?
+            int id = _canvas._internal_add_on_left_click(_triangles[0].pick_id, std::forward<F>(f));
+            for (auto& p : _triangles)
+                p.pick_id = id;
+            return *this;
+        }
+
+        template <class F>
+        triangle_ref& on_right_click(F&& f)
+        {
+            // todo: can we assume that the range is always non-empty?
+            int id = _canvas._internal_add_on_right_click(_triangles[0].pick_id, std::forward<F>(f));
+            for (auto& p : _triangles)
+                p.pick_id = id;
+            return *this;
+        }
+
+        template <class F>
+        triangle_ref& on_hover(F&& f)
+        {
+            int id = _canvas._internal_add_on_hover(_triangles[0].pick_id, std::forward<F>(f));
+            for (auto& p : _triangles)
+                p.pick_id = id;
+            return *this;
+        }
+
     public:
-        triangle_ref(array_view<triangle> triangles) : _triangles(triangles) {}
+        triangle_ref(cc::span<triangle> triangles, canvas_data& canvas) : _canvas(canvas), _triangles(triangles) {}
 
         triangle_ref(triangle_ref const&) = delete;
         triangle_ref(triangle_ref&&) = delete;
@@ -481,56 +654,96 @@ protected:
         triangle_ref& operator=(triangle_ref&&) = delete;
 
     private:
-        array_view<triangle> _triangles;
+        canvas_data& _canvas;
+        cc::span<triangle> _triangles;
     };
 
     // config
 public:
-    void set_color(tg::color3 const& c, float a = 1) { _mat = tg::color4(c, a); }
-    void set_color(tg::color4 const& c) { _mat = c; }
-    void set_color(float r, float g, float b, float a = 1) { _mat = tg::color4(r, g, b, a); }
+    void set_color(tg::color3 const& c, float a = 1) { _state.mat = tg::color4(c, a); }
+    void set_color(tg::color4 const& c) { _state.mat = c; }
+    void set_color(float r, float g, float b, float a = 1) { _state.mat = tg::color4(r, g, b, a); }
     void set_color(std::string_view hex);
-    void clear_color() { _mat = {}; }
-    void set_material(material const& m) { _mat = m; }
+    void clear_color() { _state.mat = {}; }
+    void set_material(material const& m) { _state.mat = m; }
 
     void set_point_size_px(float s = 7.f)
     {
         TG_ASSERT(s > 0);
-        _points_size = s;
-        _points_curr = &_points_px;
+        _state.points_size = s;
+        _state.points_curr = &_points_px;
     }
     void set_point_size_world(float s)
     {
         TG_ASSERT(s > 0);
-        _points_size = s;
-        _points_curr = &_points_world;
+        _state.points_size = s;
+        _state.points_curr = &_points_world;
     }
 
     void set_line_width_px(float w = 5.f)
     {
         TG_ASSERT(w > 0);
-        _lines_width = w;
-        _lines_curr = &_lines_px;
+        _state.lines_width = w;
+        _state.lines_curr = &_lines_px;
     }
     void set_line_width_world(float w)
     {
         TG_ASSERT(w > 0);
-        _lines_width = w;
-        _lines_curr = &_lines_world;
+        _state.lines_width = w;
+        _state.lines_curr = &_lines_world;
+    }
+
+    void set_2d_frame(tg::pos3 origin, tg::vec3 dir_x, tg::vec3 dir_y)
+    {
+        _state.frame2d_pos = origin;
+        _state.frame2d_dir_x = dir_x;
+        _state.frame2d_dir_y = dir_y;
     }
 
     void set_splat_size(float s)
     {
         TG_ASSERT(s > 0);
-        _splats_size = s;
+        _state.splats_size = s;
     }
 
     /// number of segments used to approximate round geometry
     void set_resolution(int res)
     {
         TG_ASSERT(res >= 4);
-        _resolution = res;
+        _state.resolution = res;
     }
+
+    /// reconstructs the canvas
+    /// this also frees allocated memory
+    void reset()
+    {
+        this->~canvas_data();
+        new (this) canvas_data();
+    }
+
+    /// clears the canvas
+    /// will not free allocated memory
+    void clear()
+    {
+        _state = state(*this);
+        _points_px.clear();
+        _points_world.clear();
+
+        _splats.clear();
+
+        _lines_px.clear();
+        _lines_world.clear();
+
+        _triangles.clear();
+
+        _labels.clear();
+
+        _quadrics.clear();
+
+        // do not clear due to the shared ownership!
+        _pick_functions = std::make_shared<std::vector<pick_functions>>();
+    }
+
 
     // face
 public:
@@ -547,33 +760,34 @@ public:
     template <int D, class T>
     triangle_ref add_face(tg::triangle<D, T> const& t, material const& mat = {})
     {
-        static_assert(D == 3, "only supports 3D currently");
-        auto const n = normalize_safe(cross(tg::vec3(t.pos1 - t.pos0), tg::vec3(t.pos2 - t.pos0)));
-        return _add_triangle(tg::pos3(t.pos0), tg::pos3(t.pos1), tg::pos3(t.pos2), n, n, n, mat);
+        auto const p0 = _to_pos3(t.pos0);
+        auto const p1 = _to_pos3(t.pos1);
+        auto const p2 = _to_pos3(t.pos2);
+        auto const n = normalize_safe(cross(p1 - p0, p2 - p0));
+        return _add_triangle(p0, p1, p2, n, n, n, mat);
     }
     template <class T>
     triangle_ref add_face(tg::box<2, T, 3> const& t, material const& mat = {})
     {
         auto start_cnt = _triangles.size();
-        auto n = tg::normal_of(tg::box2in3(t));
+        auto n = tg::vec3(tg::normalize_safe(cross(t.half_extents[0], t.half_extents[1])));
         auto v00 = tg::pos3(t[{-1, -1}]);
         auto v01 = tg::pos3(t[{-1, +1}]);
         auto v10 = tg::pos3(t[{+1, -1}]);
         auto v11 = tg::pos3(t[{+1, +1}]);
         _add_triangle(v00, v10, v11, n, n, n, mat);
         _add_triangle(v00, v11, v01, n, n, n, mat);
-        return array_view<triangle>(_triangles.data() + start_cnt, _triangles.size() - start_cnt);
+        return {cc::span<triangle>(_triangles.data() + start_cnt, _triangles.size() - start_cnt), *this};
     }
     template <int D, class T>
     triangle_ref add_face(tg::quad<D, T> const& t, material const& mat = {})
     {
         auto start_cnt = _triangles.size();
-        static_assert(D == 3, "only supports 3D currently");
-        auto vc = tg::centroid_of(tg::quad3(t));
-        auto v00 = tg::pos3(t.pos00);
-        auto v01 = tg::pos3(t.pos01);
-        auto v10 = tg::pos3(t.pos10);
-        auto v11 = tg::pos3(t.pos11);
+        auto v00 = _to_pos3(t.pos00);
+        auto v01 = _to_pos3(t.pos01);
+        auto v10 = _to_pos3(t.pos10);
+        auto v11 = _to_pos3(t.pos11);
+        auto vc = (v00 + v01 + v10 + v11) / 4.f;
         auto n00 = normalize_safe(cross(v01 - v00, v10 - v00));
         auto n01 = normalize_safe(cross(v11 - v01, v00 - v01));
         auto n10 = normalize_safe(cross(v00 - v10, v11 - v10));
@@ -583,7 +797,7 @@ public:
         _add_triangle(v10, v11, vc, n10, n11, nc, mat);
         _add_triangle(v11, v01, vc, n11, n01, nc, mat);
         _add_triangle(v01, v00, vc, n01, n00, nc, mat);
-        return array_view<triangle>(_triangles.data() + start_cnt, _triangles.size() - start_cnt);
+        return {cc::span<triangle>(_triangles.data() + start_cnt, _triangles.size() - start_cnt), *this};
     }
     template <class PosT>
     triangle_ref add_face(pm::face_handle face, pm::vertex_attribute<PosT> const& pos, material const& mat = {})
@@ -596,13 +810,13 @@ public:
             auto area = 0.0f;
             auto h = face.any_halfedge();
             auto const v0 = h.vertex_from();
-            auto const p0 = tg::pos3(v0[pos]);
+            auto const p0 = _to_pos3(v0[pos]);
 
-            auto p_prev = tg::pos3(h.vertex_to()[pos]);
+            auto p_prev = _to_pos3(h.vertex_to()[pos]);
             h = h.next();
             do
             {
-                auto p_curr = tg::pos3(h.vertex_to()[pos]);
+                auto p_curr = _to_pos3(h.vertex_to()[pos]);
                 auto a = length(cross(p_prev - p0, p_curr - p0));
                 area += a;
                 centroid += (p_prev + p_curr + p0) * a;
@@ -614,27 +828,36 @@ public:
             centroid /= 3.0f * area;
         }
 
+        // try to find a non-zero normal
         tg::vec3 normal;
         {
-            auto e = face.any_halfedge();
-            auto const v0 = tg::pos3(e.vertex_from()[pos]);
-            auto const v1 = tg::pos3(e.vertex_to()[pos]);
-            normal = cross(v0 - centroid, v1 - centroid);
-            auto l = length(normal);
-            normal = l == 0 ? tg::vec3::zero : normal / l;
+            auto const h_start = face.any_halfedge();
+            auto h_curr = h_start;
+            do
+            {
+                auto const v0 = _to_pos3(h_curr.vertex_from()[pos]);
+                auto const v1 = _to_pos3(h_curr.vertex_to()[pos]);
+                normal = cross(v0 - centroid, v1 - centroid);
+                auto l = length(normal);
+                normal = l == 0 ? tg::vec3::zero : normal / l;
+                h_curr = h_curr.next();
+
+            } while (h_curr != h_start && normal == tg::vec3::zero);
         }
+
+        // add triangle fan
         auto h0 = face.any_halfedge();
         auto he = h0.prev();
         auto h = h0.next();
-        auto v0 = tg::pos3(pos[h0.vertex_from()]);
+        auto v0 = _to_pos3(pos[h0.vertex_from()]);
         while (h != he)
         {
-            auto v1 = tg::pos3(pos[h.vertex_from()]);
-            auto v2 = tg::pos3(pos[h.vertex_to()]);
+            auto v1 = _to_pos3(pos[h.vertex_from()]);
+            auto v2 = _to_pos3(pos[h.vertex_to()]);
             _add_triangle(v0, v1, v2, normal, normal, normal, mat);
             h = h.next();
         }
-        return array_view<triangle>(_triangles.data() + start_cnt, _triangles.size() - start_cnt);
+        return {cc::span<triangle>(_triangles.data() + start_cnt, _triangles.size() - start_cnt), *this};
     }
 
     // faces
@@ -671,7 +894,7 @@ public:
                 add_faces(e, mat);
         else
             static_assert(tg::always_false<T>, "type not supported");
-        return array_view<triangle>(_triangles.data() + start_cnt, _triangles.size() - start_cnt);
+        return {cc::span<triangle>(_triangles.data() + start_cnt, _triangles.size() - start_cnt), *this};
     }
 
     // line
@@ -679,18 +902,27 @@ public:
     template <int D, class T>
     line_ref add_line(tg::segment<D, T> const& s, material const& mat = {})
     {
-        static_assert(D == 3, "only supports 3D currently");
-        return _add_line(tg::pos3(s.pos0), tg::pos3(s.pos1), mat);
+        return _add_line(_to_pos3(s.pos0), _to_pos3(s.pos1), mat);
     }
     template <int D, class T>
     line_ref add_line(tg::pos<D, T> const& p0, tg::pos<D, T> const& p1, material const& mat = {})
     {
-        return add_lines(tg::segment(p0, p1), mat);
+        return _add_line(_to_pos3(p0), _to_pos3(p1), mat);
     }
     template <int D, class T>
     line_ref add_line(tg::pos<D, T> const& p, tg::vec<D, T> const& dir, material const& mat = {})
     {
-        return add_lines(tg::segment(p, p + dir), mat);
+        return _add_line(_to_pos3(p), _to_pos3(p + dir), mat);
+    }
+    template <class PosT>
+    line_ref add_line(pm::edge_handle edge, pm::vertex_attribute<PosT> const& pos, material const& mat = {})
+    {
+        return _add_line(_to_pos3(pos[edge.vertexA()]), _to_pos3(pos[edge.vertexB()]), mat);
+    }
+    template <class PosT>
+    line_ref add_line(pm::halfedge_handle edge, pm::vertex_attribute<PosT> const& pos, material const& mat = {})
+    {
+        return _add_line(_to_pos3(pos[edge.vertex_from()]), _to_pos3(pos[edge.vertex_to()]), mat);
     }
 
     // lines
@@ -698,41 +930,52 @@ public:
     template <int D, class T>
     line_ref add_lines(tg::segment<D, T> const& s, material const& mat = {})
     {
-        static_assert(D == 3, "only supports 3D currently");
-        return _add_line(tg::pos3(s.pos0), tg::pos3(s.pos1), mat);
+        return _add_line(_to_pos3(s.pos0), _to_pos3(s.pos1), mat);
     }
     template <class T>
     line_ref add_lines(tg::sphere<2, T, 3> const& s, material const& mat = {})
     {
-        auto start_cnt = _lines_curr->size();
+        auto start_cnt = _state.lines_curr->size();
         auto d0 = tg::any_normal(s.normal) * s.radius;
         auto d1 = cross(d0, s.normal);
         auto prev_p = s.center + d1;
-        for (auto i = 1; i <= _resolution; ++i)
+        for (auto i = 1; i <= _state.resolution; ++i)
         {
-            auto [si, co] = tg::sin_cos(360_deg * i / _resolution);
+            auto [si, co] = tg::sin_cos(360_deg * float(i) / float(_state.resolution));
             auto curr_p = s.center + d0 * si + d1 * co;
             _add_line(prev_p, curr_p, mat);
             prev_p = curr_p;
         }
-        return array_view<line>(_lines_curr->data() + start_cnt, _lines_curr->size() - start_cnt);
+        return {cc::span<line>(_state.lines_curr->data() + start_cnt, _state.lines_curr->size() - start_cnt), *this};
     }
     template <class T>
     line_ref add_lines(T const& value, material const& mat = {})
     {
-        auto start_cnt = _lines_curr->size();
+        auto start_cnt = _state.lines_curr->size();
         if constexpr (tg::has_edges_of<T const&>)
             for (auto const& e : edges_of(value))
                 add_lines(e, mat);
         else if constexpr (gv::detail::is_vertex_attr<T>)
             for (auto e : value.mesh().edges())
-                _add_line(tg::pos3(value[e.vertexA()]), tg::pos3(value[e.vertexB()]), mat);
+                _add_line(_to_pos3(value[e.vertexA()]), _to_pos3(value[e.vertexB()]), mat);
         else if constexpr (tg::is_any_range<T const&>)
             for (auto const& e : value)
                 add_lines(e, mat);
         else
             static_assert(tg::always_false<T>, "type not supported");
-        return array_view<line>(_lines_curr->data() + start_cnt, _lines_curr->size() - start_cnt);
+        return {cc::span<line>(_state.lines_curr->data() + start_cnt, _state.lines_curr->size() - start_cnt), *this};
+    }
+    template <class PosT>
+    line_ref add_lines(pm::face_handle face, pm::vertex_attribute<PosT> const& pos, material const& mat = {})
+    {
+        auto start_cnt = _state.lines_curr->size();
+        for (auto h : face.halfedges())
+        {
+            auto v0 = _to_pos3(pos[h.vertex_from()]);
+            auto v1 = _to_pos3(pos[h.vertex_to()]);
+            _add_line(v0, v1, mat);
+        }
+        return {cc::span<line>(_state.lines_curr->data() + start_cnt, _state.lines_curr->size() - start_cnt), *this};
     }
 
     // point
@@ -740,22 +983,23 @@ public:
     template <class PosT>
     point_ref add_point(PosT const& pos, material const& mat = {})
     {
-        static_assert(tg::is_comp_like<PosT, 3, float>, "pos must be a pos3 like type");
-        return _add_point(tg::pos3(pos), mat);
+        static_assert(tg::is_comp_like<PosT, 3, float> || tg::is_comp_like<PosT, 2, float>, "pos must be a pos2/pos3 like type");
+        return _add_point(_to_pos3(pos), mat);
     }
-    point_ref add_point(float x, float y, float z, material const& mat = {}) { return add_point(tg::pos3(x, y, z), mat); }
+    point_ref add_point(float x, float y, float z, material const& mat = {}) { return _add_point(tg::pos3(x, y, z), mat); }
+    point_ref add_point(float x, float y, material const& mat = {}) { return _add_point(_to_pos3(tg::pos2(x, y)), mat); }
 
     // points
 public:
     template <class T>
     point_ref add_points(T const& value, material const& mat = {})
     {
-        auto start_cnt = _points_curr->size();
-        if constexpr (tg::is_comp_like<T, 3, float>)
-            _add_point(tg::pos3(value), mat);
+        auto start_cnt = _state.points_curr->size();
+        if constexpr (tg::is_comp_like<T, 3, float> || tg::is_comp_like<T, 2, float>)
+            _add_point(_to_pos3(value), mat);
         else if constexpr (tg::has_vertices_of<T const&>)
             for (auto const& v : vertices_of(value))
-                _add_point(tg::pos3(v), mat);
+                _add_point(_to_pos3(v), mat);
         else if constexpr (gv::detail::is_vertex_attr<T>)
             for (auto v : value.mesh().vertices())
                 add_points(value[v], mat);
@@ -764,7 +1008,7 @@ public:
                 add_points(v, mat);
         else
             static_assert(tg::always_false<T>, "type not supported");
-        return {array_view<point>(_points_curr->data() + start_cnt, _points_curr->size() - start_cnt), *this};
+        return {cc::span<point>(_state.points_curr->data() + start_cnt, _state.points_curr->size() - start_cnt), *this};
     }
 
     // splat
@@ -804,10 +1048,10 @@ public:
 
                 while (p_it != p_end && n_it != n_end)
                 {
-                    add_splats(pos, normal, mat);
+                    add_splats(*p_it, *n_it, mat);
 
                     ++p_it;
-                    ++n_end;
+                    ++n_it;
                 }
 
                 TG_ASSERT(!(p_it != p_end) && !(n_it != n_end) && "range size mismatch");
@@ -818,35 +1062,91 @@ public:
         }
         else
             static_assert(tg::always_false<PosT>, "type not supported");
-        return array_view<splat>(_splats.data() + start_cnt, _splats.size() - start_cnt);
+        return {cc::span<splat>(_splats.data() + start_cnt, _splats.size() - start_cnt), *this};
+    }
+
+    // quadric objects
+public:
+    // sphere
+    template <class T>
+    void add_sphere(tg::pos<3, T> center, float radius, material const& mat = {})
+    {
+        auto& q = _quadrics.emplace_back();
+        q.set_sphere({tg::pos3(center), radius});
+        q.color = mat.color;
+    }
+    template <class T, class TraitsT>
+    void add_sphere(tg::sphere<3, T, 3, TraitsT> const& s, material const& mat = {})
+    {
+        return add_sphere(s.center, s.radius, mat);
+    }
+
+    // cylinder
+    template <class T>
+    void add_cylinder(tg::pos<3, T> pos0, tg::pos<3, T> pos1, float radius, material const& mat = {})
+    {
+        auto& q = _quadrics.emplace_back();
+        q.set_cylinder({tg::pos3(pos0), tg::pos3(pos1), radius});
+        q.color = mat.color;
+    }
+    template <class T>
+    void add_cylinder_no_caps(tg::pos<3, T> pos0, tg::pos<3, T> pos1, float radius, material const& mat = {})
+    {
+        auto& q = _quadrics.emplace_back();
+        q.set_cylinder({tg::pos3(pos0), tg::pos3(pos1), radius});
+        q.color = mat.color;
+        q.draw_box = false;
+    }
+    template <class T>
+    void add_cylinder(tg::segment<3, T> const& axis, float radius, material const& mat = {})
+    {
+        return add_cylinder(axis.pos0, axis.pos1, radius, mat);
+    }
+    template <class T>
+    void add_cylinder_no_caps(tg::segment<3, T> const& axis, float radius, material const& mat = {})
+    {
+        return add_cylinder_no_caps(axis.pos0, axis.pos1, radius, mat);
+    }
+    template <class T, class TraitsT>
+    void add_cylinder(tg::cylinder<3, T, TraitsT> const& cyl, material const& mat = {})
+    {
+        if constexpr (std::is_same_v<TraitsT, tg::boundary_no_caps_tag>)
+            add_cylinder_no_caps(cyl.axis.pos0, cyl.axis.pos1, cyl.radius, mat);
+        else
+            add_cylinder(cyl.axis.pos0, cyl.axis.pos1, cyl.radius, mat);
+    }
+    template <class T, class TraitsT>
+    void add_cylinder_no_caps(tg::cylinder<3, T, TraitsT> const& cyl, material const& mat = {})
+    {
+        add_cylinder_no_caps(cyl.axis.pos0, cyl.axis.pos1, cyl.radius, mat);
     }
 
     // labels
 public:
     void add_label(label const& label);
-    template <class T>
-    label& add_label(tg::pos<3, T> pos, std::string_view text, label_style const& style = {})
+    template <int D, class T>
+    label& add_label(tg::pos<D, T> pos, cc::string_view text, label_style const& style = {})
     {
         auto& l = _labels.emplace_back();
-        l.text = text;
-        l.pos = tg::pos3(pos);
+        l.text = std::string(text.data(), text.size());
+        l.pos = _to_pos3(pos);
         l.style = style;
         return l;
     }
     template <class Pos3>
-    label& add_label(pm::vertex_attribute<Pos3> const& pos, pm::vertex_index v, std::string_view text, label_style const& style = {})
+    label& add_label(pm::vertex_attribute<Pos3> const& pos, pm::vertex_index v, cc::string_view text, label_style const& style = {})
     {
         return add_label(pos[v], text, style);
     }
     template <class Pos3, class Normal3>
-    label& add_label(pm::vertex_attribute<Pos3> const& pos, pm::vertex_attribute<Normal3> const& normal, pm::vertex_index v, std::string_view text, label_style const& style = {})
+    label& add_label(pm::vertex_attribute<Pos3> const& pos, pm::vertex_attribute<Normal3> const& normal, pm::vertex_index v, cc::string_view text, label_style const& style = {})
     {
         auto& l = add_label(pos[v], text, style);
         l.normal = tg::vec3(normal[v]);
         return l;
     }
 
-    void add_labels(glow::array_view<label const> labels);
+    void add_labels(cc::span<label const> labels);
 
     // extras
 public:
@@ -854,11 +1154,28 @@ public:
     void add_arrow(tg::pos3 from_pos, tg::vec3 extent, float world_size, tg::color3 color, arrow_style const& style = {});
     void add_arrow(tg::vec3 extent, tg::pos3 to_pos, float world_size, tg::color3 color, arrow_style const& style = {});
 
+    template <int D, class T>
+    void add_arrow(tg::pos<D, T> const& from, tg::pos<D, T> const& to, float world_size, tg::color3 color, arrow_style const& style = {})
+    {
+        add_arrow(_to_pos3(from), _to_pos3(to), world_size, color, style);
+    }
+    template <int D, class T>
+    void add_arrow(tg::pos<D, T> const& from_pos, tg::vec<D, T> const& extent, float world_size, tg::color3 color, arrow_style const& style = {})
+    {
+        add_arrow(_to_pos3(from_pos), _to_vec3(extent), world_size, color, style);
+    }
+    template <int D, class T>
+    void add_arrow(tg::vec<D, T> const& extent, tg::pos<D, T> const& to_pos, float world_size, tg::color3 color, arrow_style const& style = {})
+    {
+        add_arrow(_to_vec3(extent), _to_pos3(to_pos), world_size, color, style);
+    }
+
     void add_file(std::string_view filename, tg::mat4 const& transform = tg::mat4::identity);
 
     void add_data(canvas_data const& data)
     {
-        auto add_range = [](auto& dest, auto const& src) {
+        auto add_range = [](auto& dest, auto const& src)
+        {
             for (auto&& d : src)
                 dest.push_back(d);
         };
@@ -876,12 +1193,94 @@ public:
         add_range(_labels, data._labels);
     }
 
+    template <int D>
+    line_ref add_bezier(tg::bezier<D, tg::pos3> const& bezier, material const& mat = {})
+    {
+        tg::bezier<1, tg::pos3> bezier_start_end_segment = tg::make_bezier(bezier.control_points[0], bezier.control_points[D]);
+        tg::bezier<D, tg::vec3> bezier_subtract = bezier - bezier_start_end_segment;
+        auto min = tg::pos3(bezier_subtract.control_points[0]);
+        auto max = tg::pos3(bezier_subtract.control_points[0]);
+
+        for (tg::vec3& c : bezier_subtract.control_points)
+        {
+            min.x = tg::min(c.x, min.x);
+            min.y = tg::min(c.y, min.y);
+            min.z = tg::min(c.z, min.z);
+
+            max.x = tg::max(c.x, max.x);
+            max.y = tg::max(c.y, max.y);
+            max.z = tg::max(c.z, max.z);
+        }
+
+        tg::aabb3 bb = tg::aabb3(min, max);
+        float bb_length_diagonal = tg::length(bb.max - bb.min);
+        float segment_size;
+        if (bb_length_diagonal <= (2 * tg::epsilon<float>)) // zero curvature: approximation with single segment
+            segment_size = 1.0f;
+        else
+            segment_size = 0.05f * (1.0f / bb_length_diagonal);
+
+        // estimated segment length in world size approximated from 1st segment
+        float segment_size_world = tg::length(bezier[0] - bezier[segment_size]);
+
+        // ratio of in param segment size and world size segment size for back-mapping
+        float ratio = segment_size / segment_size_world;
+
+        if (_state.lines_curr == &_lines_world && segment_size_world < 5 * _state.lines_width)
+        {
+            segment_size_world = 5 * _state.lines_width;
+            // back-mapping to param size
+            segment_size = segment_size_world * ratio;
+        }
+
+        // segment length larger 1 exceeds bezier parametrization
+        segment_size = tg::clamp(segment_size, 0.001, 1.0f);
+
+        return _add_bezier(bezier, segment_size, mat);
+    }
+
+    template <int D, class PosT>
+    line_ref _add_bezier(tg::bezier<D, PosT> const& bezier, float segment_length, material const& mat = {})
+    {
+        static_assert(tg::is_comp_like<PosT, 3, float>, "value must be a pos3 like type");
+
+        auto start_cnt = _state.lines_curr->size();
+        float current_length = segment_length;
+        PosT prev_position = bezier.control_points[0];
+        [[maybe_unused]] int segment_counter = 0;
+
+        while (current_length <= 1.0f)
+        {
+            PosT current_position = bezier[current_length];
+
+            add_line(prev_position, current_position, mat);
+
+            prev_position = current_position;
+            current_length += segment_length;
+            segment_counter++;
+        }
+
+        // add last segment
+        if ((current_length - segment_length) < 1)
+            add_line(prev_position, bezier[1], mat);
+
+        return {cc::span<line>(_state.lines_curr->data() + start_cnt, _state.lines_curr->size() - start_cnt), *this};
+    }
+
     std::vector<SharedRenderable> create_renderables() const;
 
-    // state
-private:
-    material _mat;
-    int _resolution = 64;
+    void set_name(std::string s) { _state.name = std::move(s); }
+
+    void set_global_transform(tg::mat4 const& t) { _transform = t; }
+
+    void set_all_lines_two_colored(bool are_two_colored = true) { _state.two_colored_lines = are_two_colored; }
+
+    size_t size_triangles() const { return _triangles.size(); }
+    size_t size_lines() const { return _lines_px.size() + _lines_world.size(); }
+    size_t size_points() const { return _points_px.size() + _points_world.size(); }
+    size_t size_splats() const { return _splats.size(); }
+
+    tg::mat4 get_transform_2d_to_3d() const;
 
     // data
     // NOTE: if adding something here, it might need to be added to add_data as well
@@ -891,6 +1290,7 @@ protected:
         tg::pos3 pos;
         tg::color4 color;
         float size = 0;
+        int pick_id = -1;
     };
     struct splat
     {
@@ -898,62 +1298,115 @@ protected:
         tg::color4 color;
         tg::vec3 normal;
         float size = 0;
+        int pick_id = -1;
     };
     struct line
     {
-        point p0;
-        point p1;
+        splat p0;
+        splat p1;
         float dash_size = 0.f;
+        int pick_id = -1;
     };
     struct triangle
     {
         tg::pos3 pos[3];
         tg::vec3 normal[3];
         tg::color4 color[3];
+        int pick_id = -1;
     };
 
-    float _points_size = 7.f;
+    struct pick_functions
+    {
+        std::function<picking_result(tg::pos3, tg::vec3)> on_left_click;
+        std::function<picking_result(tg::pos3, tg::vec3)> on_right_click;
+        std::function<picking_result(tg::pos3, tg::vec3)> on_hover;
+    };
+
     std::vector<point> _points_px;
     std::vector<point> _points_world;
-    std::vector<point>* _points_curr = &_points_px;
 
-    float _splats_size = -1;
     std::vector<splat> _splats;
 
-    float _lines_width = 5.f;
     std::vector<line> _lines_px;
     std::vector<line> _lines_world;
-    std::vector<line>* _lines_curr = &_lines_px;
 
     std::vector<triangle> _triangles;
 
     std::vector<label> _labels;
 
+    std::vector<boxed_quadric> _quadrics;
+
+    std::shared_ptr<std::vector<pick_functions>> _pick_functions = std::make_shared<std::vector<pick_functions>>();
+
+    tg::mat4 _transform = tg::mat4::identity;
+
+    struct state
+    {
+        std::vector<point>* points_curr = nullptr;
+        std::vector<line>* lines_curr = nullptr;
+
+        float points_size = 7.f;
+        float splats_size = -1;
+        float lines_width = 5.f;
+        int resolution = 64;
+        std::string name;
+        material mat;
+
+        bool two_colored_lines = false;
+
+        tg::pos3 frame2d_pos;
+        tg::vec3 frame2d_dir_x = tg::vec3(1, 0, 0);
+        tg::vec3 frame2d_dir_y = tg::vec3(0, 0, -1);
+
+        state(canvas_data& c) : points_curr{&c._points_px}, lines_curr{&c._lines_px} {}
+    } _state;
+
+    template <int D, class T>
+    tg::pos3 _to_pos3(tg::pos<D, T> p) const
+    {
+        if constexpr (D == 2)
+            return _state.frame2d_pos + _state.frame2d_dir_x * p.x + _state.frame2d_dir_y * p.y;
+        else if constexpr (D == 3)
+            return tg::pos3(p);
+        else
+            static_assert(cc::always_false_v<D>, "only 2D and 3D supported");
+    }
+    template <int D, class T>
+    tg::vec3 _to_vec3(tg::vec<D, T> v) const
+    {
+        if constexpr (D == 2)
+            return _state.frame2d_dir_x * v.x + _state.frame2d_dir_y * v.y;
+        else if constexpr (D == 3)
+            return tg::vec3(v);
+        else
+            static_assert(cc::always_false_v<D>, "only 2D and 3D supported");
+    }
+
     point_ref _add_point(tg::pos3 p, material const& m)
     {
-        auto& pt = _points_curr->emplace_back();
+        auto& pt = _state.points_curr->emplace_back();
         pt.pos = p;
-        pt.color = m.is_default() ? _mat.is_default() ? tg::color4(.7f, .7f, .7f, 1.f) : _mat.color : m.color;
-        pt.size = _points_size;
-        return {array_view<point>(&pt, 1), *this};
+        pt.color = m.is_default() ? _state.mat.is_default() ? tg::color4(.7f, .7f, .7f, 1.f) : _state.mat.color : m.color;
+        pt.size = _state.points_size;
+        return {cc::span<point>(&pt, 1), *this};
     }
     splat_ref _add_splat(tg::pos3 p, tg::vec3 normal, material const& m)
     {
         auto& s = _splats.emplace_back();
         s.pos = p;
         s.normal = normal;
-        s.color = m.is_default() ? _mat.is_default() ? tg::color4(.7f, .7f, .7f, 1.f) : _mat.color : m.color;
-        s.size = _splats_size;
-        return array_view<splat>(&s, 1);
+        s.color = m.is_default() ? _state.mat.is_default() ? tg::color4(.7f, .7f, .7f, 1.f) : _state.mat.color : m.color;
+        s.size = _state.splats_size;
+        return {cc::span<splat>(&s, 1), *this};
     }
     line_ref _add_line(tg::pos3 p0, tg::pos3 p1, material const& m)
     {
-        auto& l = _lines_curr->emplace_back();
+        auto& l = _state.lines_curr->emplace_back();
         l.p0.pos = p0;
         l.p1.pos = p1;
-        l.p0.color = l.p1.color = m.is_default() ? _mat.is_default() ? tg::color4(.25f, .25f, .25f, 1.f) : _mat.color : m.color;
-        l.p0.size = l.p1.size = _lines_width;
-        return array_view<line>(&l, 1);
+        l.p0.color = l.p1.color = m.is_default() ? _state.mat.is_default() ? tg::color4(.25f, .25f, .25f, 1.f) : _state.mat.color : m.color;
+        l.p0.size = l.p1.size = _state.lines_width;
+        return {cc::span<line>(&l, 1), *this};
     }
     triangle_ref _add_triangle(tg::pos3 p0, tg::pos3 p1, tg::pos3 p2, tg::vec3 n0, tg::vec3 n1, tg::vec3 n2, material const& m)
     {
@@ -964,14 +1417,65 @@ protected:
         t.normal[0] = n0;
         t.normal[1] = n1;
         t.normal[2] = n2;
-        t.color[0] = t.color[1] = t.color[2] = m.is_default() ? _mat.is_default() ? tg::color4(1.f) : _mat.color : m.color;
-        return array_view<triangle>(&t, 1);
+        t.color[0] = t.color[1] = t.color[2] = m.is_default() ? _state.mat.is_default() ? tg::color4(1.f) : _state.mat.color : m.color;
+        return {cc::span<triangle>(&t, 1), *this};
+    }
+
+    template <class F>
+    std::function<picking_result(tg::pos3, tg::vec3)> _internal_make_pick_function(F&& f)
+    {
+        if constexpr (std::is_invocable_r_v<picking_result, F, tg::pos3, tg::vec3>)
+            return std::forward<F>(f);
+        else if constexpr (std::is_invocable_r_v<void, F, tg::pos3, tg::vec3>)
+            return [f = std::forward<F>(f)](tg::pos3 p, tg::vec3 n) -> picking_result
+            {
+                f(p, n);
+                return {};
+            };
+        else
+            static_assert(tg::always_false<F> && "Invalid function signature");
+    }
+
+    template <class F>
+    int _internal_add_on_left_click(int id, F&& f)
+    {
+        if (id < 0)
+        {
+            id = int(_pick_functions->size());
+            _pick_functions->emplace_back();
+        }
+        (*_pick_functions)[id].on_left_click = _internal_make_pick_function(std::forward<F>(f));
+        return id;
+    }
+
+    template <class F>
+    int _internal_add_on_right_click(int id, F&& f)
+    {
+        if (id < 0)
+        {
+            id = int(_pick_functions->size());
+            _pick_functions->emplace_back();
+        }
+        (*_pick_functions)[id].on_right_click = _internal_make_pick_function(std::forward<F>(f));
+        return id;
+    }
+
+    template <class F>
+    int _internal_add_on_hover(int id, F&& f)
+    {
+        if (id < 0)
+        {
+            id = int(_pick_functions->size());
+            _pick_functions->emplace_back();
+        }
+        (*_pick_functions)[id].on_hover = _internal_make_pick_function(std::forward<F>(f));
+        return id;
     }
 
     // ctors
     // (copy and move is deleted because e.g. _line_curr need stable pointers)
 public:
-    canvas_data() = default;
+    canvas_data() : _state(*this) {}
     canvas_data(canvas_data const&) = delete;
     canvas_data(canvas_data&&) = delete;
     canvas_data& operator=(canvas_data const&) = delete;

@@ -1,16 +1,17 @@
 #pragma once
 
-#include <glow/fwd.hh>
+#include <clean-core/span.hh>
+
 #include <glow/common/log.hh>
 #include <glow/common/nodiscard.hh>
 #include <glow/common/shared.hh>
+#include <glow/fwd.hh>
 
 #include "Buffer.hh"
 
 #include "raii/BoundAtomicCounterBuffer.hh"
 
 #include <string>
-#include <vector>
 
 namespace glow
 {
@@ -45,6 +46,7 @@ public: // static construction
     /// NOTE: default is a single counter with value 0
     static SharedAtomicCounterBuffer create(uint32_t value = 0, int count = 1);
     /// Creates an atomic counter buffer with given initial values
-    static SharedAtomicCounterBuffer create(std::vector<uint32_t> const& values);
+    static SharedAtomicCounterBuffer create(cc::span<uint32_t const> values);
+    static SharedAtomicCounterBuffer create(std::initializer_list<uint32_t> values) { return create(cc::span(values.begin(), values.size())); }
 };
 }

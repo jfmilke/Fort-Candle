@@ -13,15 +13,17 @@ namespace detail
 {
 template <class... Ts>
 struct tuple_impl;
+
 template <>
 struct tuple_impl<>
 {
     template <size_t I>
     constexpr void get() const
     {
-        static_assert(cc::always_false<I>, "cannot get element of empty tuple");
+        static_assert(cc::always_false_v<I>, "cannot get element of empty tuple");
     }
 };
+
 template <class T>
 struct tuple_impl<T>
 {
@@ -43,6 +45,7 @@ struct tuple_impl<T>
         return value;
     }
 };
+
 template <class T, class U, class... Ts>
 struct tuple_impl<T, U, Ts...> : tuple_impl<U, Ts...>
 {
@@ -90,7 +93,7 @@ struct tuple_helper
     };
 
     template <size_t... I>
-    static constexpr hash_t make_hash(tuple<Types...> const& v, std::index_sequence<I...>)
+    static constexpr uint64_t make_hash(tuple<Types...> const& v, std::index_sequence<I...>)
     {
         return cc::hash_combine(cc::hash<Types>{}(v.template get<I>())...);
     }
@@ -108,12 +111,12 @@ struct tuple : private detail::tuple_impl<Types...>
     template <class... OtherTypes>
     constexpr bool operator==(tuple<OtherTypes...> const& rhs) const
     {
-        return detail::tuple_helper<Types...>::template other_tuple<OtherTypes...>::template are_equal(*this, rhs, std::index_sequence_for<Types...>{});
+        return detail::tuple_helper<Types...>::template other_tuple<OtherTypes...>::are_equal(*this, rhs, std::index_sequence_for<Types...>{});
     }
     template <class... OtherTypes>
     constexpr bool operator!=(tuple<OtherTypes...> const& rhs) const
     {
-        return detail::tuple_helper<Types...>::template other_tuple<OtherTypes...>::template are_not_equal(*this, rhs, std::index_sequence_for<Types...>{});
+        return detail::tuple_helper<Types...>::template other_tuple<OtherTypes...>::are_not_equal(*this, rhs, std::index_sequence_for<Types...>{});
     }
 };
 
@@ -125,7 +128,7 @@ tuple(Types...)->tuple<Types...>;
 template <class... Ts>
 struct hash<tuple<Ts...>>
 {
-    [[nodiscard]] constexpr hash_t operator()(tuple<Ts...> const& v) const noexcept
+    [[nodiscard]] constexpr uint64_t operator()(tuple<Ts...> const& v) const noexcept
     {
         return cc::detail::tuple_helper<Ts...>::make_hash(v, std::index_sequence_for<Ts...>{});
     }
