@@ -1,5 +1,6 @@
 
 #include "config.h"
+#include "config_simd.h"
 
 #include "cpu_caps.h"
 
@@ -11,19 +12,17 @@
 #endif
 #endif
 
-#ifdef HAVE_INTRIN_H
+#if defined(HAVE_CPUID_H)
+#include <cpuid.h>
+#elif defined(HAVE_INTRIN_H)
 #include <intrin.h>
 #endif
-#ifdef HAVE_CPUID_H
-#include <cpuid.h>
-#endif
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <string>
 
-
-int CPUCapFlags{0};
 
 namespace {
 
@@ -33,7 +32,7 @@ using reg_type = unsigned int;
 inline std::array<reg_type,4> get_cpuid(unsigned int f)
 {
     std::array<reg_type,4> ret{};
-    __get_cpuid(f, &ret[0], &ret[1], &ret[2], &ret[3]);
+    __get_cpuid(f, ret.data(), &ret[1], &ret[2], &ret[3]);
     return ret;
 }
 #define CAN_GET_CPUID
@@ -51,14 +50,14 @@ inline std::array<reg_type,4> get_cpuid(unsigned int f)
 
 } // namespace
 
-al::optional<CPUInfo> GetCPUInfo()
+std::optional<CPUInfo> GetCPUInfo()
 {
     CPUInfo ret;
 
 #ifdef CAN_GET_CPUID
     auto cpuregs = get_cpuid(0);
     if(cpuregs[0] == 0)
-        return al::nullopt;
+        return std::nullopt;
 
     const reg_type maxfunc{cpuregs[0]};
 
@@ -111,22 +110,22 @@ al::optional<CPUInfo> GetCPUInfo()
 #else
 
     /* Assume support for whatever's supported if we can't check for it */
-#if defined(HAVE_SSE4_1)
+#if HAVE_SSE4_1
 #warning "Assuming SSE 4.1 run-time support!"
     ret.mCaps |= CPU_CAP_SSE | CPU_CAP_SSE2 | CPU_CAP_SSE3 | CPU_CAP_SSE4_1;
-#elif defined(HAVE_SSE3)
+#elif HAVE_SSE3
 #warning "Assuming SSE 3 run-time support!"
     ret.mCaps |= CPU_CAP_SSE | CPU_CAP_SSE2 | CPU_CAP_SSE3;
-#elif defined(HAVE_SSE2)
+#elif HAVE_SSE2
 #warning "Assuming SSE 2 run-time support!"
     ret.mCaps |= CPU_CAP_SSE | CPU_CAP_SSE2;
-#elif defined(HAVE_SSE)
+#elif HAVE_SSE
 #warning "Assuming SSE run-time support!"
     ret.mCaps |= CPU_CAP_SSE;
 #endif
 #endif /* CAN_GET_CPUID */
 
-#ifdef HAVE_NEON
+#if HAVE_NEON
 #ifdef __ARM_NEON
     ret.mCaps |= CPU_CAP_NEON;
 #elif defined(_WIN32) && (defined(_M_ARM) || defined(_M_ARM64))
@@ -138,5 +137,5 @@ al::optional<CPUInfo> GetCPUInfo()
 #endif
 #endif
 
-    return al::make_optional(ret);
+    return ret;
 }

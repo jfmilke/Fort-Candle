@@ -70,7 +70,10 @@ set(ALSOFT_UTILS OFF CACHE BOOL "" FORCE)
 set(ALSOFT_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(ALSOFT_INSTALL OFF CACHE BOOL "" FORCE)
 set(ALSOFT_INSTALL_CONFIG OFF CACHE BOOL "" FORCE)
-# The JACK backend fails to link on many Linux setups (undefined symbol: jack_error_callback)
+set(ALSOFT_INSTALL_HRTF_DATA OFF CACHE BOOL "" FORCE)
+set(ALSOFT_INSTALL_AMBDEC_PRESETS OFF CACHE BOOL "" FORCE)
+# The game does not need JACK. With OpenAL 1.21.1 and ALSOFT_DLOPEN=OFF it failed to link
+# (undefined symbol: jack_error_callback); not tested with the current version.
 set(ALSOFT_BACKEND_JACK OFF CACHE BOOL "Enable JACK backend")
 add_subdirectory(extern/openal)
 
@@ -87,8 +90,10 @@ foreach(TARGET_NAME
     typed-geometry
     clean-core
     OpenAL
-    alcommon
-    ex-common
+    alsoft.common
+    alsoft.excommon
+    alsoft.fmt
+    clang-tidy-check
     update_glfw_config
 )
     if(TARGET ${TARGET_NAME})
