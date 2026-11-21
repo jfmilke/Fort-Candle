@@ -70,7 +70,7 @@ void gamedev::AudioSystem::Update(float dt)
             // Update values for every emitter, whether in range or not
             UpdateSoundState(handle, dt);
 
-            CullEmitters(handle); // Remove emitters that are too far away
+            CullEmitters(handle); // Release the source of emitters that are too far away or finished
         }
     }
 
@@ -78,6 +78,7 @@ void gamedev::AudioSystem::Update(float dt)
     {
         // std::sort(emitters.begin(), emitters.end(), gamedev::AudioSystem::CompareNodesByPriority); // Then sort by priority
 
+        // TODO: Off by one: the emitter at index sources.size() is neither detached nor attached.
         DetachSources(emitters.begin() + (sources.size() + 1), emitters.end()); // Detach sources from emitters that won't be covered this frame
         
         AttachSources(emitters.begin(), emitters.begin() + (sources.size()));   // And attach sources to emitters that WILL be covered this frame
@@ -111,13 +112,11 @@ void gamedev::AudioSystem::UpdateSoundState(InstanceHandle handle, float dt)
         while (emitter->timeLeft < 0)
         {
             emitter->timeLeft += emitter->sound->GetLength();
-            // streamPos += sound->GetLength();
         }
     }
     else if (emitter->timeLeft < 0)
     {
         DetachSource(handle);
-        // mECS->RemoveComponent<SoundEmitter>(handle);
     }
 
     if (emitter->oalSource)
@@ -142,31 +141,7 @@ void gamedev::AudioSystem::UpdateSoundState(InstanceHandle handle, float dt)
 
         alSourcefv(emitter->oalSource->source, AL_POSITION, (float*)&position);
 
-        //if (sound->IsStreaming())
-        //{
-        //    int numProcessed;
-        //    alGetSourcei(oalSource->source, AL_BUFFERS_PROCESSED, &numProcessed);
-        //    alSourcei(oalSource->source, AL_LOOPING, 0);
-
-        //    while (numProcessed-- /* && streamPos > 0*/)
-        //    { // The && prevents clipping at the end of sounds!
-        //        ALuint freeBuffer;
-
-        //        alSourceUnqueueBuffers(oalSource->source, 1, &freeBuffer);
-
-        //        streamPos -= sound->StreamData(freeBuffer, streamPos);
-        //        alSourceQueueBuffers(oalSource->source, 1, &freeBuffer);
-
-        //        if (streamPos < 0 && isLooping)
-        //        {
-        //            streamPos += sound->GetLength();
-        //        }
-        //    }
-        //}
-        //else
-        //{
         alSourcei(emitter->oalSource->source, AL_LOOPING, emitter->isLooping ? 1 : 0);
-        //}
     }
 }
 
@@ -213,35 +188,12 @@ void gamedev::AudioSystem::AttachSource(InstanceHandle handle, OALSource* s)
     alSourcef(emitter->oalSource->source, AL_MAX_DISTANCE, emitter->maxRadius);
     alSourcef(emitter->oalSource->source, AL_REFERENCE_DISTANCE, emitter->minRadius);
 
-    //// if(timeLeft > 0) {
-    //if (sound->IsStreaming())
-    //{ 
-    //    streamPos = timeLeft;
-    //    int numBuffered = 0;
-    //    while (numBuffered < NUM_STREAM_BUFFERS)
-    //    {
-    //        double streamed = sound->StreamData(streamBuffers[numBuffered], streamPos);
-
-    //        if (streamed)
-    //        {
-    //            streamPos -= streamed;
-    //            ++numBuffered;
-    //        }
-    //        else
-    //        {
-    //            break;
-    //        }
-    //    }
-    //    alSourceQueueBuffers(oalSource->source, numBuffered, &streamBuffers[0]);
-    //}
-    //else
-    //{
     alSourcei(emitter->oalSource->source, AL_BUFFER, emitter->sound->GetBuffer());
+    // TODO: GetLength() and timeLeft are in seconds, so dividing by 1000 makes the offset (almost) zero.
     alSourcef(emitter->oalSource->source, AL_SEC_OFFSET, (emitter->sound->GetLength() / 1000.0) - (emitter->timeLeft / 1000.0));
 
     glow::info() << "Attaching Audio Source! Timeleft: " << (emitter->sound->GetLength() / 1000.0) - (emitter->timeLeft / 1000.0);
     alSourcePlay(emitter->oalSource->source);
-    // }
     alSourcePlay(emitter->oalSource->source);
 }
 
@@ -259,17 +211,6 @@ void gamedev::AudioSystem::DetachSource(InstanceHandle handle)
     alSourcef(emitter->oalSource->source, AL_GAIN, 0.0f);
     alSourceStop(emitter->oalSource->source);
     alSourcei(emitter->oalSource->source, AL_BUFFER, 0);
-
-    //if (emitter->sound && emitter->sound->IsStreaming())
-    //{
-    //    int numProcessed = 0;
-    //    ALuint tempBuffer;
-    //    alGetSourcei(emitter->oalSource->source, AL_BUFFERS_PROCESSED, &numProcessed);
-    //    while (numProcessed--)
-    //    {
-    //        alSourceUnqueueBuffers(emitter->oalSource->source, 1, &tempBuffer);
-    //    }
-    //}
 
     emitter->oalSource = NULL;
     glow::info() << "Source detached!";
@@ -396,7 +337,6 @@ void gamedev::AudioSystem::CleanupLocalEmitters()
         if (emitter->timeLeft <= 0 && !emitter->isLooping)
         {
             DetachSource(*i);
-            // mECS->RemoveComponent<SoundEmitter>(*i);
             mECS->DestroyInstance(*i);
             i = mLocalEmitters.erase(i);
             glow::info() << "Local emitter erased!";
@@ -410,9 +350,6 @@ void gamedev::AudioSystem::CleanupLocalEmitters()
 
 void gamedev::AudioSystem::LoadSounds()
 {
-    /*Sound::AddSound("test_mono.wav");
-    Sound::AddSound("test_stereo.wav");*/
-
     Sound::AddSound("arrow1.wav");
     Sound::AddSound("arrow2.wav");
     Sound::AddSound("arrow3.wav");

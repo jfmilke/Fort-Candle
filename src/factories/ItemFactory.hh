@@ -11,17 +11,23 @@
 
 namespace gamedev
 {
+/// Factory for the meshes in `data/meshes/items/` (arrows, bows, ...). Saves to `data/config/items.fac`.
 class ItemFactory : public Factory
 {
 public:
     ItemFactory() { mSavefilePath = "../data/config/items.fac"; }
 
+    /// Configures the special item presets (`arrow`, `bow`); call after registering the item meshes.
     void InitResources();
 
 private:
+    /// Gives every item preset a `Render` component.
     void PostProcessRegistration(InstanceHandle presetHandle) override;
 
+    /// `arrow`: rendered, not selectable, with `Arrow`, `Physics` and `Animated`.
     void Init_Arrow();
+
+    /// `bow`: adds `Animated` (drawn/scaled when a soldier shoots).
     void Init_Bow();
 };
 }

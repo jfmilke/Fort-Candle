@@ -8,6 +8,7 @@
 
 namespace
 {
+/// Packs a color with components in [0, 1] into RGBA8 (R in the highest byte); inverse of `unpackSaturatedFloat4`.
 inline uint32_t packSaturatedFloat4(tg::vec4 value)
 {
     uint32_t res = 0;
@@ -18,6 +19,7 @@ inline uint32_t packSaturatedFloat4(tg::vec4 value)
     return res;
 }
 
+/// Unpacks an RGBA8 color (R in the highest byte) into components in [0, 1].
 inline tg::vec4 unpackSaturatedFloat4(uint32_t value)
 {
     tg::vec4 res;
@@ -271,24 +273,6 @@ void gamedev::AdvancedFeatures::runImgui(bool& outFlyToSelection, bool& outCreat
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
-
-        // An input box for the random seed that allows integer numbers only
-        // ImGui::InputInt("Procedural Mesh Seed", &mSeed);
-
-        //// Recreate the procedural mesh on on button click
-        // if (ImGui::Button("Regenerate Procedural Mesh"))
-        //{
-        //    if (mWorld.isLiveHandle(mInstanceGenerated))
-        //    {
-        //        // regenerate
-        //        mProcMesh = buildProceduralMesh(mSeed);
-        //        // upload to gpu
-        //        mWorld.getInstance(mInstanceGenerated).vao = mProcMesh->createVertexArray();
-        //    }
-
-        //    // bump the seed so you can spam this button and something happens
-        //    ++mSeed;
-        //}
     }
     ImGui::End();
 

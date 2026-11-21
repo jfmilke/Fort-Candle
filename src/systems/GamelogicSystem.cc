@@ -121,25 +121,7 @@ int gamedev::GamelogicSystem::Update(float dt)
         auto lifeform = mECS->GetComponent<Living>(handle);
         auto attacker = mECS->TryGetComponent<Attacker>(handle);
 
-        //if (attacker)
-        //{
-        //    if (attacker->forceAttack)
-        //    {
-        //        if (mECS->IsLiveHandle(attacker->attackOrder))
-        //        {
-        //            auto target = mECS->GetInstance(attacker->attackOrder);
-        //            auto distance = tg::distance(instance.xform.translation, target.xform.translation;
-        //            if (distance > attacker->weapon.range)
-        //            {
-        //                auto posMove = tg::normalize_safe(posT - pos) * (distance - range + 0.8f) + pos;
-        //                SetMoveOrder(lifeform, posMove);
-        //            }
-        //
-        //            SetMoveOrder(lifeform, mECS->GetInstanceTransform(attacker->attackOrder).translation)
-        //        }
-        //    }
-        //}
-
+        // TODO: Called once per entity, so the effects converge faster with more units.
         UpdateEffects(dt);
 
         // Do Casual
@@ -168,6 +150,7 @@ int gamedev::GamelogicSystem::Update(float dt)
         // Do Monster Stuff
         UpdateMonster(instance, lifeform, dt);
 
+        // TODO: True for every update from the 30th on (and evaluated once per entity).
         if (mUpdateControl / 30)
             UpdateHomefire();
     }
@@ -322,7 +305,7 @@ void gamedev::GamelogicSystem::UpdateFocus(const Instance& instance, Living* sub
 
     if (!mECS->IsLiveHandle(subject->focusHandle))
     {
-        subject->focusHandle._value = uint32_t(1);
+        subject->focusHandle._value = uint32_t(1); // TODO: should be the invalid handle uint32_t(-1)
         return;
     }
 
@@ -363,7 +346,7 @@ void gamedev::GamelogicSystem::UpdateAttackOrder(const Instance& instance, Livin
 
     auto animation = mECS->TryGetComponent<Animated>(instance.mHandle);
 
-    // No target, but weapon: sheath weapon
+    // No target: count idle updates (sheathing the weapon after 5 s is disabled) and keep the weapon at the side
     if (!attacker->attackOrder.is_valid())
     {
         attacker->idle++;
@@ -380,16 +363,6 @@ void gamedev::GamelogicSystem::UpdateAttackOrder(const Instance& instance, Livin
 
     attacker->idle = 0;
 
-    // if (!attacker->attackOrder.is_valid())
-    // {
-    //     if (attacker->weaponHandle.is_valid())
-    //     {
-    //         SheathWeapon(attacker);
-    //         MoveWeapon(instance, attacker);
-    //     }
-    // 
-    //     return;
-    // }
 
 
     // Business as usual:
@@ -636,7 +609,6 @@ void gamedev::GamelogicSystem::AimWeapon(Attacker* attacker)
 }
 
 
-// Inspired by:
 gamedev::arcEq gamedev::GamelogicSystem::GetArrowArc(Attacker* attacker, float dt)
 {
     // Get instances
@@ -650,8 +622,6 @@ gamedev::arcEq gamedev::GamelogicSystem::GetArrowArc(Attacker* attacker, float d
     auto targetPhysics = mECS->TryGetComponent<Physics>(attacker->attackOrder);
     if (targetPhysics)
     {
-        //v_q = targetPhysics->velocity;
-        //v_q.y = 0;
         v_q = (target.xform.translation - targetPhysics->lastPosition) / dt;
         v_q.y = 0;
     }
@@ -703,7 +673,6 @@ bool gamedev::GamelogicSystem::LookForProduction(InstanceHandle handle)
 
     auto pBulding = mECS->GetInstance(producer->produceOrder);
 
-    // SetMoveOrder(handle, tg::pos3(pBulding.xform.translation));
 
     return true;
 }
@@ -809,32 +778,12 @@ void gamedev::GamelogicSystem::SetEnemySpawns()
 
 void gamedev::GamelogicSystem::Produce(Producer* producer, float dt)
 {
-    //if (!producer->producing)
-    //    return;
 
     mGold += producer->income * 3.f * dt + mForges * 3.f * 2.f * producer->income * dt;
 }
 
 void gamedev::GamelogicSystem::SpawnEnemyWave(int number) 
 { 
-    //return;
-
-    // random number generator
-    //tg::rng rng;
-    //rng.seed(0);
-
-    //for (int i = 0; i < number; i++)
-    //{
-    //    auto direction = tg::uniform<tg::dir2>(rng);
-    //    tg::pos3 position = mHome.center + mHome.radius * mGlobalScale * tg::vec3(direction.x * 3, 0, direction.y * 3);
-    //    auto handle = mUF->Create("creature", position);
-    //    mCreatures.push_back(handle);
-    //
-    //    auto lifeform = mECS->GetComponent<Living>(handle);
-    //    lifeform->moveOrder = true;
-    //    lifeform->movePosition = mHome.center;
-    //}
-
     for (int i = 0; i < number; i++)
     {
         auto location = mEnemySpawns[int(RandomFloat(0.0, mEnemySpawns.size() - 0.1))];
@@ -856,7 +805,6 @@ void gamedev::GamelogicSystem::SpawnReinforcements(int number)
     if (GetPioneerCount() >= GetMaxPioneers())
         return;
 
-    //mReinforcementsStart = mHome.center + mHome.radius * mGlobalScale * tg::vec3(0.0, 0.0, -1.0);
     mReinforcementsStart = mReinforcementWay[5];
 
 
@@ -873,10 +821,6 @@ void gamedev::GamelogicSystem::SpawnReinforcements(int number)
         auto fc = mECS->CreateComponent<ForeignControl>(handle);
         fc->waypoints = mReinforcementWay;
         fc->currentIndex = 5;
-
-        //auto lifeform = mECS->GetComponent<Living>(handle);
-        //lifeform->moveOrder = true;
-        //lifeform->movePosition = mHome.center;
     }
 }
 
@@ -891,7 +835,6 @@ void gamedev::GamelogicSystem::Rightclick(tg::pos3 world_position)
 
         if (lifeform)
         {
-            //SetMoveOrder(mSelected, world_position);
             SetMoveOrder(lifeform, tg::vec3(world_position));
             mAS->PlayGlobalSound("interfaceClick.wav", ui, 0.7f);
         }
@@ -928,7 +871,6 @@ void gamedev::GamelogicSystem::Rightclick(InstanceHandle handle)
                 SetMoveOrder(lifeform, posMove);
             }
 
-            // SetMoveOrder(mSelected, world_position);
             mAS->PlayGlobalSound("interfaceClick.wav", ui, 0.7f);
         }
 
@@ -996,111 +938,6 @@ void gamedev::GamelogicSystem::Destroy(InstanceHandle destroyedHandle, InstanceH
         mECS->MarkDestruction(destroyedHandle);
 }
 
-/*
-void gamedev::GamelogicSystem::UpdateAttack(InstanceHandle handle, float dt)
-{
-    auto instance = mECS->GetInstance(handle);
-    auto living = mECS->TryGetComponent<Living>(handle);
-    auto attacker = mECS->TryGetComponent<Attacker>(handle);
-
-    living->focusHandle = {std::uint32_t(-1)};
-
-    float minDistance = attacker->weapon.range;
-    attacker->attackOrder = {std::uint32_t(-1)};
-
-    std::vector<InstanceHandle> enemies;
-
-    if (living->friendly) 
-    {
-        enemies = mCreatures;
-
-        // equip bow
-        if (attacker->weaponHandle.is_valid())
-        {
-            auto& bowInstance = mECS->GetInstance(attacker->weaponHandle);
-            bowInstance.xform.translation = tg::vec3(instance.xform.translation) + instance.xform.forward_vec() * 0.2;
-            bowInstance.xform.translation.y = instance.xform.translation.y + 0.05f;
-
-            auto t_facing = bowInstance.xform.rotation_mat2D() * tg::vec3(bowInstance.facing);
-            auto look_dir = instance.xform.forward_vec();
-            t_facing.y, look_dir.y = 0.0;
-            auto angle = tg::angle_towards(t_facing, look_dir, tg::vec3::unit_y);
-            bowInstance.xform.rotate(tg::quat::from_axis_angle(tg::dir3::pos_y, angle));
-        }
-        else
-        {
-            attacker->weaponHandle = mIF->Create("bow", tg::pos3(instance.xform.translation) + instance.xform.forward_vec() * 0.2);
-            auto& bowInstance = mECS->GetInstance(attacker->weaponHandle);
-            bowInstance.xform.translation.y = instance.xform.translation.y + 0.05f;
-            bowInstance.xform.scale(0.6f);
-        }
-    }
-    else
-    {
-        enemies = mUnits;
-    }
-
-    // find closest enemy
-    for (const auto& enemy : enemies) 
-    { 
-        auto enemyInstance = mECS->GetInstance(enemy);
-
-        float distance = tg::distance_sqr(tg::pos3(enemyInstance.xform.translation), tg::pos3(instance.xform.translation));
-
-        if (distance < minDistance)
-        {
-            minDistance = distance;
-            attacker->attackOrder = enemy;
-        }
-    }
-
-    // attack
-    if (attacker->attackOrder.is_valid())
-    {
-        living->focusHandle = attacker->attackOrder;
-
-        auto target = mECS->GetInstance(attacker->attackOrder);
-
-        // soldier
-        if (living->friendly)
-        {
-            // shoot arrows
-            if (attacker->currentCooldown <= 0)
-            {
-                auto arrow = mIF->Create("arrow", tg::pos3(instance.xform.translation) + instance.xform.forward_vec() * 0.2);
-                //mArrows.push_back({arrow, 5.f});
-                auto arrowComp = mECS->GetComponent<Arrow>(arrow);
-                arrowComp->target = attacker->attackOrder;
-
-                auto& arrowInstance = mECS->GetInstance(arrow);
-                arrowInstance.xform.translation.y = instance.xform.translation.y + 0.3f;
-
-                auto t_facing = arrowInstance.xform.rotation_mat2D() * tg::vec3(arrowInstance.facing);
-                auto look_dir = tg::normalize_safe(target.xform.translation - arrowInstance.xform.translation);
-                t_facing.y, look_dir.y = 0.0;
-                auto angle = tg::angle_towards(t_facing, look_dir, tg::vec3::unit_y);
-                arrowInstance.xform.rotate(tg::quat::from_axis_angle(tg::dir3::pos_y, angle));
-
-                auto physicsComp = mECS->GetComponent<Physics>(arrow);
-                physicsComp->gravity = false;
-                physicsComp->velocity = tg::normalize_safe(tg::pos3(target.xform.translation) - tg::pos3(instance.xform.translation)) * 5;
-
-                attacker->currentCooldown = attacker->weapon.cooldown * 50;
-                mAS->PlayLocalSound(attacker->weaponHandle, "test_mono.wav");
-            }
-            else
-            {
-                attacker->currentCooldown -= dt;
-            } 
-        }
-        else
-        {
-            // creature
-        }
-    }
-}
-*/
-
 void gamedev::GamelogicSystem::CollisionListener(Event& e)
 {
     auto lifeform = mECS->TryGetComponent<Living>(e.mSubject);
@@ -1158,7 +995,7 @@ void gamedev::GamelogicSystem::ArrowListener(Event& e)
 }
 
 // Algorithm:
-// 1. Take 360� of a circle
+// 1. Take 360 degrees of a circle
 // 2. Subtract the angles occupied by fixed segments (i.e. gate)
 // 3. Divide remaining angles by the angles of the reoccuring segments (i.e. walls, pillars)
 // 4. If the prior result was fractional, scale the gate to accomodate for the (missing) fractional wall
@@ -1198,7 +1035,7 @@ void gamedev::GamelogicSystem::SpawnStoneWalls()
     auto gOffs = mHome.radius - (mHome.radius * tg::cos(gTheta / 2.f));
     tg::size3 gScaleFix(1.0);                                                // prepare the fixing of the gates scale if a fractional result of wSegments remains
 
-    // Start with the circles 360� and subtract all elements angles which are not covered by the following for-loop
+    // Start with the circles 360 degrees and subtract all elements angles which are not covered by the following for-loop
     auto circumcircle = 360_deg;
     circumcircle -= gTheta;                             // Gate
     circumcircle -= 2 * wTheta;                         // Usually: Walls without a successive pillar. BUT: It looks better if set to 2 instead of 1, idk
@@ -1790,17 +1627,6 @@ void gamedev::GamelogicSystem::AssignArtisan()
         mAS->PlayGlobalSound("interfaceNegative.wav", ui);
         mGold += GetArtisanPrice();
     }
-
-    //auto first = mPeople.begin();
-    //
-    //const auto& filthyPeasant = mECS->GetInstance(*first);
-    //auto artisan = mUF->Create("person_artisan", tg::pos3(filthyPeasant.xform.translation), filthyPeasant.xform.rotation, filthyPeasant.xform.scaling);
-    //mECS->MarkDestruction(filthyPeasant.mHandle);
-    //
-    //mOutlinedHandles.push_back(artisan);
-    //mOutlinedColors.push_back(tg::vec4(0.0, 153.0 / 255.0, 1.0, 1.0));
-    //
-    //mAS->PlayGlobalSound("interfaceClick.wav", ui);
 }
 void gamedev::GamelogicSystem::AssignSoldier()
 {
@@ -1843,19 +1669,8 @@ void gamedev::GamelogicSystem::AssignSoldier()
     if (!assigned)
     {
         mAS->PlayGlobalSound("interfaceNegative.wav", ui);
-        mGold += GetArtisanPrice();
+        mGold += GetArtisanPrice(); // TODO: should refund GetSoldierPrice() (currently the same value)
     }
-
-    //auto first = mPeople.begin();
-    //
-    //const auto& filthyPeasant = mECS->GetInstance(*first);
-    //auto soldier = mUF->Create("person_soldier", tg::pos3(filthyPeasant.xform.translation), filthyPeasant.xform.rotation, filthyPeasant.xform.scaling);
-    //mECS->MarkDestruction(filthyPeasant.mHandle);
-    //
-    //mOutlinedHandles.push_back(soldier);
-    //mOutlinedColors.push_back(tg::vec4(0.0, 153.0 / 255.0, 1.0, 1.0));
-    //
-    //mAS->PlayGlobalSound("interfaceClick.wav", ui);
 }
 
 int gamedev::GamelogicSystem::GetGold() { return tg::ifloor(mGold); }
@@ -2065,7 +1880,7 @@ void gamedev::GamelogicSystem::UpdateHomefire()
 
 void gamedev::GamelogicSystem::ConsumeWood(float dt)
 {
-    // Consume every 4 seconds
+    // Consume 0.1 wood every second
     if (int(mTime - dt) < int(mTime))
     {
         mFireWood -= 0.1;
@@ -2459,7 +2274,6 @@ void gamedev::GamelogicSystem::UpdateForeignControl(const Instance& instance, Li
         }
 
         fc->currentIndex++;
-        //fc->currentTarget = tg::pos3(instance.xform.translation) + (fc->waypoints[fc->currentIndex] - fc->waypoints[fc->currentIndex - 1]);
         fc->currentTarget = fc->waypoints[fc->currentIndex];
         fc->currentTarget.y = mTerrain->heightAt(fc->currentTarget);
 
@@ -2478,7 +2292,6 @@ void gamedev::GamelogicSystem::UpdateForeignControl(const Instance& instance, Li
             return;
         }
 
-        //fc->currentTarget = tg::pos3(instance.xform.translation) + (fc->waypoints[fc->currentIndex] - fc->waypoints[fc->currentIndex - 1]);
         fc->currentTarget = fc->waypoints[fc->currentIndex];
         fc->currentTarget.y = mTerrain->heightAt(fc->currentTarget);
 

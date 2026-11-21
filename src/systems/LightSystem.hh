@@ -9,29 +9,57 @@
 
 namespace gamedev
 {
+/**
+ * Collects the point lights for the renderer.
+ *
+ * Entities: all instances with a `PointLightEmitter`. Every update it rebuilds
+ *  - the list of regular point lights (free lights plus emitter lights, moved with their instance and flickered),
+ *  - the one shadow-casting point light.
+ *
+ * `Game::render()` passes both to the `RenderSystem`.
+ */
 class LightSystem : public System
 {
 public:
+    /// Stores the ECS.
     void Init(std::shared_ptr<EngineECS>& ecs);
+
+    /// Adds a light that is not bound to an instance and returns its ID. Unused.
     int AddFreeLight(PointLight& pl);
+
+    /**
+     * Removes a free light by ID. Unused.
+     *
+     * TODO: Indexes the light list with the ID directly and updates the ID maps inconsistently, so IDs are only
+     * correct while no light was removed.
+     */
     void RemoveFreeLight(int light_id);
+
+    /// Rebuilds the light lists (see `BuildLights`). Returns the elapsed time in microseconds.
     int Update(float dt);
+
+    /// Regular (non-shadowing) point lights in world space, as built by the last `Update`.
     const std::vector<PointLight>& GetLights();
+
+    /// The shadow-casting point light in world space, as built by the last `Update`.
     const PointLight& GetShadowingPointlight();
+
+    /// Number of regular point lights.
     int GetLightCount();
 
 private:
+    /// Fills `mLights` and `mShadowPL`: transforms emitter lights to world space and applies flicker.
     void BuildLights(float dt);
 
 private:
-    std::shared_ptr<EngineECS> mECS;
-    std::vector<PointLight> mFreeLights;
-    std::vector<PointLight> mLights;
-    PointLight mShadowPL;
+    std::shared_ptr<EngineECS> mECS;     ///< Shared ECS.
+    std::vector<PointLight> mFreeLights; ///< Lights not bound to an instance.
+    std::vector<PointLight> mLights;     ///< Regular lights of the current update.
+    PointLight mShadowPL;                ///< Shadow-casting light of the current update.
 
 private:
-    int mFreeLightIndex = 0;
-    std::unordered_map<int, int> mExternToInternID;
-    std::unordered_map<int, int> mInternToExternID;
+    int mFreeLightIndex = 0;                        ///< Next free light ID.
+    std::unordered_map<int, int> mExternToInternID; ///< Free light ID -> index in `mFreeLights`.
+    std::unordered_map<int, int> mInternToExternID; ///< Index in `mFreeLights` -> free light ID.
 };
 }

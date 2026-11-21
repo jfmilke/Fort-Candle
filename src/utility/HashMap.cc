@@ -56,7 +56,6 @@ void gamedev::Hash2D::Insert_(Hash2Client& c)
         for (int y = i1.y; y <= i2.y; y++)
         {
             tg::ipos2 pos{x, y};
-            //auto k = _Key(pos);
             auto k = GetIndexID_(pos);
 
             if (mBinMap.find(k) == mBinMap.end())
@@ -80,7 +79,6 @@ void gamedev::Hash2D::Remove_(Hash2Client& c)
         for (int y = i1.y; y <= i2.y; y++)
         {
             tg::ipos2 pos{x, y};
-            //auto k = _Key(pos);
             auto k = GetIndexID_(pos);
 
             auto& container = mBinMap[k];
@@ -169,7 +167,6 @@ std::unordered_set<gamedev::InstanceHandle, gamedev::InstanceHandleHash> gamedev
         for (int y = i1.y; y <= i2.y; y++)
         {
             tg::ipos2 pos{x, y};
-            //auto k = _Key(pos);
             auto k = GetIndexID_(pos);
 
             // sanity check + instance retrieval

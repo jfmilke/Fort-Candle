@@ -274,7 +274,7 @@ void main()
     const float viewDist = 25;
     const vec2 uv = vTexCoord;
 
-    // Light Paramters
+    // Light Parameters
     const float specularity = 3;
 
     // local dirs
@@ -283,7 +283,7 @@ void main()
     vec3 T = normalize(vTangent);
     vec3 B = normalize(cross(N, T));
     vec3 DL = normalize(uSunLight.direction);   // Directional Light
-    vec3 PL = normalize(uLightPos - vWorldPos); // Demo Point Light
+    vec3 PL = normalize(uLightPos - vWorldPos); // Shadow-casting point light
 
     if (uRenderNormals)
     {
@@ -306,9 +306,9 @@ void main()
     albedo = saturate(lerp(albedo, pow(albedoBias.rgb, vec3(2.2)), albedoBias.a));
 
     // Important angles
-    float dotNV = dot(N, V); // cos: Normal, Vertex
+    float dotNV = dot(N, V); // cos: Normal, View
 
-    // Frescnel
+    // Fresnel
     vec3 F0 = lerp(vec3(M_F_DIELECTRIC), albedo, metalness);
 
     // Calculate fragment shade
@@ -334,7 +334,7 @@ void main()
 
     if (uEnablePointL)
     {
-        // Demo Pointlight
+        // Shadow-casting point light
         const float Ldistance = length(uLightPos - vWorldPos);
         const vec3 Lradiance = uLightColor * uLightIntensity * getInverseSquareFalloffAttenuation(Ldistance, uLightRadius);
         //const vec3 Lradiance = vec3(5, 10, 6) * getInverseSquareFalloffAttenuation(Ldistance, Lradius);

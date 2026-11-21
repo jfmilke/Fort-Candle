@@ -111,8 +111,6 @@ void gamedev::EnvironmentSystem::CalculateSun()
     // Calculation in spherical coordinate system
     const auto theta = tg::radians(mSunTheta * tg::pi_scalar<float> / 180.f); // forward
     const auto phi = tg::radians(mSunPhi * tg::pi_scalar<float> / 180.f);   // rotation
-    // const auto theta = mSunTheta * tg::pi_scalar<float> / 180.f;
-    // const auto phi = mSunPhi * tg::pi_scalar<float> / 180.f;
 
     tg::pos3 sunPosition;
 

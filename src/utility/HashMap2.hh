@@ -7,6 +7,7 @@
 #include <set>
 #include <map>
 
+// Empty placeholder (like HashMap2.cc); the spatial hash map is `Hash2D` in HashMap.hh.
 namespace gamedev
 {
 

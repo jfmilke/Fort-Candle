@@ -6,22 +6,19 @@
 
 namespace gamedev
 {
-/***
-* https://austinmorlan.com/posts/entity_component_system/
-* 
-* The Component Manager registers Component Types at runtime.
-* It also does all the talking to Component Arrays when a Component needs to be added or removed from an Entity.
-* It will automatically create a unique Signature for a Component Type.
-* 
-* Fun Fact:
-*    - The integer representation of the typeid(..).name() pointer is used as a unique key to map Component to ComponentType.
-*    - The Signature is a bitset which allows for easy bitwise comparison to check if an entity has certain Component Types.
-* 
-***/
+/**
+ * Registers component types at runtime and owns one `ComponentArray` per type.
+ *
+ * Based on https://austinmorlan.com/posts/entity_component_system/.
+ *
+ *  - Owned by `EngineECS`, which also updates the instance signatures; this class only stores the component data.
+ *  - Types are keyed by the `typeid(CompT).name()` pointer.
+ *  - Types get consecutive `ComponentType` IDs (bit indices into a `Signature`) in registration order.
+ */
 class ComponentManager
 {
 public:
-    // Register the component struct (once) to the manager.
+    /// Registers `CompT`: assigns the next `ComponentType` ID and creates its array. Asserts if registered twice.
     template <typename CompT>
     void RegisterComponent()
     {
@@ -37,7 +34,7 @@ public:
       ++mNextComponentType;
     }
 
-    // Return the components type id
+    /// Returns the ID (signature bit) of `CompT`. Asserts if `CompT` is not registered.
     template <typename CompT>
     ComponentType GetComponentType()
     {
@@ -48,7 +45,7 @@ public:
         return mComponentTypes[typeName];
     }
 
-    // Add a fresh component to an instance
+    /// Adds a new `CompT(&instance)` to `handle` and returns it. Asserts if `handle` already has a `CompT`.
     template <typename CompT>
     CompT* CreateComponent(InstanceHandle handle, Instance& instance)
     {
@@ -60,7 +57,7 @@ public:
         return CompArray->GetData(handle);
     }
 
-    // Add a fresh component to an instance
+    /// Like `CreateComponent`, but if `handle` already has a `CompT` it is kept and returned.
     template <typename CompT>
     CompT* TryCreateComponent(InstanceHandle handle, Instance& instance)
     {
@@ -72,7 +69,10 @@ public:
         return CompArray->GetData(handle);
     }
 
-    // Add an existing component to an instance
+    /**
+     * Adds a copy of `component` to `handle` (its `handle_value` is set, its `instance` pointer is kept as is).
+     * Asserts if `handle` already has a `CompT`.
+     */
     template <typename CompT>
     void AddComponent(InstanceHandle handle, CompT component)
     {
@@ -80,16 +80,18 @@ public:
         GetComponentArray<CompT>()->InsertData(handle, component);
     }
 
-    // Remove a component from an instance
+    /// Removes `handle`'s `CompT`. Asserts if it has none.
     template <typename CompT>
     void RemoveComponent(InstanceHandle handle) { GetComponentArray<CompT>()->RemoveData(handle); }
 
+    /// Removes `handle`'s `CompT` if it has one.
     template <typename CompT>
     void TryRemoveComponent(InstanceHandle handle)
     {
         GetComponentArray<CompT>()->TryRemoveData(handle);
     }
 
+    /// Removes all of `handle`'s components.
     void RemoveAllComponents(InstanceHandle handle)
     {
         for (auto& arr : mComponentArrays)
@@ -98,15 +100,15 @@ public:
         }
     }
 
-    // Get reference to a component from an instance
+    /// Returns `handle`'s `CompT`. Asserts if it has none.
     template <typename CompT>
     CompT* GetComponent(InstanceHandle handle) { return GetComponentArray<CompT>()->GetData(handle); }
 
+    /// Returns `handle`'s `CompT`, or nullptr if it has none.
     template <typename CompT>
     CompT* TryGetComponent(InstanceHandle handle) { return GetComponentArray<CompT>()->TryGetData(handle); }
 
-    // Notifies all component arrays that an entity has been destroyed.
-    // If necessary, all component arrays will delete the entity from their mapping.
+    /// Removes the destroyed instance's components from all component arrays.
     void EntityDestroyed(InstanceHandle handle)
     {
         for (const auto& pair : mComponentArrays)
@@ -117,7 +119,7 @@ public:
         }
     }
 
-    // Notifies all component arrays, that all entities have been destroyed.
+    /// Clears all component arrays.
     void AllEntitiesDestroyed()
     {
         for (const auto& pair : mComponentArrays)
@@ -128,7 +130,10 @@ public:
         }
     }
 
-    // Clones all components from the source instance & corrects the Instance reference of those components.
+    /**
+     * Copies every component of `instance_source` to `instance_copy` (overwriting existing ones) and points the copies'
+     * `instance` to `instance_copy`. Does not update the copy's signature.
+     */
     void CloneEntityComponents(Instance& instance_source, Instance& instance_copy)
     {
         for (const auto& cArray : mComponentArrays)
@@ -142,14 +147,11 @@ public:
     }
 
 private:
-    // Map typeid(..).name() to component type
-    std::unordered_map<const char*, ComponentType> mComponentTypes{};
-    // Map typeid(..).name() to component array
-    std::unordered_map<const char*, std::shared_ptr<IComponentArray>> mComponentArrays{};
-    // ComponentType to be assigned for the next registered component
-    ComponentType mNextComponentType{};
+    std::unordered_map<const char*, ComponentType> mComponentTypes{};                     ///< Type name -> type ID.
+    std::unordered_map<const char*, std::shared_ptr<IComponentArray>> mComponentArrays{}; ///< Type name -> array.
+    ComponentType mNextComponentType{};                                                   ///< ID for the next registered type.
 
-    // Convenience: Cast component array to correct component type
+    /// Returns the array of `CompT`, cast to its concrete type. Asserts if `CompT` is not registered.
     template <typename CompT>
     std::shared_ptr<ComponentArray<CompT>> GetComponentArray()
     {

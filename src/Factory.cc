@@ -130,6 +130,7 @@ gamedev::InstanceHandle gamedev::Factory::Register(std::string asset_identifier,
     instance.xform.scaling = {scaling, scaling, scaling};
 
     // Calculate maximum possible bounding box
+    // TODO: The comma operator makes this scale only max_bounds.max (min stays unscaled).
     auto max_bounds = mObj->getAABB(a_name);
     max_bounds.min, max_bounds.max *= instance.xform.scaling * 1.15;
     instance.max_bounds = MaxBoundingBox(max_bounds);
@@ -159,6 +160,7 @@ gamedev::InstanceHandle gamedev::Factory::Register(std::string asset_identifier,
 
     instance.xform.translation = {0, 0, 0};
     instance.xform.scaling = {scaling, scaling, scaling};
+    // TODO: The comma operator makes this scale only max_bounds.max (min stays unscaled).
     auto max_bounds = mObj->getAABB(a_name);
     max_bounds.min, max_bounds.max *= instance.xform.scaling * 1.25;
     instance.max_bounds = MaxBoundingBox(max_bounds);
@@ -189,6 +191,7 @@ gamedev::InstanceHandle gamedev::Factory::Register(std::string asset_identifier,
 
     instance.xform.translation = {0, 0, 0};
     instance.xform.scaling = {scaling, scaling, scaling};
+    // TODO: The comma operator makes this scale only max_bounds.max (min stays unscaled).
     auto max_bounds = mObj->getAABB(a_name);
     max_bounds.min, max_bounds.max *= instance.xform.scaling * 1.25;
     instance.max_bounds = MaxBoundingBox(max_bounds);

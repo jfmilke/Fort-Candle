@@ -32,6 +32,14 @@ cmake --build build --config RelWithDebInfo --parallel
 
 Code style: `.clang-format` (Google-based, Allman braces, 4-space indent, 150 column limit). Engine code lives in `namespace gamedev`; members use an `m` prefix.
 
+Documentation: Doxygen comments, written to be read in the code first (the generated docs come second).
+- Multi-line docs use `/** ... */` blocks with a ` * ` prefix per line; single-line docs use `///`, data members and enumerators a trailing `///<` (or `///` above the member if the line would exceed 150 columns). Align consecutive `///<` like clang-format's `AlignTrailingComments`.
+- Class docs explain purpose, ownership and how the class fits into the ECS. Give them structure: a one-line summary, then short paragraphs and `-`/`1.` lists separated by empty ` *` lines.
+- Function docs state intent and effect (side effects, ownership, units, coordinate spaces) in as few words as possible. They live at the declaration (header). Separate documented declarations by an empty line.
+- `.cc` files only get plain `//` comments for implementation details.
+- Known bugs and quirks start with `TODO:`, in the doc block (as its own paragraph) and/or as `// TODO:` at the code site. Keep existing `TODO`/`ToDo` markers until resolved.
+- Don't keep commented-out code; git history has it. Exceptions: the unfinished `QuadTree` (`utility/QuadTree.*`) and `GPUParticleSystem` (end of `ParticleSystem.*`), kept with a note.
+
 ## Vendored libraries (`extern/`)
 
 Everything in `extern/` was imported as plain files in one commit (`1d74651`, 2022-01-19), without upstream metadata. The snapshots below were identified by matching file contents against upstream history. The arcana/Glow libraries have no maintained release tags (`develop` is their only active branch), so pin commits.
@@ -63,7 +71,9 @@ Everything in `extern/` was imported as plain files in one commit (`1d74651`, 20
 
 The ECS is based on austinmorlan.com's ECS article. `EngineECS` (`ecs/Engine.hh`) is the facade the rest of the code talks to. It wraps the `ComponentManager`, `SystemManager`, `EventManager`, the `World`, and the spatial hash map (`Hash2D`).
 
-- **Entities are `InstanceHandle`s**, managed by `World` (`advanced/World.hh`). An `Instance` is not a pure ID: it directly holds the render data (VAO, albedo/normal/ARM textures, `transform xform`, bounds, auxiliary models, a simple animation type) plus the component `Signature` bitset and a `destroy` flag.
+- **Entities are `InstanceHandle`s**, managed by `World` (`advanced/World.hh`). An `Instance` is not a pure ID: it directly holds the render data (VAO, albedo/normal/ARM textures, `transform xform`, bounds, auxiliary models, a simple animation type) plus the component `Signature` bitset and a `destroy` flag. Instances live in a compact pool: destroying one moves the last instance into the freed slot, so `Instance&` references and `Component::instance` pointers are only valid until the next destruction. Keep handles instead.
+- Components are stored by value in one fixed-size array per type; removing a component moves the last one into the gap, so don't keep component pointers across removals either.
+- Systems and factories hold a `shared_ptr` back to `EngineECS`, so it is never destroyed (reference cycle). `EngineECS::Init` wraps the `World` (owned by `AdvancedFeatures`) in an owning `shared_ptr`, which is only harmless because of that.
 - **Limits** are in `Constants.hh`: `MAX_COMPONENTS = 32`, `MAX_INSTANCES = 2048`.
 - **Components** (`src/components/`, all included through `Components.hh`) derive from `Component`, which keeps a back-pointer to its `Instance` and its `handle_value`. Several component structs can share one header, e.g. `UnitComp.hh` defines `Living`, `Mortal`, `Attacker`, etc. Component and system types are keyed by `typeid(T).name()`.
 - **Systems** (`src/systems/`) derive from `System` and receive every entity whose signature contains the system's signature, collected in `mEntities` (a `std::set<InstanceHandle>`). Systems can override `AddEntity`/`RemoveEntity` to keep their own containers.
@@ -76,14 +86,14 @@ Adding a new component or system requires matching edits in `Game.cc`/`Game.hh`:
 Notes:
 - **`Prototype` entities are never added to systems** (`EngineECS::UpdateSystems`). Factory presets carry this component, so they exist only as templates to clone.
 - **Destruction is deferred.** Call `mECS->MarkDestruction(handle)`, and `CleanupSystem` destroys marked instances at the end of the update. That removes them from all component arrays, all systems, and the spatial hash.
-- **Events** (`ecs/Event.hh`) have a fixed `EventType` enum (collisions, hits, deaths, supply upgrades, ...). `SendFunctionalEvent` dispatches synchronously to listeners registered with `AddFunctionalListener(FUNCTIONAL_LISTENER(EventType::X, Class::Method))`. `SendEvent` only queues events into `GetPendingEvents()` for manual handling. Collision results reach gameplay this way, from `CollisionSystem` to `GamelogicSystem` listeners. Moving an entity should send `EventType::NewPosition` so `CollisionSystem` updates its collider hash maps.
+- **Events** (`ecs/Event.hh`) have a fixed `EventType` enum (collisions, hits, deaths, supply upgrades, ...). `SendFunctionalEvent` dispatches synchronously to listeners registered with `AddFunctionalListener(FUNCTIONAL_LISTENER(EventType::X, Class::Method))`. `SendEvent` only queues events into `GetPendingEvents()` for manual handling; nothing uses that path. All game events are functional: e.g. collision results go from `CollisionSystem` to `GamelogicSystem` and `PhysicsSystem` listeners, deaths and hits to the `ParticleSystem`. `Supply1`, `Supply2` and `MoreWood` are sent but have no listeners. Moving an entity should send `EventType::NewPosition` so `CollisionSystem` updates its collider hash maps (`PhysicsSystem` and the factories do this).
 
 ### Systems
 
 - `GamelogicSystem` is by far the largest file (~2.5k lines). It holds all gameplay: resources, building, unit AI and combat, enemy waves, and win/lose state. It also drives some render parameters (desaturation and vignette radius come from game state). It is initialized with references to the audio system and the unit, structure, and item factories.
-- `CollisionSystem` handles 2D-only collision (OBB vs. circle shapes on the ground plane) and uses `Hash2D` for broad-phase.
-- `RenderSystem` (`AdvancedRenderSystem.cc`) is a forward renderer. Pass order: point-light depth cubemaps → directional shadow map → skybox → scene → particles → post-processing (outlines, bloom, tonemap, sepia, vignette, distance fade). Shaders are loaded from `data/shaders/` by base name: `Program::createFromFile("../data/shaders/object")` picks up `object.vsh` + `object.fsh`. Shader includes use `.glsli`.
-- The other systems are `PhysicsSystem`, `EnvironmentSystem` (day/night game time), `LightSystem`, `ParticleSystem` (instanced, plus a compute shader), `AnimationSystem` (non-skeletal), `AudioSystem` (OpenAL 3D audio; sound files in `data/audio/`), and `CleanupSystem`.
+- `CollisionSystem` handles 2D-only collision (OBB vs. circle shapes on the ground plane) and uses two `Hash2D`s (static and dynamic colliders) for broad-phase. Its static pass also marks destructible static colliders with zero health for destruction.
+- `RenderSystem` (`AdvancedRenderSystem.cc`) is a forward renderer. Pass order: point-light shadow cube map → directional shadow map → skybox → scene (`poly` shader) → particles → outlines → bloom → post-processing (tonemap, gamma, sepia, vignette, desaturation, distance fade) → outline resolve. Shaders are loaded from `data/shaders/` by base name: `Program::createFromFile("../data/shaders/poly")` picks up `poly.vsh` + `poly.fsh`. Shader includes use `.glsli`. The `object`/`object_simple` shaders and the test meshes/textures are loaded but unused.
+- The other systems are `PhysicsSystem`, `LightSystem`, `ParticleSystem` (CPU-simulated, drawn instanced; `compute_particles.csh` belongs to an unfinished, commented-out GPU variant), `AnimationSystem` (non-skeletal; also flies arrows), `AudioSystem` (OpenAL 3D audio; sound files in `data/audio/`), and `CleanupSystem` (runs last). `EnvironmentSystem` (game clock and day counter, which triggers the daily enemy waves) is not ECS-registered; `Game` creates and updates it directly. `InputSystem` and `AISystem` exist but are not registered (unused).
 
 ### Assets and factories
 
@@ -94,6 +104,6 @@ Notes:
 ### Other directories
 
 - `src/advanced/` contains the instance `World`, `transform`, the stats/debug helpers, and the editor. It originated from course framework code.
-- `src/utility/` contains the spatial hash maps, a quadtree, RNG, and WAV loading (`Sound.cc` with dr_wav; only `.wav` files are loaded).
+- `src/utility/` contains the spatial hash map (`Hash2D`), a quadtree (fully commented out), RNG, and WAV loading (`Sound.cc` with dr_wav; only `.wav` files are loaded).
 - `src/types/` contains plain data types shared across components (lights, materials, particles, unit and structure properties).
 - `docs/` contains early design notes and a ToDo list from the start of the project. They are not authoritative about the current code.

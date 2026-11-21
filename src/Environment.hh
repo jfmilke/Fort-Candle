@@ -5,6 +5,7 @@
 
 namespace gamedev
 {
+/// Empty and unused; the game clock and sun are in `EnvironmentSystem`.
 class Environment
 {
 

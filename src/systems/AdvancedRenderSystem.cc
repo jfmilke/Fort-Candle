@@ -224,13 +224,10 @@ void gamedev::RenderSystem::UpdateShadowMapTexture()
 
     glow::info() << "Creating " << mDirShadowResolution << " x " << mDirShadowResolution << " shadow map";
 
-    // auto shadowColorMap = glow::Texture2D::createStorageImmutable(mShadowMapResolution, mShadowMapResolution, GL_R8, 1);
     mDirShadowDepthMap = glow::Texture2D::createStorageImmutable(mDirShadowResolution, mDirShadowResolution, GL_DEPTH_COMPONENT32F, 0);
     {
         auto tex = mDirShadowDepthMap->bind();
-        // tex.setMinFilter(GL_LINEAR); // no mip-maps
         tex.setFilter(GL_NEAREST, GL_NEAREST);
-        // tex.setWrap(GL_REPEAT, GL_REPEAT);
         tex.setWrap(GL_CLAMP_TO_BORDER, GL_CLAMP_TO_BORDER);
         tex.setBorderColor({1.0f, 1.0f, 1.0f, 1.0f});
 
@@ -238,8 +235,6 @@ void gamedev::RenderSystem::UpdateShadowMapTexture()
         tex.setCompareMode(GL_COMPARE_REF_TO_TEXTURE);
         tex.setCompareFunc(GL_LESS);
     }
-    // add a dummy color target (in hope that some drivers calm their mammaries)
-    // mFramebufferDirShadow = glow::Framebuffer::create({{"fColor", shadowColorMap}}, mDirShadowDepthMap);
     mFramebufferDirShadow = glow::Framebuffer::createDepthOnly(mDirShadowDepthMap);
 }
 
@@ -315,9 +310,6 @@ void gamedev::RenderSystem::RenderInstances(glow::UsedProgram& shader)
 {
     for (const auto& handle : mEntities)
     {
-        //if (mECS->TestSignature<Arrow>(handle))
-        //    continue;
-
         gamedev::Instance const& instance = mECS->GetInstance(handle);
 
         // bind the textures
@@ -353,9 +345,6 @@ void gamedev::RenderSystem::RenderDepth(glow::UsedProgram& shader)
 
     for (const auto& handle : mEntities)
     {
-        // if (mECS->TestSignature<Arrow>(handle))
-        //     continue;
-
         gamedev::Instance const& instance = mECS->GetInstance(handle);
 
         // compute and upload the model matrix
@@ -472,7 +461,7 @@ void gamedev::RenderSystem::RenderPostProcessing()
         shader["uEnableSepia"] = mEnableSepia;
         shader["uEnableVignette"] = mEnableVignette;
         shader["uEnableDesaturate"] = mEnableDesaturate;
-        shader["uEnableDistFade"] = mVignetteIntensity;
+        shader["uEnableDistFade"] = mVignetteIntensity; // TODO: output.fsh has no such uniform; the fade is always applied
         shader["uDesaturationStrength"] = mDesaturationIntensity;
         shader["uSepiaStrength"] = mSepiaIntensity;
         shader["uVignetteColor"] = mVignetteColor;
@@ -483,8 +472,6 @@ void gamedev::RenderSystem::RenderPostProcessing()
         shader["uDistFadeStrength"] = mDistFadeoffIntensity;
 
 
-        /*shader["uPointShadowMap"] = mPointShadowDepthMap;
-        shader["uDirShadowMap"] = mDirShadowDepthMap;*/
 
 
         glow::geometry::FullscreenTriangle::draw();
@@ -590,9 +577,6 @@ void gamedev::RenderSystem::RenderDepthCubemap()
 void gamedev::RenderSystem::RenderDepthMap()
 {
     {
-        //float const depthVal = 1.f;
-        //mDirShadowDepthMap->clear(GL_DEPTH_COMPONENT, GL_FLOAT, &depthVal);
-
         auto fb_shadow = mFramebufferDirShadow->bind();
         glClear(GL_DEPTH_BUFFER_BIT);
 
@@ -629,9 +613,7 @@ void gamedev::RenderSystem::RenderDepthMap()
 
         GLOW_SCOPED(cullFace, GL_FRONT);
 
-        //glCullFace(GL_FRONT);
         RenderInstances(shader);
-        //glCullFace(GL_BACK);
     }
 }
 
@@ -658,9 +640,6 @@ void gamedev::RenderSystem::RenderOutline(InstanceHandle handle, const tg::vec4&
 {
     if (!mECS->IsLiveHandle(handle))
         return;
-
-    // tg::vec4 clear = {0, 0, 0, 0};
-    // mTargetOutlineIntermediate->clear(GL_RGBA, GL_FLOAT, tg::data_ptr(clear));
 
     auto fb = mFramebufferOutline->bind();
 
@@ -836,6 +815,7 @@ void gamedev::RenderSystem::LoadGFXResources()
         mShaderBackground = glow::Program::createFromFile("../data/shaders/background");
         mShaderParticle = glow::Program::createFromFile("../data/shaders/particles");
         mShaderBlur = glow::Program::createFromFiles({"../data/shaders/fullscreen_tri.vsh", "../data/shaders/blur.fsh"});
+        // Unused alternatives (shadows_screenspace.*, depth.gsh):
         // mShaderSSS = glow::Program::createFromFiles({"../data/shaders/shadows_screenspace.vsh", "../data/shaders/shadows_screenspace.fsh"});
 
         // mShaderDepth = glow::Program::createFromFiles({"../data/shaders/depth.vsh", "../data/shaders/depth.fsh", "../data/shaders/depth.gsh"});

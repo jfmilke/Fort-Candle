@@ -6,35 +6,45 @@
 
 #include <typed-geometry/tg-lean.hh> // leans means only types, no functions
 
-/// mesh derives from pm::Mesh, thus it has .vertices(), .faces(), etc.
+/**
+ * Polygon mesh with per-halfedge normals, tangents and texture coordinates, loaded from OBJ files.
+ *
+ * Course framework code. Derives from `pm::Mesh`, so it has `.vertices()`, `.faces()`, etc. Loading relies on the
+ * patched polymesh OBJ reader (`has_valid_texcoords()`/`has_valid_normals()`, see CLAUDE.md).
+ */
 struct Mesh3D : public pm::Mesh
 {
-    // attributes are stored as members
+    /// Vertex positions (attributes are stored as members).
     pm::vertex_attribute<tg::pos3> position{*this};
 
     // normal, tangent, texCoord are stored per halfedge
     // (e.g. to support different normals on the same vertex for different faces)
     // (see image in https://www.graphics.rwth-aachen.de/media/openmesh_static/Documentations/OpenMesh-6.3-Documentation/a00010.html
-    pm::halfedge_attribute<tg::vec3> normal{*this};
-    pm::halfedge_attribute<tg::vec3> tangent{*this};
-    pm::halfedge_attribute<tg::pos2> texCoord{*this};
+    pm::halfedge_attribute<tg::vec3> normal{*this};   ///< Normal per halfedge (corner).
+    pm::halfedge_attribute<tg::vec3> tangent{*this};  ///< Tangent per halfedge (corner).
+    pm::halfedge_attribute<tg::pos2> texCoord{*this}; ///< Texture coordinate per halfedge (corner).
 
-    /// loads mesh from file
-    ///
-    /// by default, computed vertex tangents are interpolated from face tangents,
-    /// for flat shaded objects (e.g. cube) this flag should be set to false
-    ///
-    /// returns true if file was loaded without errors
+    /**
+     * Loads the OBJ file `filename`, computes vertex normals if the file has none, and computes tangents.
+     *
+     * By default, the tangents are interpolated per vertex from the face tangents; for flat shaded objects (e.g. a
+     * cube) set `interpolate_tangents` to false. Returns false (and logs) if the file cannot be opened, has faces
+     * that cannot be added, or has no texture coordinates; in the last case positions and normals are still loaded.
+     */
     bool loadFromFile(std::string const& filename, bool interpolate_tangents = true);
 
-    /// uploads the mesh to the GPU (with a GL_TRIANGLES vertex array)
-    ///
-    /// vertex layout:
-    ///     in vec3 aPosition;
-    ///     in vec3 aNormal;
-    ///     in vec3 aTangent;
-    ///     in vec2 aTexCoord;
+    /**
+     * Uploads the mesh to the GPU as a GL_TRIANGLES vertex array with one vertex per halfedge; for non-triangle meshes
+     * an index buffer fans each polygon into triangles. Needs an OpenGL context.
+     *
+     * vertex layout:
+     *     in vec3 aPosition;
+     *     in vec3 aNormal;
+     *     in vec3 aTangent;
+     *     in vec2 aTexCoord;
+     */
     glow::SharedVertexArray createVertexArray() const;
 
+    /// Like `createVertexArray`, but only with `aPosition` and `aNormal` (used for the particle cube).
     glow::SharedVertexArray createBasicVertexArray() const;
 };

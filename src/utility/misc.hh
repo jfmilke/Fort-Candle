@@ -8,10 +8,13 @@
 
 namespace gamedev
 {
+/// Returns `string` converted to lower case (ASCII), e.g. to normalize preset and asset names.
 std::string lowerString(std::string string);
 
-// For formulas: ax^2 + bx + c
-// Returns both solutions as (s1, s2) tuple if real, else it returns (0,0)
+/**
+ * Solves a*x^2 + b*x + c = 0. Returns both real solutions (s1 >= s2 for a > 0), or (0, 0) if there is none.
+ * `a` must not be zero.
+ */
 template<typename T>
 std::pair<float, float> solveQuadratic(T a, T b, T c)
 {

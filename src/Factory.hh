@@ -8,116 +8,179 @@
 #include <typed-geometry/tg-lean.hh>
 #include <list>
 
-/* Factory Main System
- *
- * A factory manages a set of presets of entities which can be added and accessed by readable string identifiers.
- * It can spawn new entities with a certain preset, but also clone them.
- * 
- * If a new preset is to be added, it is advised to let the factory create the entity itself using the asset manager:
- *    Register("../data/meshes/units/person.obj");    // Automatically checks if identifier is path and extracts filename as well
- *    auto handle = GetPreset("person");              // Can be accessed either by the path above or by its filename alone (without extension)
- *    // Do something with handle to modify preset
- * 
- * Creating an entity is as simple as:
- *    auto handle = Create("person");
- * 
- * To customize the registration of new entities, subclasses of factory can overwrite the Register() methods.
- * 
- */
-
 namespace gamedev
 {
+/**
+ * Manages named entity presets and creates instances from them.
+ *
+ * Base class of the unit, structure, nature and item factories.
+ *
+ * Presets:
+ *  - A preset is a `Prototype` instance (never part of any system) that carries the mesh and all components of an
+ *    entity type.
+ *  - `Create` clones a preset into a live instance.
+ *  - Identifiers are case-insensitive and can be a name or a path:
+ *    @code
+ *    Register("../data/meshes/units/person.obj"); // registers the name "person" and the path
+ *    auto preset = GetPreset("person");          // by name (file name without extension) or by path; modify as needed
+ *    auto handle = Create("person", position);   // live instance
+ *    @endcode
+ *
+ * Subclasses attach their components in `PostProcessRegistration` or in their own `Register` overloads.
+ * `Game::init()` creates one instance of each subclass and registers all meshes of its folder in `data/meshes/`.
+ *
+ * World layouts are saved and loaded as `.fac` files in `data/config/`, a sequence of records
+ * `[null-terminated preset name][tg::vec3 translation][tg::quat rotation][tg::size3 scaling]`.
+ */
 class Factory
 {
 public:
-    // Factory needs access to ECS and the asset manager
+    /// Sets the ECS and the asset manager. Must be called before any other function.
     void Init(SharedEngineECS& ecs, SharedGameObjects& obj);
+
+    /// Sets the terrain; created instances are then placed on its surface.
     void AttachTerrain(std::shared_ptr<Terrain>& terrain);
 
-    // Add a new object along with its configuration to the factories preset container.
-    // Info: Better call Register() in conjunction with GetPreset() to add a new preset and alter it afterwards.
+    /**
+     * Adds `presetHandle` as preset under `identifier` (a name, or a path whose file name becomes the name).
+     * If the identifier exists, the existing preset's components are replaced by copies of `presetHandle`'s.
+     * Prefer `Register` + `GetPreset` to add and then modify a preset.
+     */
     void AddPreset(std::string identifier, InstanceHandle presetHandle);
+
+    /// Adds `presetHandle` under both the name `identifier` and the path `identifying_path` (see above).
     void AddPreset(std::string identifier, std::filesystem::path identifying_path, InstanceHandle presetHandle);
 
-    // Returns the handle of the actual preset (i.e. to modify the preset)
+    /// Returns the preset instance for a name or path (to modify it), or an invalid handle.
     InstanceHandle GetPreset(std::string identifier);
 
-    // Create a new object with the asset manager using asset_identifier
-    // and add this object as a preset with the "prototype" component (prevents system usage of this instance).
-    // Will either use the asset_identifier name as an identifier for the factory system and, if applicable, also add as a path identifier.
-    // Or will use the explicitly given identifier within the factory system (and, if applicable, the explicitly given path).
-    // Info: Preferred way to initally add presets.
+    /**
+     * Creates a `Prototype` instance from the asset `asset_identifier` (mesh name or path known to the asset manager),
+     * scaled uniformly by `scaling`, runs `PostProcessRegistration` and adds it as preset under the asset name (and
+     * path). Returns the preset, or an invalid handle if the asset is unknown. Preferred way to add presets.
+     */
     InstanceHandle Register(std::string asset_identifier, float scaling = 1.0);
+
+    /// Like above, but registers the preset under `factory_identifier`.
     InstanceHandle Register(std::string asset_identifier, std::string factory_identifier, float scaling = 1.0);
+
+    /// Like above, but registers the preset under `factory_identifier` and `factory_path`.
     InstanceHandle Register(std::string asset_identifier, std::string factory_identifier, std::filesystem::path factory_path, float scaling = 1.0);
 
-    // Creates a new instance and clone the components of an existing preset (along with some transformation)
+    /**
+     * Creates a live instance from the preset `identifier` (without the `Prototype` component), adds it to the spatial
+     * hash map and remembers it for saving. Returns an invalid handle if the preset does not exist.
+     */
     InstanceHandle Create(std::string identifier);
+
+    /// Like `Create`, placed at `position` (height taken from the terrain, if attached).
     InstanceHandle Create(std::string identifier, tg::pos3 position);
+
+    /// Like `Create`, placed at `position` with `rotation`.
     InstanceHandle Create(std::string identifier, tg::pos3 position, tg::quat rotation);
+
+    /// Like `Create`, placed at `position` with `rotation` and `scaling` (replaces the preset scale).
     InstanceHandle Create(std::string identifier, tg::pos3 position, tg::quat rotation, tg::size3 scaling);
+
+    /// Like `Create`, placed at `position` with `scaling` (replaces the preset scale).
     InstanceHandle Create(std::string identifier, tg::pos3 position, tg::size3 scaling);
 
-    // Creates a new instance and clones the components of the given handle (along with some transformation)
+    /**
+     * Creates a copy of `templateHandle` with all its components (a `Prototype` stays a prototype) and adds it to the
+     * spatial hash map. Unlike `Create`, the copy is not remembered for saving.
+     */
     InstanceHandle Clone(InstanceHandle templateHandle);
+
+    /// Like `Clone`, placed at `position` (height taken from the terrain, if attached).
     InstanceHandle Clone(InstanceHandle templateHandle, tg::pos3 position);
+
+    /// Like `Clone`, placed at `position` with `rotation`.
     InstanceHandle Clone(InstanceHandle templateHandle, tg::pos3 position, tg::quat rotation);
+
+    /// Like `Clone`, placed at `position` with `rotation` and `scaling`.
     InstanceHandle Clone(InstanceHandle templateHandle, tg::pos3 position, tg::quat rotation, tg::size3 scaling);
+
+    /// Like `Clone`, placed at `position` with `scaling`.
     InstanceHandle Clone(InstanceHandle templateHandle, tg::pos3 position, tg::size3 scaling);
 
+    /// Marks the instance of the last `Create` call, so `SaveMarkedObjects` saves it.
     void MarkLastCreated();
 
-    // Registers each object in the vector for this system
+    /// `Register`s every asset in `asset_identifiers` with the same `scaling`.
     void RegisterAutomatically(std::vector<std::string> asset_identifiers, float scaling = 1.0);
 
-    // Returns a list with all identifiers in lexicographic order (either name or path)
+    /// All preset names (unordered).
     std::vector<std::string> GetNameIdentifiers();
+
+    /**
+     * Meant to return all preset paths.
+     *
+     * TODO: Returns the names instead (it iterates the name map).
+     */
     std::vector<std::string> GetPathIdentifiers();
+
+    /// Handles of all live instances created by this factory.
     std::vector<InstanceHandle> GetGeneratedHandles();
+
+    /// Handles and preset names of all live instances created by this factory.
     std::vector<std::pair<InstanceHandle, std::string>> GetGeneratedIdentifiers();
 
-    // Returns whether the given identifier is registered (checks name and path)
+    /// True if a preset with this name or path exists.
     bool exists(std::string identifier);
 
-    // Load and save objects
+    /// Saves all live instances created by this factory to `mSavefilePath`. Returns false on I/O errors.
     bool SaveObjects();
+
+    /// Saves all live marked instances to `filepath` (a full path). Returns false on I/O errors.
     bool SaveMarkedObjects(std::filesystem::path filepath);
+
+    /// Creates the instances saved in `mSavefilePath`. Returns false if none were loaded.
     bool LoadObjects();
+
+    /// Creates the instances saved in `data/config/<filepath>.fac`. Returns false if none were loaded.
     bool LoadObjects(std::filesystem::path filepath);
+
+    /// Like `LoadObjects(filepath)`, but also marks the created instances and returns their handles.
     std::vector<InstanceHandle> LoadObjectsMarked(std::filesystem::path filepath);
 
     virtual ~Factory() {}
 
 private:
-    // Overwrites the given ID with the given handle. Won't do any sanity check.
+    /// Replaces the components of preset `presetID` by copies of `templateHandle`'s. No sanity checks.
     void OverwritePreset(int presetID, InstanceHandle templateHandle);
+
+    /// Writes all live created instances to `filepath` (`.fac` format).
     bool SaveObjectsTo(std::filesystem::path filepath);
+
+    /// Writes all live marked instances to `filepath` (`.fac` format).
     bool SaveMarkedObjectsTo(std::filesystem::path filepath);
+
+    /**
+     * Creates one instance per `.fac` record of `filepath` with the saved transform (including the saved height) and
+     * returns their handles; with `marked`, also marks them.
+     */
     std::vector<InstanceHandle> LoadObjectsFrom(std::filesystem::path filepath, bool marked = false);
 
+    /// Returns `boundingBox` unchanged (the code after the `return` is dead).
     tg::aabb3 MaxBoundingBox(tg::aabb3& boundingBox);
 protected:
-    // Can be modified by subclasses to i.e. add some additional components while using the main class' registration method
+    /// Hook for subclasses, called by `Register` before the preset is added, e.g. to attach components.
     virtual void PostProcessRegistration(InstanceHandle presetHandle){};
 
 protected:
-    SharedEngineECS mECS;
-    SharedGameObjects mObj;
-    std::shared_ptr<Terrain> mT;
-    int mFreeID = 0;
-    std::pair<InstanceHandle, std::string> mLastCreated = {{std::uint32_t(-1)}, ""};
+    SharedEngineECS mECS;                                                            ///< Shared ECS.
+    SharedGameObjects mObj;                                                          ///< Asset manager (meshes, textures).
+    std::shared_ptr<Terrain> mT;                                                     ///< Terrain for placement, may be null.
+    int mFreeID = 0;                                                                 ///< Next preset ID.
+    std::pair<InstanceHandle, std::string> mLastCreated = {{std::uint32_t(-1)}, ""}; ///< Last `Create` result.
 
-    // Save location
-    std::filesystem::path mSavefilePath = "../data/config/undefined.fac";
+    std::filesystem::path mSavefilePath = "../data/config/undefined.fac"; ///< Default save file; its folder is used by `LoadObjects(path)`.
 
-    // Mappings to get from the object identifier (name or path) to the internal ID which uniquely identifies the presets handle
-    std::unordered_map<std::string, int> mObjectNameToID;
-    std::unordered_map<std::string, int> mObjectPathToID;
-    // A unique mapping the the instance handle of the preset
-    std::unordered_map<int, InstanceHandle> mIDToPreset;
+    std::unordered_map<std::string, int> mObjectNameToID; ///< Preset name -> preset ID.
+    std::unordered_map<std::string, int> mObjectPathToID; ///< Preset path -> preset ID.
+    std::unordered_map<int, InstanceHandle> mIDToPreset;  ///< Preset ID -> preset instance.
 
-    // Keeps track of all objects that were created (not cloned) by this factory (handle & object identifier)
-    std::list<std::pair<InstanceHandle, std::string>> mGeneratedObjects;
-    std::list<std::pair<InstanceHandle, std::string>> mMarkedObjects;
+    std::list<std::pair<InstanceHandle, std::string>> mGeneratedObjects; ///< Instances created (not cloned) by this factory, with preset name.
+    std::list<std::pair<InstanceHandle, std::string>> mMarkedObjects;    ///< Instances marked for `SaveMarkedObjects`.
 };
 }

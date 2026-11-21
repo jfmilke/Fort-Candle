@@ -32,7 +32,6 @@ void gamedev::GameObjects::initializeMeshes()
 void gamedev::GameObjects::initializeTextures()
 {
     mTexAlbedoPolyPalette = glow::Texture2D::createFromFile("../data/textures/BigPalette.png", glow::ColorSpace::sRGB);
-    //mTexNormalWater = glow::Texture2D::createFromFile("../data/textures/water.normal.png", glow::ColorSpace::Linear);
 }
 
 void gamedev::GameObjects::scanMeshes()
@@ -112,7 +111,7 @@ bool gamedev::GameObjects::registerObject(std::filesystem::path mesh_path)
     auto aabb = mesh.position.aabb();
     auto vao = mesh.createVertexArray();
 
-    // Make objPath relative to a canonical location
+    // Use the lower-case path as given (not canonicalized)
     std::string objPath = mesh_path.string();
     std::transform(objPath.begin(), objPath.end(), objPath.begin(), ::tolower);
 

@@ -5,10 +5,11 @@
 
 namespace gamedev
 {
+/// Continuous particle emitters attached to an instance, spawned by the `ParticleSystem`.
 struct ParticleEmitter : Component
 {
     using Component::Component;
 
-    std::vector<ParticleProperties> pp;
+    std::vector<ParticleProperties> pp; ///< One entry per emitter.
 };
 }

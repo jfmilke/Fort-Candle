@@ -51,9 +51,6 @@ gamedev::InstanceHandle gamedev::Terrain::CreateGround(tg::pos3 pos, tg::size3 s
 
     auto render = mECS->CreateComponent<Render>(mGroundHandle);
 
-    // mECS->GetHashMap().AddInstance(mGroundHandle, instance.xform.translation, instance.max_bounds);
-    // mECS->GetHashMap2().Insert(mGroundHandle, mapSize, instance.xform.translation);
-
     return mGroundHandle;
 }
 
@@ -67,10 +64,9 @@ gamedev::InstanceHandle gamedev::Terrain::CreateWater(tg::pos3 pos, tg::size3 sc
     waterTransform.translation = pos - tg::pos3::zero;
     waterTransform.scale(scale);
     // todo: maybe fix this and have the water have its real extents
+    // TODO: `instance` is a copy, so this does not change the water instance
     auto instance = mECS->GetInstance(mWaterHandle);
     instance.max_bounds = {mMapExtents.min, mMapExtents.max};
-
-    // mECS->GetHashMap().AddInstance(mGroundHandle, instance.xform.translation, instance.max_bounds);
 
     auto render = mECS->CreateComponent<Render>(mWaterHandle);
 
@@ -96,7 +92,6 @@ void gamedev::Terrain::createHeightmap(const Mesh3D& mesh, const transform& xfor
     std::vector<std::vector<float>> height(size[1]);
     for (auto& row : height)
         row = std::move(std::vector<float>(size[0], -20000.f));
-        //row.resize(size[0]);
 
     // Fill height map:
     // Iterate over all triangles..
