@@ -1,8 +1,8 @@
 #include "systems/EnvironmentSystem.hh"
 
-void gamedev::EnvironmentSystem::Init(std::shared_ptr<EngineECS>& ecs)
+void gamedev::EnvironmentSystem::Init(EngineECS& ecs)
 {
-    mECS = ecs;
+    mECS = &ecs;
     mSunLight.color = tg::vec3(0.985, 1.0, 0.876);
 
     mSunTheta = 0.f; // 70.0f;

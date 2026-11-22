@@ -172,6 +172,9 @@ public:
     /// Const version of `get_span`.
     CC_FORCE_INLINE cc::span<T const> get_span() const { return {data(), size()}; }
 
+    /// Stable slot of a live `handle` in [0, `max_size()`); unlike the packed index it does not change on `release`.
+    CC_FORCE_INLINE size_t get_slot_index(handle_t handle) const { return _sparse_indices.get_handle_index(handle); }
+
     /// Current packed index of a live `handle`'s value.
     CC_FORCE_INLINE size_t get_handle_index(handle_t handle) const { return _sparse_indices.get(handle); }
 

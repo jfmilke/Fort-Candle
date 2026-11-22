@@ -7,8 +7,8 @@
 #include "advanced/World.hh"
 #include "Components.hh"
 #include "utility/HashMap.hh"
-#include <array>
 #include "glow/common/log.hh"
+#include <memory>
 
 namespace gamedev
 {
@@ -21,31 +21,27 @@ GLOW_SHARED(class, EngineECS);
  * Based on https://austinmorlan.com/posts/entity_component_system/.
  *
  * Ownership:
- *  - Created by `Game::init()` and shared (as `SharedEngineECS`) with every system and factory.
- *  - Owns the `ComponentManager`, `SystemManager` and `EventManager`.
- *  - Wraps the `World` that stores the instances (owned by `AdvancedFeatures`).
+ *  - Created and owned by `Game` (`Game::init()`); systems and factories keep a non-owning pointer.
+ *  - Owns the `ComponentManager`, `SystemManager` and `EventManager`, and through the `SystemManager` the systems.
+ *  - Uses the `World` that stores the instances (owned by `AdvancedFeatures`), which must outlive this object.
+ *  - `Game::onClose()` destroys it while the GL context still exists, because the systems own GL resources.
  *
  * Every function that changes a component set also updates the instance signature and re-evaluates the system membership (`UpdateSystems`).
- *
- * TODO: Systems and factories hold `shared_ptr`s back to this object, so it is never destroyed (reference cycle).
  */
 class EngineECS
 {
 public:
     /**
-     * Creates the managers and wraps the instance storage.
+     * Creates the managers and stores the instance storage.
      *
-     * TODO: `world` is wrapped in an owning `shared_ptr` although `AdvancedFeatures` owns it.
-     * This is only harmless because this object is never destroyed.
-     *
-     * @param world Instance storage; must outlive this object.
+     * @param world Instance storage; not owned, must outlive this object.
      */
     void Init(World& world)
     {
+        mInstanceManager = &world;
         mSystemManager = std::make_unique<SystemManager>();
-        mComponentManager = std::make_unique<ComponentManager>();
+        mComponentManager = std::make_unique<ComponentManager>(world);
         mEventManager = std::make_unique<EventManager>();
-        mInstanceManager = std::shared_ptr<World>(&world);
     }
 
     // Entity Management (world)
@@ -92,26 +88,23 @@ public:
     }
 
     /// Returns the instance data of a live handle.
-    Instance& GetInstance(InstanceHandle handle) { return mInstanceManager->getInstance(handle); }
+    [[nodiscard]] Instance& GetInstance(InstanceHandle handle) { return mInstanceManager->getInstance(handle); }
 
     /// Returns the world transform of a live handle (for rendering and gameplay positions).
-    transform& GetInstanceTransform(InstanceHandle handle) { return mInstanceManager->getInstance(handle).xform; }
+    [[nodiscard]] transform& GetInstanceTransform(InstanceHandle handle) { return mInstanceManager->getInstance(handle).xform; }
 
     /// Number of live instances, including prototypes.
-    uint32_t getNumLiveInstances() const { return mInstanceManager->getNumLiveInstances(); }
+    [[nodiscard]] uint32_t getNumLiveInstances() const { return mInstanceManager->getNumLiveInstances(); }
 
     /**
      * Flags an instance for destruction; `CleanupSystem` destroys it at the end of the current update.
      *
      * @param handle Live instance to destroy.
      */
-    void MarkDestruction(InstanceHandle handle)
-    {
-        mInstanceManager->getInstance(handle).destroy = true;
-    }
+    void MarkDestruction(InstanceHandle handle) { mInstanceManager->getInstance(handle).destroy = true; }
 
     /**
-     * Immediately frees an instance and removes it from all components, systems and the spatial hash map.
+     * Immediately removes an instance from all systems, the spatial hash map and all components, then frees it.
      *
      * Prefer `MarkDestruction` while systems iterate.
      *
@@ -119,20 +112,21 @@ public:
      */
     void DestroyInstance(InstanceHandle handle)
     {
-        mInstanceManager->destroyInstance(handle);
+        // Components are found through the instance's slot, so detach everything before the World frees it
         InstanceDestroyed(handle);
+        mInstanceManager->destroyInstance(handle);
     }
 
     /**
-     * Removes an instance from all components, systems and the spatial hash map, without freeing the instance itself.
+     * Removes an instance from all systems, the spatial hash map and all components, without freeing the instance itself.
      *
-     * @param handle Instance that was or is about to be freed in the `World`.
+     * @param handle Instance that is still alive in the `World` (the caller frees it afterwards).
      */
     void InstanceDestroyed(InstanceHandle handle)
     {
-        mComponentManager->EntityDestroyed(handle);
         mSystemManager->EntityDestroyed(handle);
         mSpatialHashMap.RemoveInstance(handle);
+        mComponentManager->EntityDestroyed(handle);
     }
 
     /// Clears all components, systems and the spatial hash map after the `World` was emptied by the caller.
@@ -144,13 +138,13 @@ public:
     }
 
     /// True if `handle` refers to a live instance.
-    bool IsLiveHandle(InstanceHandle handle) const { return mInstanceManager->isLiveHandle(handle); }
+    [[nodiscard]] bool IsLiveHandle(InstanceHandle handle) const { return mInstanceManager->isLiveHandle(handle); }
 
     // Component Management
     // --------------------
 
     /// Registers component type `CompT`. Must happen before any other use of `CompT`.
-    template <typename CompT>
+    template <EcsComponent CompT>
     void RegisterComponent()
     {
         mComponentManager->RegisterComponent<CompT>();
@@ -164,18 +158,12 @@ public:
      * @param handle Live instance to add the component to.
      * @return The new component, valid until the next removal of a `CompT`.
      */
-    template <typename CompT>
+    template <EcsComponent CompT>
     CompT* CreateComponent(InstanceHandle handle)
     {
-        auto Component = mComponentManager->CreateComponent<CompT>(handle, mInstanceManager->getInstance(handle));
-
-        auto signature = mInstanceManager->GetSignature(handle);
-        signature.set(mComponentManager->GetComponentType<CompT>(), true);
-        mInstanceManager->SetSignature(handle, signature);
-
-        UpdateSystems(handle);
-
-        return Component;
+        auto component = mComponentManager->CreateComponent<CompT>(handle);
+        SetSignatureBit<CompT>(handle, true);
+        return component;
     }
 
     /**
@@ -184,18 +172,12 @@ public:
      * @param handle Live instance to add the component to.
      * @return The new or existing component, valid until the next removal of a `CompT`.
      */
-    template <typename CompT>
+    template <EcsComponent CompT>
     CompT* TryCreateComponent(InstanceHandle handle)
     {
-        auto Component = mComponentManager->TryCreateComponent<CompT>(handle, mInstanceManager->getInstance(handle));
-
-        auto signature = mInstanceManager->GetSignature(handle);
-        signature.set(mComponentManager->GetComponentType<CompT>(), true);
-        mInstanceManager->SetSignature(handle, signature);
-
-        UpdateSystems(handle);
-
-        return Component;
+        auto component = mComponentManager->TryCreateComponent<CompT>(handle);
+        SetSignatureBit<CompT>(handle, true);
+        return component;
     }
 
     /**
@@ -204,18 +186,13 @@ public:
      * Asserts if the instance already has a `CompT`.
      *
      * @param handle Live instance to add the component to.
-     * @param component Component to copy; the copy keeps its `instance` pointer as is.
+     * @param component Component to copy.
      */
-    template <typename CompT>
+    template <EcsComponent CompT>
     void AddComponent(InstanceHandle handle, CompT component)
     {
-        mComponentManager->AddComponent<CompT>(handle, component);
-
-        auto signature = mInstanceManager->GetSignature(handle);
-        signature.set(mComponentManager->GetComponentType<CompT>(), true);
-        mInstanceManager->SetSignature(handle, signature);
-
-        UpdateSystems(handle);
+        mComponentManager->AddComponent<CompT>(handle, std::move(component));
+        SetSignatureBit<CompT>(handle, true);
     }
 
     /**
@@ -226,12 +203,8 @@ public:
      */
     void CloneComponents(InstanceHandle source_handle, InstanceHandle copy_handle)
     {
-        auto& source_instance = GetInstance(source_handle);
-        auto& copy_instance = GetInstance(copy_handle);
-
-        mComponentManager->CloneEntityComponents(source_instance, copy_instance);
-
-        mInstanceManager->SetSignature(copy_handle, source_instance.mSignature);
+        mComponentManager->CloneEntityComponents(source_handle, copy_handle);
+        mInstanceManager->SetSignature(copy_handle, mInstanceManager->GetSignature(source_handle));
 
         UpdateSystems(copy_handle);
     }
@@ -241,16 +214,11 @@ public:
      *
      * @param handle Live instance to remove the component from.
      */
-    template <typename CompT>
+    template <EcsComponent CompT>
     void RemoveComponent(InstanceHandle handle)
     {
         mComponentManager->RemoveComponent<CompT>(handle);
-
-        auto signature = mInstanceManager->GetSignature(handle);
-        signature.set(mComponentManager->GetComponentType<CompT>(), false);
-        mInstanceManager->SetSignature(handle, signature);
-
-        UpdateSystems(handle);
+        SetSignatureBit<CompT>(handle, false);
     }
 
     /**
@@ -258,16 +226,11 @@ public:
      *
      * @param handle Live instance to remove the component from.
      */
-    template <typename CompT>
+    template <EcsComponent CompT>
     void TryRemoveComponent(InstanceHandle handle)
     {
         mComponentManager->TryRemoveComponent<CompT>(handle);
-
-        auto signature = mInstanceManager->GetSignature(handle);
-        signature.set(mComponentManager->GetComponentType<CompT>(), false);
-        mInstanceManager->SetSignature(handle, signature);
-
-        UpdateSystems(handle);
+        SetSignatureBit<CompT>(handle, false);
     }
 
     /**
@@ -278,40 +241,46 @@ public:
     void RemoveAllComponents(InstanceHandle handle)
     {
         mComponentManager->RemoveAllComponents(handle);
-
-        auto signature = mInstanceManager->GetSignature(handle);
-        signature.reset();
-        mInstanceManager->SetSignature(handle, signature);
+        mInstanceManager->SetSignature(handle, {});
 
         UpdateSystems(handle);
     }
 
     /// Returns `handle`'s `CompT`. Asserts if it has none. Do not keep the pointer across component removals.
-    template <typename CompT>
-    CompT* GetComponent(InstanceHandle handle)
+    template <EcsComponent CompT>
+    [[nodiscard]] CompT* GetComponent(InstanceHandle handle)
     {
         return mComponentManager->GetComponent<CompT>(handle);
     }
 
-    /// Returns `handle`'s `CompT`, or nullptr if it has none. Do not keep the pointer across component removals.
-    template <typename CompT>
-    CompT* TryGetComponent(InstanceHandle handle)
+    /// Returns `handle`'s `CompT`, or nullptr if it has none or is dead. Do not keep the pointer across component removals.
+    template <EcsComponent CompT>
+    [[nodiscard]] CompT* TryGetComponent(InstanceHandle handle)
     {
         return mComponentManager->TryGetComponent<CompT>(handle);
     }
 
     /// Returns the signature bit of `CompT`, e.g. to build system signatures.
-    template <typename CompT>
-    ComponentType GetComponentType()
+    template <EcsComponent CompT>
+    [[nodiscard]] ComponentType GetComponentType() const
     {
         return mComponentManager->GetComponentType<CompT>();
     }
 
-    /// True if `handle`'s signature contains `CompT`.
-    template <typename CompT>
-    bool TestSignature(InstanceHandle handle)
+    /// Signature with the bits of all `CompTs` set, e.g. `MakeSignature<Living, Attacker>()`.
+    template <EcsComponent... CompTs>
+    [[nodiscard]] Signature MakeSignature() const
     {
-        return mInstanceManager->getInstance(handle).mSignature.test(mComponentManager->GetComponentType<CompT>());
+        Signature signature;
+        (signature.set(GetComponentType<CompTs>()), ...);
+        return signature;
+    }
+
+    /// True if `handle`'s signature contains `CompT`.
+    template <EcsComponent CompT>
+    [[nodiscard]] bool TestSignature(InstanceHandle handle)
+    {
+        return mInstanceManager->getInstance(handle).mSignature.test(GetComponentType<CompT>());
     }
 
     // System Management
@@ -336,22 +305,31 @@ public:
         mSystemManager->EntitySignatureChanged(handle, GetInstance(handle).mSignature);
     }
 
-    /// Creates system `SysT` (owned by the `SystemManager`) and returns it. Set its signature before adding entities.
-    template <typename SysT>
+    /**
+     * Creates system `SysT` (owned by the `SystemManager`) that receives every entity with all `Required` components.
+     *
+     * Register the components first. Without `Required`, the system receives every entity.
+     * Register systems before creating entities: existing entities are not re-checked.
+     *
+     * @return The new system, e.g. to call its `Init` and `Update`.
+     */
+    template <EcsSystem SysT, EcsComponent... Required>
     std::shared_ptr<SysT> RegisterSystem()
     {
-        return mSystemManager->RegisterSystem<SysT>();
+        auto system = mSystemManager->RegisterSystem<SysT>();
+        mSystemManager->SetSignature<SysT>(MakeSignature<Required...>());
+        return system;
     }
 
-    /// Sets the components an entity needs to be part of `SysT`. Only the first call has an effect (see `SystemManager`).
-    template <typename SysT>
+    /// Replaces the components an entity needs to be part of `SysT`; existing entities are not re-checked.
+    template <EcsSystem SysT>
     void SetSystemSignature(Signature signature)
     {
         mSystemManager->SetSignature<SysT>(signature);
     }
 
     /// Direct access to the instance storage.
-    World* GetInstanceManager() { return mInstanceManager.get(); }
+    World* GetInstanceManager() { return mInstanceManager; }
 
     /// Direct access to the system manager.
     SystemManager* GetSystemManager() { return mSystemManager.get(); }
@@ -368,9 +346,9 @@ public:
      * @param type Event type to listen to.
      * @param listener Called synchronously by `SendFunctionalEvent`; cannot be removed.
      */
-    void AddFunctionalListener(EventType type, std::function<void(Event&)> const&listener)
+    void AddFunctionalListener(EventType type, std::function<void(Event&)> listener)
     {
-        mEventManager->AddFunctionalListener(type, listener);
+        mEventManager->AddFunctionalListener(type, std::move(listener));
     }
 
     /**
@@ -378,20 +356,14 @@ public:
      *
      * @param event Event to send; listeners may modify it.
      */
-    void SendFunctionalEvent(Event& event)
-    {
-        mEventManager->SendFunctionalEvent(event);
-    }
+    void SendFunctionalEvent(Event& event) { mEventManager->SendFunctionalEvent(event); }
 
     /**
      * Queues an event for manual handling via `GetPendingEvents`. Unused.
      *
      * @param event Event to copy into the queue.
      */
-    void SendEvent(Event& event)
-    {
-        mEventManager->SendEvent(event);
-    }
+    void SendEvent(Event& event) { mEventManager->SendEvent(event); }
 
     /// Events queued with `SendEvent`.
     std::vector<Event>& GetPendingEvents() { return mEventManager->GetPendingEvents(); }
@@ -403,14 +375,22 @@ public:
      */
     Hash2D& GetHashMap() { return mSpatialHashMap; }
 
-
 private:
-    std::shared_ptr<World> mInstanceManager;             ///< Instance storage (see the note on `Init`).
+    /// Sets or clears the signature bit of `CompT` and re-evaluates the system membership.
+    template <EcsComponent CompT>
+    void SetSignatureBit(InstanceHandle handle, bool value)
+    {
+        auto signature = mInstanceManager->GetSignature(handle);
+        signature.set(GetComponentType<CompT>(), value);
+        mInstanceManager->SetSignature(handle, signature);
+
+        UpdateSystems(handle);
+    }
+
+    World* mInstanceManager = nullptr;                   ///< Instance storage (not owned).
     std::unique_ptr<SystemManager> mSystemManager;       ///< Systems and their signatures.
     std::unique_ptr<ComponentManager> mComponentManager; ///< Component types and arrays.
     std::unique_ptr<EventManager> mEventManager;         ///< Event listeners and queue.
-
-private:
-    Hash2D mSpatialHashMap; ///< See `GetHashMap`; instances are removed when destroyed.
+    Hash2D mSpatialHashMap;                              ///< See `GetHashMap`; instances are removed when destroyed.
 };
 }

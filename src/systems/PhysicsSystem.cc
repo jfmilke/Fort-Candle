@@ -1,26 +1,9 @@
 #include "systems/PhysicsSystem.hh"
 #include "advanced/transform.hh"
 
-void gamedev::PhysicsSystem::AddEntity(InstanceHandle& handle, Signature entitySignature)
+void gamedev::PhysicsSystem::Init(EngineECS& ecs)
 {
-    mEntities.insert(handle);
-}
-
-void gamedev::PhysicsSystem::RemoveEntity(InstanceHandle& handle, Signature entitySignature)
-{
-    mEntities.erase(handle);
-}
-
-void gamedev::PhysicsSystem::RemoveEntity(InstanceHandle& handle)
-{
-    mEntities.erase(handle);
-}
-
-void gamedev::PhysicsSystem::RemoveAllEntities() { mEntities.clear(); }
-
-void gamedev::PhysicsSystem::Init(std::shared_ptr<EngineECS>& ecs)
-{
-    mECS = ecs;
+    mECS = &ecs;
 
     mECS->AddFunctionalListener(FUNCTIONAL_LISTENER(EventType::StaticCollision, PhysicsSystem::CollisionListener));
 }

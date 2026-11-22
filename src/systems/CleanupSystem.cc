@@ -3,16 +3,8 @@
 #include "advanced/transform.hh"
 #include "glow/common/log.hh"
 
-void gamedev::CleanupSystem::AddEntity(InstanceHandle& handle, Signature entitySignature) { mEntities.insert(handle); }
-
-void gamedev::CleanupSystem::RemoveEntity(InstanceHandle& handle, Signature entitySignature) { mEntities.erase(handle); }
-
-void gamedev::CleanupSystem::RemoveEntity(InstanceHandle& handle) { mEntities.erase(handle); }
-
-void gamedev::CleanupSystem::RemoveAllEntities() { mEntities.clear(); }
-
-void gamedev::CleanupSystem::Init(std::shared_ptr<EngineECS>& ecs) {
-    mECS = ecs;
+void gamedev::CleanupSystem::Init(EngineECS& ecs) {
+    mECS = &ecs;
 }
 
 int gamedev::CleanupSystem::Update()

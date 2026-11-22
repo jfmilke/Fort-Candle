@@ -32,23 +32,22 @@ public:
      *
      * Unused: `Game` calls the overload with the map bounds.
      *
-     * @param ecs Shared ECS.
+     * @param ecs The ECS; must outlive this object.
      */
-    void Init(std::shared_ptr<EngineECS>& ecs);
+    void Init(EngineECS& ecs);
 
     /**
      * Stores the ECS, sets up the hash maps with one cell per world unit and registers the position listener.
      *
-     * @param ecs Shared ECS.
+     * @param ecs The ECS; must outlive this object.
      * @param map_bounds World-space area covered by the hash maps (the terrain).
      */
-    void Init(std::shared_ptr<EngineECS>& ecs, tg::aabb3 map_bounds);
+    void Init(EngineECS& ecs, tg::aabb3 map_bounds);
 
     /// Sorts the entity into the static or dynamic set (by `Collider::dynamic`) and hash map.
-    void AddEntity(InstanceHandle& handle, Signature entitySignature);
-    void RemoveEntity(InstanceHandle& handle, Signature entitySignature);
-    void RemoveEntity(InstanceHandle& handle);
-    void RemoveAllEntities();
+    void AddEntity(InstanceHandle handle, Signature entitySignature) override;
+    void RemoveEntity(InstanceHandle handle) override;
+    void RemoveAllEntities() override;
 
     /**
      * Runs the static and dynamic pass (see class description).
@@ -212,7 +211,7 @@ private:
     void PositionListener(Event& e);
 
 private:
-    std::shared_ptr<EngineECS> mECS; ///< Shared ECS.
+    EngineECS* mECS = nullptr; ///< ECS (not owned).
 
     std::set<InstanceHandle> mStaticEntities;  ///< Colliders that never move.
     std::set<InstanceHandle> mDynamicEntities; ///< Colliders that move (units).

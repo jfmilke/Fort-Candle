@@ -1,7 +1,7 @@
 #include "systems/CollisionSystem.hh"
 #include <typed-geometry/tg-lean.hh>
 
-void gamedev::CollisionSystem::AddEntity(InstanceHandle& handle, Signature entitySignature)
+void gamedev::CollisionSystem::AddEntity(InstanceHandle handle, Signature entitySignature)
 {
     if (mECS->GetComponent<Collider>(handle)->dynamic)
     {
@@ -9,7 +9,7 @@ void gamedev::CollisionSystem::AddEntity(InstanceHandle& handle, Signature entit
 
         mStaticEntities.erase(handle);
 
-        auto instance = mECS->GetInstance(handle);
+        auto const& instance = mECS->GetInstance(handle);
         mDynamicColliderHashMap.AddInstance(handle, instance.xform.translation, instance.max_bounds);
         mStaticColliderHashMap.RemoveInstance(handle);
     }
@@ -19,22 +19,13 @@ void gamedev::CollisionSystem::AddEntity(InstanceHandle& handle, Signature entit
 
         mDynamicEntities.erase(handle);
 
-        auto instance = mECS->GetInstance(handle);
+        auto const& instance = mECS->GetInstance(handle);
         mStaticColliderHashMap.AddInstance(handle, instance.xform.translation, instance.max_bounds);
         mDynamicColliderHashMap.RemoveInstance(handle);
     }
 }
 
-void gamedev::CollisionSystem::RemoveEntity(InstanceHandle& handle, Signature entitySignature)
-{
-    mDynamicEntities.erase(handle);
-    mStaticEntities.erase(handle);
-
-    mStaticColliderHashMap.RemoveInstance(handle);
-    mDynamicColliderHashMap.RemoveInstance(handle);
-}
-
-void gamedev::CollisionSystem::RemoveEntity(InstanceHandle& handle)
+void gamedev::CollisionSystem::RemoveEntity(InstanceHandle handle)
 {
     mDynamicEntities.erase(handle);
     mStaticEntities.erase(handle);
@@ -52,9 +43,9 @@ void gamedev::CollisionSystem::RemoveAllEntities()
     mDynamicColliderHashMap.Clear();
 }
 
-void gamedev::CollisionSystem::Init(std::shared_ptr<EngineECS>& ecs)
+void gamedev::CollisionSystem::Init(EngineECS& ecs)
 {
-    mECS = ecs;
+    mECS = &ecs;
 
     mDynamicColliderHashMap.Init(tg::size2::unit, tg::aabb3::unit_from_zero);
     mStaticColliderHashMap.Init(tg::size2::unit, tg::aabb3::unit_from_zero);
@@ -62,9 +53,9 @@ void gamedev::CollisionSystem::Init(std::shared_ptr<EngineECS>& ecs)
     mECS->AddFunctionalListener(FUNCTIONAL_LISTENER(EventType::NewPosition, CollisionSystem::PositionListener));
 }
 
-void gamedev::CollisionSystem::Init(std::shared_ptr<EngineECS>& ecs, tg::aabb3 map_bounds)
+void gamedev::CollisionSystem::Init(EngineECS& ecs, tg::aabb3 map_bounds)
 {
-    mECS = ecs;
+    mECS = &ecs;
 
     auto size = tg::size_of(map_bounds);
 

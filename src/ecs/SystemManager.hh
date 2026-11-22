@@ -1,8 +1,10 @@
 #pragma once
 #include "advanced/World.hh"
 #include "ecs/System.hh"
-#include "ecs/ComponentManager.hh"
-#include <unordered_map>
+#include <clean-core/assert.hh>
+#include <memory>
+#include <typeindex>
+#include <vector>
 
 namespace gamedev
 {
@@ -12,68 +14,56 @@ namespace gamedev
  * Keeps each system's entity set in sync with the entity signatures.
  * Based on https://austinmorlan.com/posts/entity_component_system/.
  *
- *  - Owned by `EngineECS`.
- *  - Like the `ComponentManager`, it keys systems by the `typeid(SysT).name()` pointer.
+ *  - Owned by `EngineECS`; destroying it destroys the systems (unless `Game` still holds them).
+ *  - Systems are kept in registration order, which is also the order in which they are notified.
  */
 class SystemManager
 {
 public:
-    /// Creates and stores a system of type `SysT` and returns a shared pointer to it. Asserts if registered twice.
-    template <typename SysT>
+    /// Creates and stores a system of type `SysT` with an empty signature and returns it. Asserts if registered twice.
+    template <EcsSystem SysT>
     std::shared_ptr<SysT> RegisterSystem()
     {
-        const char* typeName = typeid(SysT).name();
-
-        assert(mSystems.find(typeName) == mSystems.end() && "Registering system more than once.");
+        CC_ASSERT_MSG(!Find<SysT>(), "Registering system more than once.");
 
         auto system = std::make_shared<SysT>();
-        mSystems.insert({typeName, system});
+        mSystems.push_back({typeid(SysT), system, {}});
         return system;
     }
 
     /**
      * Sets the component signature that entities need to be added to system `SysT`.
      *
-     * Only the first call per system has an effect (`insert` does not overwrite), and existing entities are not re-checked.
-     * Call it right after `RegisterSystem`: `EntitySignatureChanged` stores an empty signature for every system that has none yet,
-     * and this call cannot replace it.
+     * Existing entities are not re-checked, so set it before entities with matching components are created.
      *
      * @param signature Components an entity needs; an empty signature matches every entity.
      */
-    template <typename SysT>
+    template <EcsSystem SysT>
     void SetSignature(Signature signature)
     {
-        const char* typeName = typeid(SysT).name();
+        auto entry = Find<SysT>();
+        CC_ASSERT_MSG(entry, "System used before registered.");
 
-        assert(mSystems.find(typeName) != mSystems.end() && "System used before registered.");
-
-        mSignatures.insert({typeName, signature});
+        if (entry)
+            entry->signature = signature;
     }
 
     /**
      * Removes an entity from every system.
      *
-     * @param handle Entity that was destroyed or became a prototype.
+     * @param handle Entity that is destroyed or became a prototype.
      */
     void EntityDestroyed(InstanceHandle handle)
     {
-        for (const auto& pair : mSystems)
-        {
-            const auto& system = pair.second;
-
-            system->RemoveEntity(handle);
-        }
+        for (auto const& entry : mSystems)
+            entry.system->RemoveEntity(handle);
     }
 
     /// Removes all entities from every system.
     void AllEntitiesDestroyed()
     {
-        for (const auto& pair : mSystems)
-        {
-            const auto& system = pair.second;
-
-            system->RemoveAllEntities();
-        }
+        for (auto const& entry : mSystems)
+            entry.system->RemoveAllEntities();
     }
 
     /**
@@ -84,25 +74,34 @@ public:
      */
     void EntitySignatureChanged(InstanceHandle handle, Signature entitySignature)
     {
-        for (const auto& pair : mSystems)
+        for (auto const& entry : mSystems)
         {
-            const auto& type = pair.first;
-            const auto& system = pair.second;
-            const auto& systemSignature = mSignatures[type];
-
-            if ((entitySignature & systemSignature) == systemSignature)
-            {
-                system->AddEntity(handle, entitySignature);
-            }
+            if ((entitySignature & entry.signature) == entry.signature)
+                entry.system->AddEntity(handle, entitySignature);
             else
-            {
-                system->RemoveEntity(handle, entitySignature);
-            }
+                entry.system->RemoveEntity(handle);
         }
     }
 
 private:
-    std::unordered_map<const char*, Signature> mSignatures{};            ///< System type name -> required signature.
-    std::unordered_map<const char*, std::shared_ptr<System>> mSystems{}; ///< System type name -> system.
+    /// A registered system with the components it requires.
+    struct Entry
+    {
+        std::type_index type;           ///< Type of `system`, to find it by type.
+        std::shared_ptr<System> system; ///< The system.
+        Signature signature;            ///< Components an entity needs to be part of `system`.
+    };
+
+    std::vector<Entry> mSystems; ///< In registration order; a handful of entries, so lookups are linear.
+
+    /// Entry of `SysT`, or nullptr if it is not registered.
+    template <EcsSystem SysT>
+    Entry* Find()
+    {
+        for (auto& entry : mSystems)
+            if (entry.type == typeid(SysT))
+                return &entry;
+        return nullptr;
+    }
 };
 }

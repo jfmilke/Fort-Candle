@@ -18,7 +18,7 @@ gamedev::QuadTree::QuadTree(tg::aabb2 global_region)
     mRoot->mRegion = global_region;
 }
 
-void gamedev::QuadTree::init(SharedEngineECS& engineECS) { ecs = engineECS; }
+void gamedev::QuadTree::init(EngineECS& engineECS) { ecs = &engineECS; }
 
 void gamedev::QuadTree::add(InstanceHandle& handle, Shape& shape, SharedNode& node)
 {

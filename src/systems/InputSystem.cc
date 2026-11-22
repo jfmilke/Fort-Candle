@@ -1,22 +1,18 @@
 #include "systems/InputSystem.hh"
 #include "advanced/transform.hh"
 
-void gamedev::InputSystem::AddEntity(InstanceHandle& handle, Signature entitySignature) {
+void gamedev::InputSystem::AddEntity(InstanceHandle handle, Signature entitySignature) {
     mEntities.insert(handle);
 }
 
-void gamedev::InputSystem::RemoveEntity(InstanceHandle& handle, Signature entitySignature) {
-    mEntities.erase(handle);
-}
-
-void gamedev::InputSystem::RemoveEntity(InstanceHandle& handle) {
+void gamedev::InputSystem::RemoveEntity(InstanceHandle handle) {
     mEntities.erase(handle);
 }
 
 void gamedev::InputSystem::RemoveAllEntities() { mEntities.clear(); }
 
-void gamedev::InputSystem::Init(std::shared_ptr<EngineECS>& ecs) {
-    mECS = ecs;
+void gamedev::InputSystem::Init(EngineECS& ecs) {
+    mECS = &ecs;
 }
 
 int gamedev::InputSystem::Update(float dt)

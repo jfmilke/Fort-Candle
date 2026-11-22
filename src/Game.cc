@@ -73,10 +73,10 @@ void Game::init()
     mGameAssets->initialize();
 
     // ECS
-    mECS = std::make_shared<gamedev::EngineECS>();
+    mECS = std::make_unique<gamedev::EngineECS>();
     mECS->Init(mAdvancedFeatures.mWorld);
 
-    mAdvancedFeatures.setECS(mECS);
+    mAdvancedFeatures.setECS(mECS.get());
 
     // Register components before use
     mECS->RegisterComponent<gamedev::Prototype>();
@@ -101,72 +101,29 @@ void Game::init()
     mECS->RegisterComponent<gamedev::Tower>();
     mECS->RegisterComponent<gamedev::ForeignControl>();
 
-    // Register systems managed by ECS before use
-    mCollisionSys = mECS->RegisterSystem<gamedev::CollisionSystem>();
-    {
-        Signature signature;
-        signature.set(mECS->GetComponentType<gamedev::Collider>());
-        mECS->SetSystemSignature<gamedev::CollisionSystem>(signature);
-    }
-    mRenderSys = mECS->RegisterSystem<gamedev::RenderSystem>();
-    {
-        Signature signature;
-        signature.set(mECS->GetComponentType<gamedev::Render>());
-        mECS->SetSystemSignature<gamedev::RenderSystem>(signature);
-    }
-    mPhysicsSys = mECS->RegisterSystem<gamedev::PhysicsSystem>();
-    {
-        Signature signature;
-        signature.set(mECS->GetComponentType<gamedev::Physics>());
-        mECS->SetSystemSignature<gamedev::PhysicsSystem>(signature);
-    }
-    mLightSys = mECS->RegisterSystem<gamedev::LightSystem>();
-    {
-        Signature signature;
-        signature.set(mECS->GetComponentType<gamedev::PointLightEmitter>());
-        mECS->SetSystemSignature<gamedev::LightSystem>(signature);
-    }
-    mParticleSys = mECS->RegisterSystem<gamedev::ParticleSystem>();
-    {
-        Signature signature;
-        signature.set(mECS->GetComponentType<gamedev::ParticleEmitter>());
-        mECS->SetSystemSignature<gamedev::ParticleSystem>(signature);
-    }
-
-    mGamelogicSys = mECS->RegisterSystem<gamedev::GamelogicSystem>();
-    {
-        Signature signature;
-        signature.set(mECS->GetComponentType<gamedev::Living>());
-        mECS->SetSystemSignature<gamedev::GamelogicSystem>(signature);
-    }
-
-    mAnimationSys = mECS->RegisterSystem<gamedev::AnimationSystem>();
-    {
-        Signature signature;
-        signature.set(mECS->GetComponentType<gamedev::Animated>());
-        mECS->SetSystemSignature<gamedev::AnimationSystem>(signature);
-    }
-
-    mAudioSys = mECS->RegisterSystem<gamedev::AudioSystem>();
-    {
-        Signature signature;
-        signature.set(mECS->GetComponentType<gamedev::SoundEmitter>());
-        mECS->SetSystemSignature<gamedev::AudioSystem>(signature);
-    }
-    mCleanSys = mECS->RegisterSystem<gamedev::CleanupSystem>();
+    // Register systems managed by ECS before use: each receives the entities with all listed components
+    mCollisionSys = mECS->RegisterSystem<gamedev::CollisionSystem, gamedev::Collider>();
+    mRenderSys = mECS->RegisterSystem<gamedev::RenderSystem, gamedev::Render>();
+    mPhysicsSys = mECS->RegisterSystem<gamedev::PhysicsSystem, gamedev::Physics>();
+    mLightSys = mECS->RegisterSystem<gamedev::LightSystem, gamedev::PointLightEmitter>();
+    mParticleSys = mECS->RegisterSystem<gamedev::ParticleSystem, gamedev::ParticleEmitter>();
+    mGamelogicSys = mECS->RegisterSystem<gamedev::GamelogicSystem, gamedev::Living>();
+    mAnimationSys = mECS->RegisterSystem<gamedev::AnimationSystem, gamedev::Animated>();
+    mAudioSys = mECS->RegisterSystem<gamedev::AudioSystem, gamedev::SoundEmitter>();
+    mCleanSys = mECS->RegisterSystem<gamedev::CleanupSystem>(); // every entity
 
     // Create autonomous systems not managed by ECS before use
     mEnvironmentSys = std::make_shared<gamedev::EnvironmentSystem>(); 
 
     // Initialize systems
-    mRenderSys->Init(mECS);
-    mPhysicsSys->Init(mECS);
-    mEnvironmentSys->Init(mECS);
-    mLightSys->Init(mECS);
-    mParticleSys->Init(mECS);
-    mAnimationSys->Init(mECS);
-    mCleanSys->Init(mECS);
-    mAudioSys->Init(mECS);
+    mRenderSys->Init(*mECS);
+    mPhysicsSys->Init(*mECS);
+    mEnvironmentSys->Init(*mECS);
+    mLightSys->Init(*mECS);
+    mParticleSys->Init(*mECS);
+    mAnimationSys->Init(*mECS);
+    mCleanSys->Init(*mECS);
+    mAudioSys->Init(*mECS);
 
     // Factories
     mUnitFac = std::make_shared<gamedev::UnitFactory>();
@@ -174,16 +131,16 @@ void Game::init()
     mNatureFac = std::make_shared<gamedev::NatureFactory>();
     mItemFac= std::make_shared<gamedev::ItemFactory>();
 
-    mGamelogicSys->Init(mECS, mAudioSys, mUnitFac, mStructFac, mItemFac, mGameAssets, 3.0);
+    mGamelogicSys->Init(*mECS, mAudioSys, mUnitFac, mStructFac, mItemFac, mGameAssets, 3.0);
 
-    mItemFac->Init(mECS, mGameAssets);
-    mUnitFac->Init(mECS, mGameAssets);
-    mStructFac->Init(mECS, mGameAssets);
-    mNatureFac->Init(mECS, mGameAssets);
+    mItemFac->Init(*mECS, mGameAssets);
+    mUnitFac->Init(*mECS, mGameAssets);
+    mStructFac->Init(*mECS, mGameAssets);
+    mNatureFac->Init(*mECS, mGameAssets);
 
     // Terrain
     mTerrain = std::make_shared<gamedev::Terrain>();
-    mTerrain->Init(mECS);
+    mTerrain->Init(*mECS);
     mTerrain->setGroundMesh("../data/meshes/world_ground.obj");
     mTerrain->setWaterMesh("../data/meshes/world_water.obj");
     mTerrain->setGroundTexture(mGameAssets->mTexAlbedoPolyPalette);
@@ -197,7 +154,7 @@ void Game::init()
     mStructFac->AttachTerrain(mTerrain);
     mNatureFac->AttachTerrain(mTerrain);
     mGamelogicSys->AttachTerrain(mTerrain);
-    mCollisionSys->Init(mECS, mTerrain->GetSize());
+    mCollisionSys->Init(*mECS, mTerrain->GetSize());
 
     // Initialize GFX
     mRenderSys->UpdateWindowResolution(getWindowSize());
@@ -731,7 +688,30 @@ void Game::onGui()
 
 void Game::onClose()
 {
+    // Release everything that owns GL objects while the context still exists; GlfwApp terminates GLFW right after this.
+    // Order: instances (meshes, textures), then the users of the ECS, then the ECS, which destroys the systems.
     mAdvancedFeatures.destroy();
+
+    mUnitFac.reset();
+    mStructFac.reset();
+    mNatureFac.reset();
+    mItemFac.reset();
+    mTerrain.reset();
+
+    mCollisionSys.reset();
+    mRenderSys.reset();
+    mPhysicsSys.reset();
+    mEnvironmentSys.reset();
+    mLightSys.reset();
+    mParticleSys.reset();
+    mGamelogicSys.reset();
+    mAnimationSys.reset();
+    mCleanSys.reset();
+    mAudioSys.reset();
+
+    mAdvancedFeatures.setECS(nullptr);
+    mECS.reset();
+    mGameAssets.reset();
 
     GlfwApp::onClose();
 }

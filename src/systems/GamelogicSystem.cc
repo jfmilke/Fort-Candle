@@ -5,7 +5,7 @@
 #include "utility/Random.hh"
 #include "utility/misc.hh"
 
-void gamedev::GamelogicSystem::AddEntity(InstanceHandle& handle, Signature entitySignature)
+void gamedev::GamelogicSystem::AddEntity(InstanceHandle handle, Signature entitySignature)
 {
     mEntities.insert(handle);
 
@@ -38,16 +38,7 @@ void gamedev::GamelogicSystem::AddEntity(InstanceHandle& handle, Signature entit
     }
 }
 
-void gamedev::GamelogicSystem::RemoveEntity(InstanceHandle& handle, Signature entitySignature) {
-
-    mArtisans.erase(handle);
-    mSoldiers.erase(handle);
-    mMonsters.erase(handle);
-    mPeople.erase(handle);
-    mEntities.erase(handle);
-}
-
-void gamedev::GamelogicSystem::RemoveEntity(InstanceHandle& handle)
+void gamedev::GamelogicSystem::RemoveEntity(InstanceHandle handle)
 {
     mArtisans.erase(handle);
     mSoldiers.erase(handle);
@@ -65,7 +56,7 @@ void gamedev::GamelogicSystem::RemoveAllEntities()
     mEntities.clear();
 }
 
-void gamedev::GamelogicSystem::Init(std::shared_ptr<EngineECS>& ecs,
+void gamedev::GamelogicSystem::Init(EngineECS& ecs,
                                     std::shared_ptr<AudioSystem>& as,
                                     std::shared_ptr<UnitFactory>& uf,
                                     std::shared_ptr<StructureFactory>& sf,
@@ -73,7 +64,7 @@ void gamedev::GamelogicSystem::Init(std::shared_ptr<EngineECS>& ecs,
                                     std::shared_ptr<GameObjects>& go,
                                     float globalScale)
 {
-    mECS = ecs;
+    mECS = &ecs;
     mAS = as;
     mUF = uf;
     mSF = sf;

@@ -29,14 +29,9 @@ public:
     /**
      * Opens the default OpenAL device and context, creates the sources and loads all sounds (`LoadSounds`).
      *
-     * @param ecs Shared ECS.
+     * @param ecs The ECS; must outlive this object.
      */
-    void Init(std::shared_ptr<EngineECS>& ecs);
-
-    void AddEntity(InstanceHandle& handle, Signature entitySignature);
-    void RemoveEntity(InstanceHandle& handle, Signature entitySignature);
-    void RemoveEntity(InstanceHandle& handle);
-    void RemoveAllEntities();
+    void Init(EngineECS& ecs);
 
     /**
      * Advances all emitters, removes finished positional emitters and (re)assigns sources.
@@ -190,7 +185,7 @@ private:
      */
     bool CompareNodesByPriority(InstanceHandle handle1, InstanceHandle handle2);
 
-    std::shared_ptr<EngineECS> mECS; ///< Shared ECS.
+    EngineECS* mECS = nullptr; ///< ECS (not owned).
 
     unsigned int channels; ///< Number of OpenAL sources to create.
 
