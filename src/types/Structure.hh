@@ -4,7 +4,8 @@
 
 namespace gamedev
 {
-enum class StructType 
+/// Kinds of buildings. Unused: the `StructureFactory` identifies presets by name.
+enum class StructType
 {
     Undefined = 0,
     Bonfire,

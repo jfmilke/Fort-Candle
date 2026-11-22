@@ -10,12 +10,14 @@
 
 namespace gamedev
 {
+/// Factory for the decorative meshes in `data/meshes/nature/` (trees, rocks, grass). Saves to `data/config/nature.fac`.
 class NatureFactory : public Factory
 {
 public:
     NatureFactory() { mSavefilePath = "../data/config/nature.fac"; }
 
 private:
+    /// Gives every nature preset a `Render` component (no collision).
     void PostProcessRegistration(InstanceHandle presetHandle) override;
 };
 }

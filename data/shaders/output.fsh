@@ -129,10 +129,10 @@ vec3 tonemap_mgsv(in vec3 color)
 }
 
 
-// accurate linear to sRGB conversion (often simplified to pow(x, 1/2.24))
+// accurate linear to sRGB conversion (often simplified to pow(x, 1/2.2))
 vec3 applySRGBCurve(vec3 x)
 {
-    // accurate linear to sRGB conversion (often simplified to pow(x, 1/2.24))
+    // accurate linear to sRGB conversion (often simplified to pow(x, 1/2.2))
     return mix(
         vec3(1.055) * pow(x, vec3(1.0/2.4)) - vec3(0.055), 
         x * vec3(12.92), 
@@ -202,7 +202,7 @@ void main()
         color = applySRGBCurve(color);
     }
 
-    // some random additional effect
+    // debug effect: invert the foreground (uShowPostProcess is never enabled by the game)
     if (uShowPostProcess && depth < 1)
     {
         color = 1 - color; // invert color for foreground if true

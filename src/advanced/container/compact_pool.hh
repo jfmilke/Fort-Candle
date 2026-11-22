@@ -1,8 +1,6 @@
 #pragma once
 
-// @Kersten sorry fuers reinzeihen von clean-core, aber dieser container
-// ist ziemlich nuetzlich um eine simple render world zu basteln und waere
-// etwas umstandlich zu porten
+// Course framework code; the reason this game depends on clean-core.
 #include <clean-core/alloc_array.hh>
 #include <clean-core/atomic_linked_pool.hh>
 #include <clean-core/storage.hh>
@@ -10,16 +8,24 @@
 
 namespace gamedev
 {
-// O(1) acquire, release, access
-// memory contiguous
-// access via handles is double indirected
+/**
+ * Fixed-capacity pool with stable handles and densely packed values.
+ *
+ *  - Acquire, release and access are O(1).
+ *  - Values are contiguous (`get_span()`); access via a handle goes through one extra indirection
+ *    (handle -> slot index).
+ *  - Releasing a value moves the last value into the freed slot, so references and pointers to values are
+ *    invalidated by every `release`. Keep handles instead.
+ */
 template <class T>
 struct compact_pool
 {
 public:
-    using handle_t = cc::atomic_linked_pool<size_t>::handle_t;
+    using handle_t = cc::atomic_linked_pool<size_t>::handle_t; ///< Stable handle of a value.
 
     compact_pool() = default;
+
+    /// Creates a pool with capacity `size` (see `initialize`).
     explicit compact_pool(size_t size, cc::allocator* alloc = cc::system_allocator) { initialize(size, alloc); }
 
     compact_pool(compact_pool&&) = delete;
@@ -29,6 +35,7 @@ public:
 
     ~compact_pool() { _destroy(); }
 
+    /// Allocates storage for `size` values from `alloc`. Does nothing for size 0; asserts if already initialized.
     void initialize(size_t size, cc::allocator* alloc = cc::system_allocator)
     {
         if (size == 0)
@@ -40,9 +47,10 @@ public:
         _compact_pool_handles = _compact_pool_handles.uninitialized(size, alloc);
     }
 
+    /// Destroys all values and frees the storage; the pool can be initialized again.
     void destroy() { _destroy(); }
 
-    /// acquire a slot
+    /// Default-constructs a new value at the end of the packed range and returns its handle. Asserts if full.
     [[nodiscard]] handle_t acquire()
     {
         CC_ASSERT(!is_full() && "overcommited");
@@ -61,8 +69,10 @@ public:
         return pool_handle;
     }
 
-    /// free a slot
-    /// returns true if a move happened from element [index head (after call)] to element [index of handle], false otherwise
+    /**
+     * Destroys the value of `handle` and moves the last value into its slot.
+     * Returns true if a value was moved (from index `size()` after the call to the released index), false otherwise.
+     */
     bool release(handle_t handle)
     {
         CC_ASSERT(!is_empty() && "already empty");
@@ -83,8 +93,7 @@ public:
             return false;
         }
 
-        // move head to this position
-        //_compact_values[compact_idx].value = cc::move(_compact_values[_compact_head].value);
+        // move head to this position (move-construct: the value in this slot was destroyed above)
         new (cc::placement_new, &_compact_values[compact_idx].value) T(cc::move(_compact_values[_compact_head].value));
         _compact_pool_handles[compact_idx] = _compact_pool_handles[_compact_head];
 
@@ -95,6 +104,10 @@ public:
         return true;
     }
 
+    /**
+     * Destroys all values and invalidates all handles; the storage is kept. Returns the result of the handle pool's
+     * `release_all()`.
+     */
     unsigned release_all()
     {
         if constexpr (!std::is_trivially_destructible_v<T>)
@@ -107,34 +120,56 @@ public:
         return _sparse_indices.release_all();
     }
 
-    /// access a slot
-    /// do not maintain direct references, they are invalidated after the next release
+    /**
+     * Returns the value of a live `handle`.
+     * Do not keep the reference: it is invalidated by the next `release`.
+     */
     CC_FORCE_INLINE T& get(handle_t handle) { return _compact_values[_sparse_indices.get(handle)].value; }
+
+    /// Const version of `get`.
     CC_FORCE_INLINE T const& get(handle_t handle) const { return _compact_values[_sparse_indices.get(handle)].value; }
 
+    /// Pointer to the first of `size()` packed values.
     CC_FORCE_INLINE T* data() { return reinterpret_cast<T*>(_compact_values.data()); }
+
+    /// Const version of `data`.
     CC_FORCE_INLINE T const* data() const { return reinterpret_cast<T const*>(_compact_values.data()); }
 
+    /// Number of live values.
     size_t size() const { return _compact_head; }
+
+    /// Size of the live values in bytes.
     size_t size_bytes() const { return size() * sizeof(T); }
 
+    /// Capacity given to `initialize`.
     size_t max_size() const { return _compact_values.size(); }
 
+    /// True if no more values can be acquired.
     bool is_full() const { return size() == max_size(); }
+
+    /// True if there are no live values.
     bool is_empty() const { return _compact_head == 0; }
 
+    /// True if `handle` is valid and refers to a live value.
     bool is_alive(handle_t handle) const { return handle != unsigned(-1) && _sparse_indices.is_alive(handle); }
 
-    /// iterate allocated slots
-    /// for (auto const& val : pool.get_span()) { ... }
+    /// All live values, for iteration: `for (auto const& val : pool.get_span()) { ... }`
     CC_FORCE_INLINE cc::span<T> get_span() { return {data(), size()}; }
+
+    /// Const version of `get_span`.
     CC_FORCE_INLINE cc::span<T const> get_span() const { return {data(), size()}; }
 
+    /// Current packed index of a live `handle`'s value.
     CC_FORCE_INLINE size_t get_handle_index(handle_t handle) const { return _sparse_indices.get(handle); }
+
+    /// Same as `size()`.
     CC_FORCE_INLINE size_t get_index_head() const { return _compact_head; }
+
+    /// Handle of the value at packed `index`.
     CC_FORCE_INLINE handle_t get_nth_handle(unsigned index) const { return _compact_pool_handles[index]; }
 
 private:
+    /// Destroys all live values and frees the storage (no-op if never initialized).
     void _destroy()
     {
         if (max_size() == 0)
@@ -154,10 +189,10 @@ private:
 
 
 private:
-    cc::atomic_linked_pool<size_t, true> _sparse_indices;
-    cc::alloc_array<cc::storage_for<T>> _compact_values;
-    cc::alloc_array<handle_t> _compact_pool_handles;
-    size_t _compact_head = 0;
+    cc::atomic_linked_pool<size_t, true> _sparse_indices; ///< Handle -> packed index.
+    cc::alloc_array<cc::storage_for<T>> _compact_values;  ///< Packed values; [0, _compact_head) are live.
+    cc::alloc_array<handle_t> _compact_pool_handles;      ///< Packed index -> handle.
+    size_t _compact_head = 0;                             ///< Number of live values.
 };
 
 }

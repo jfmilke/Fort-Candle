@@ -106,6 +106,7 @@ void gamedev::CollisionSystem::ResolveStaticCollisions()
             if (hp->health.current <= 0.0f)
             {
                 mECS->MarkDestruction(handle_static);
+                // TODO: This event is never sent.
                 Event e(EventType::BuildingDestroyed, handle_static, handle_static);
             }
         }
@@ -119,7 +120,6 @@ void gamedev::CollisionSystem::ResolveStaticCollisions()
         bounds.max *= instance_s.xform.scaling;
         bounds.min *= instance_s.xform.scaling;
 
-        //for (const auto& handle_dynamic : mDynamicEntities)
         for (const auto& handle_dynamic : mDynamicColliderHashMap.FindNear(instance_s.xform.translation, instance_s.max_bounds))
         {
             if (mECS->TestSignature<InTower>(handle_dynamic))
@@ -199,14 +199,6 @@ void gamedev::CollisionSystem::ResolveStaticCollisions()
 
         else if (circleShape_s && circleShape_d)
             collision = Collide(instance_d, instance_s, circleShape_d, circleShape_s);
-
-        /*
-        if (collision)
-        {
-            Event collision_event(EventType::StaticCollision, handle_static, handle_dynamic);
-            mECS->SendFunctionalEvent(collision_event);
-        }
-        */
     }
 }
 
@@ -226,7 +218,6 @@ void gamedev::CollisionSystem::ResolveDynamicCollisions()
         auto circleShape_1 = mECS->TryGetComponent<CircleShape>(handle_1);
         auto& instance_1 = mECS->GetInstance(handle_1);
 
-        //for (const auto& handle_2 : mDynamicEntities)
         for (const auto& handle_2 : mDynamicColliderHashMap.FindNear(instance_1.xform.translation, instance_1.max_bounds))
         {
             if (handle_1 == handle_2)
@@ -243,6 +234,8 @@ void gamedev::CollisionSystem::ResolveDynamicCollisions()
 
             bool collision = false;
 
+            // TODO: The two mixed cases pass a null shape of the wrong kind. All dynamic colliders (units) use box
+            // shapes, so only the box-box case is reached.
             if (boxShape_1 && boxShape_2)
                 collision = Collide(instance_1, instance_2, boxShape_1, boxShape_2);
 
@@ -257,194 +250,6 @@ void gamedev::CollisionSystem::ResolveDynamicCollisions()
         }
     }
 }
-
-/*
-// Bouncing means mutual displacement
-void gamedev::CollisionSystem::bounce(const Shape& shapeA, const Shape& shapeB, float dt)
-{
-    tg::pos3 centerA; 
-    centerA.x = shapeA.aabb.min.x + shapeA.aabb.max.x;
-    centerA.z = shapeA.aabb.min.y + shapeA.aabb.max.y;
-    centerA += shapeA.instance->xform.translation;
-
-    tg::pos3 centerB;
-    centerB.x = shapeB.aabb.min.x + shapeB.aabb.max.x;
-    centerB.z = shapeB.aabb.min.y + shapeB.aabb.max.y;
-    centerB += shapeB.instance->xform.translation;
-
-
-    auto dir0 = (centerA - centerB);
-    auto dir1 = (centerB - centerA);
-
-
-    dir0 = tg::normalize_safe(dir0);
-    dir1 = tg::normalize_safe(dir1);
-
-
-    shapeA.instance->xform.translation.x += dt * dir0.x * 8;
-    shapeA.instance->xform.translation.z += dt * dir0.z * 8;
-
-    shapeB.instance->xform.translation.x += dt * dir1.x * 8;
-    shapeB.instance->xform.translation.z += dt * dir1.z * 8;
-}
-
-// Collision means there is one stationary rocklike badass object
-void gamedev::CollisionSystem::collide(const Shape& centerDynamic, const Shape& centerStationary, float dt)
-{
-    tg::pos3 centerA;
-    centerA.x = centerDynamic.aabb.min.x + centerDynamic.aabb.max.x;
-    centerA.z = centerDynamic.aabb.min.y + centerDynamic.aabb.max.y;
-    centerA += centerDynamic.instance->xform.translation;
-
-    tg::pos3 centerB;
-    centerB.x = centerStationary.aabb.min.x + centerStationary.aabb.max.x;
-    centerB.z = centerStationary.aabb.min.y + centerStationary.aabb.max.y;
-    centerB += centerStationary.instance->xform.translation;
-
-
-    auto dir0 = 8 * tg::normalize_safe(centerA - centerB);
-
-    centerDynamic.instance->xform.translation.x += dt * dir0.x;
-    centerDynamic.instance->xform.translation.z += dt * dir0.z;
-}
-
-bool gamedev::CollisionSystem::intersects(const Shape& aabb1, const Shape& aabb2)
-{
-    const auto scale_1 = aabb1.instance->xform.scale_mat2D();
-    const auto scale_2 = aabb2.instance->xform.scale_mat2D();
-
-    tg::vec2 translate_1;
-    translate_1.x = aabb1.instance->xform.translation.x;
-    translate_1.y = aabb1.instance->xform.translation.z;
-
-    tg::vec2 translate_2;
-    translate_2.x = aabb2.instance->xform.translation.x;
-    translate_2.y = aabb2.instance->xform.translation.z;
-
-    tg::aabb2 ab1 = aabb1.aabb;
-    ab1.min = scale_1 * ab1.min + translate_1;
-    ab1.max = scale_1 * ab1.max + translate_1;
-
-    tg::aabb2 ab2 = aabb2.aabb;
-    ab2.min = scale_2 * ab2.min + translate_2;
-    ab2.max = scale_2 * ab2.max + translate_2;
-
-    return intersects(ab1, ab2);
-}
-
-bool gamedev::CollisionSystem::intersects(const tg::aabb2& aabb1, const tg::aabb2& aabb2)
-{
-    bool xMatch = false;
-    bool yMatch = false;
-
-    if (aabb1.min.x < aabb2.max.x && aabb1.max.x > aabb2.min.x && aabb1.min.y < aabb2.max.y && aabb1.max.y > aabb2.min.y)
-        return 1; // Intersection
-
-    return 0;
-}
-
-
-
-// Calculates aabb of box and tests intersection between (aabb, circle).
-bool gamedev::CollisionSystem::intersects(const tg::box2& box, const tg::sphere2& circle)
-{
-    // Reference vectors to calculate rotation between box & unit box
-    auto b0 = tg::normalize(box.half_extents * tg::vec2::one);
-    auto u0 = box.unit_centered.half_extents * tg::vec2::one;
-
-    // Matrix which transforms unit vector b0 into unit vector u0 ("inverse rotate"):
-    tg::mat3 invRotate{tg::mat3::identity};
-    invRotate[0][0], invRotate[1][1] = b0.x * u0.x + b0.y * u0.y;
-    invRotate[1][0] = u0.x * b0.y - b0.x - u0.y;
-    invRotate[0][1] = b0.x * u0.y - u0.x - b0.y;
-
-    // box -> AABB
-    tg::box2 b;
-    b.center = invRotate * box.center;
-    b.half_extents = tg::mat2(invRotate * box.half_extents[0], invRotate * box.half_extents[1]);
-    
-    tg::aabb2 aabb = tg::aabb_of(b);
-
-    return intersects(aabb, circle);
-}
-
-bool gamedev::CollisionSystem::intersects(const tg::aabb2& aabb, const tg::sphere2& circle)
-{
-    tg::pos2 closest(INFINITY, INFINITY);
-
-    if (circle.center.x < aabb.min.x)
-        closest.x = aabb.min.x; // left of aabb
-    else if (circle.center.x > aabb.max.x)
-        closest.x = aabb.max.x; // right of aabb
-    else
-        closest.x = circle.center.x; // horizontal match
-
-
-    if (circle.center.y < aabb.min.y)
-        closest.y = aabb.min.y; // bottom of aabb
-    else if (circle.center.y > aabb.max.y)
-        closest.y = aabb.max.y; // top of aabb
-    else
-        closest.y = circle.center.y; // vertical match
-
-    // If the closest point lies within circle => collision
-    if (tg::distance_sqr(circle.center, closest) < (circle.radius * circle.radius))
-        return 1; // Intersection
-
-    return 0;
-}
-
-
-bool gamedev::CollisionSystem::intersects(const tg::sphere2& circleA, const tg::sphere2& circleB)
-{
-    // If distance between both midpoints is less than any radius of both => collision
-    auto distance = tg::distance(circleA.center, circleB.center);
-
-    if (distance < circleA.radius + circleB.radius)
-        return 1; // Intersection
-
-    return 0;
-}
-
-bool gamedev::CollisionSystem::intersects(const BoxShape& box, const CircleShape& circle)
-{
-    // Box interpreted as AABB, therefore only scaling & translation
-    const auto boxScale = box.instance->xform.scale_mat2D();
-    const auto boxRot = box.instance->xform.rotation_mat2D();
-    const auto boxTrans = tg::translation(tg::vec2(box.instance->xform.translation));
-
-    tg::box2 transformedBox;
-    transformedBox.center = boxScale * boxTrans * box.box.center;
-    transformedBox.half_extents[0] = boxScale * box.box.half_extents[0];
-    transformedBox.half_extents[1] = boxScale * box.box.half_extents[1];
-
-    tg::aabb2 AABB = tg::aabb_of(transformedBox);
-
-    // As box is AABB, circle needs to account for the box' rotation & translation:
-    // 1. Transform circle by its own means
-    // 2. Rotate circle back by inverse rotation of box around box center (since both assume (0,0) center just rotate, no need for prior translation to box center)
-    tg::sphere2 transformedCircle;
-    transformedCircle.center = circle.instance->xform.transform_mat2D() * tg::transpose(boxRot) * circle.circle.center;
-    transformedCircle.radius = std::max(circle.instance->xform.scaling.width, circle.instance->xform.scaling.depth) * circle.circle.radius;
-
-    return intersects(AABB, transformedCircle);
-}
-
-bool gamedev::CollisionSystem::intersects(const CircleShape& circleA, const CircleShape& circleB)
-{ 
-    // If distance between both midpoints is less than any radius => collision
-    tg::sphere2 cA;
-    cA.center = circleA.circle.center + tg::vec2(circleA.instance->xform.translation);
-    cA.radius = std::max(circleA.instance->xform.scaling.width, circleA.instance->xform.scaling.depth) * circleA.circle.radius;
-
-    tg::sphere2 cB;
-    cB.center = circleB.circle.center + tg::vec2(circleB.instance->xform.translation);
-    cB.radius = std::max(circleB.instance->xform.scaling.width, circleB.instance->xform.scaling.depth) * circleB.circle.radius;
-    auto centerB = tg::pos2(circleB.instance->xform.translation);
-
-    return intersects(cA, cB);
-}
-*/
 
 bool gamedev::CollisionSystem::Collide(Instance& instance_dynamic, Instance& instance_any, const BoxShape* box_dynamic, const BoxShape* box_any)
 {
@@ -465,7 +270,6 @@ bool gamedev::CollisionSystem::Collide(Instance& instance_dynamic, Instance& ins
     auto distance = tg::distance(tBox1.center, tBox2.center);
     auto radius1 = tg::length(tBox1.half_extents[0] + tBox1.half_extents[2]);
     auto radius2 = tg::length(tBox2.half_extents[0] + tBox2.half_extents[2]);
-    //if (distance > (radius1 + radius2) + (radius1 + radius2))
     if (distance > (radius1 + radius2))
         return 0; // No Intersection
 
@@ -663,7 +467,7 @@ tg::vec3 gamedev::CollisionSystem::minimalPush(const tg::box3& box_dynamic, cons
         }
     }
 
-    // Assert, that box1 is pushed away from box2
+    // Ensure that the dynamic shape is pushed away from the other one
     tg::vec3 d = box_any.center - box_dynamic.center;
     if (tg::dot(d, minimum_push) > 0)
         minimum_push *= -1;
@@ -722,7 +526,7 @@ tg::vec3 gamedev::CollisionSystem::minimalPush(const tg::box3& box_dynamic, cons
         }
     }
 
-    // Assert, that box1 is pushed away from box2
+    // Ensure that the dynamic shape is pushed away from the other one
     tg::vec3 d = circle_any.center - box_dynamic.center;
     if (tg::dot(d, minimum_push) > 0)
         minimum_push *= -1;
@@ -774,7 +578,6 @@ void gamedev::CollisionSystem::resolve(Instance& instance_dynamic, Instance& ins
             tg::vec3 bounce = tg::dot(vec_collision, N) * N; // perpendicular: bounce
             tg::vec3 friction = vec_collision - bounce;
 
-            //physics1->velocity = friction_damping * friction;
             instance_dynamic.xform.move_absolute((friction_damping * friction) * mDT);
 
             return;
@@ -782,31 +585,6 @@ void gamedev::CollisionSystem::resolve(Instance& instance_dynamic, Instance& ins
     }
     
     instance_dynamic.xform.move_absolute(push); 
-
-    // Old stuff
-    //{
-    //    const float bounce_damping = 0.5;
-    //    const float friction_damping = 1.0;
-    //
-    //    // 1. Push dynamic object outside
-    //    instance_dynamic.xform.move_absolute(push);
-    //
-    //    if (physics1)
-    //    {
-    //        tg::vec3 N = tg::normalize(push);
-    //
-    //        tg::vec3 vec_collision = physics1->velocity;
-    //
-    //        // todo: fix bounce
-    //        // if (physics2)
-    //        //    vec_collision -= physics2->velocity;
-    //
-    //        tg::vec3 bounce = tg::dot(vec_collision, N) * N; // perpendicular: bounce
-    //        tg::vec3 friction = vec_collision - bounce;
-    //
-    //        physics1->velocity = bounce_damping * bounce + friction_damping * friction;
-    //    }
-    //}
 }
 
 void gamedev::CollisionSystem::PositionListener(Event& e)

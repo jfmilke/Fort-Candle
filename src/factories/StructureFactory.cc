@@ -152,7 +152,6 @@ void gamedev::StructureFactory::Init_StartingBonfire()
 
     auto prototype = mECS->CreateComponent<gamedev::Prototype>(handle);
     auto renderable = mECS->CreateComponent<Render>(handle);
-    //auto shape = mECS->CreateComponent<gamedev::CircleShape>(handle);
     auto shape = mECS->CreateComponent<gamedev::BoxShape>(handle);
     auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
     auto light = mECS->CreateComponent<gamedev::PointLightEmitter>(handle);
@@ -164,14 +163,12 @@ void gamedev::StructureFactory::Init_StartingBonfire()
     // Render
 
     // Shape
-    //shape->circle = mObj->aabb3_as_circle(mObj->getAABB("bonfire"));
     shape->box = mObj->aabb3_as_box(mObj->getAABB("bonfire"));
 
     // Collider
     collider->dynamic = false;
 
     // Light
-    //light->pl.position = shape->circle.center + tg::vec3(0, 1, 0); // Light above center
     light->pl.position = shape->box.center + tg::vec3(0, 1, 0); // Light above center
     light->pl.color = tg::vec3(255, 108, 33) / 255;
     light->pl.intensity = 20.0;
@@ -248,7 +245,6 @@ void gamedev::StructureFactory::Init_RegularBonfire()
 
     auto prototype = mECS->CreateComponent<gamedev::Prototype>(handle);
     auto renderable = mECS->CreateComponent<Render>(handle);
-    // auto shape = mECS->CreateComponent<gamedev::CircleShape>(handle);
     auto shape = mECS->CreateComponent<gamedev::BoxShape>(handle);
     auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
     auto light = mECS->CreateComponent<gamedev::PointLightEmitter>(handle);
@@ -260,14 +256,12 @@ void gamedev::StructureFactory::Init_RegularBonfire()
     // Render
 
     // Shape
-    //shape->circle = mObj->aabb3_as_circle(mObj->getAABB("bonfire"));
     shape->box = mObj->aabb3_as_box(mObj->getAABB("bonfire"));
 
     // Collider
     collider->dynamic = false;
 
     // Light
-    //light->pl.position = shape->circle.center + tg::vec3(0, 1, 0); // Light above center
     light->pl.position = shape->box.center + tg::vec3(0, 1, 0); // Light above center
     light->pl.color = tg::vec3(255, 108, 33) / 255;
     light->pl.intensity = 20.0;
@@ -348,7 +342,6 @@ void gamedev::StructureFactory::Init_Forge()
     destructible->health.current = destructible->health.max;
 
     // Shape
-    // auto aabb = mObj->getAABB("forgefurnace");
     shape->box = mObj->aabb3_as_box(mObj->getAABB("forgefurnace"));
 
     // Collider

@@ -11,22 +11,31 @@ GLOW_SHARED(struct, CircleShape);
 
 typedef struct Instance Instance;
 
-// Base Component Struct
-// Components are POD
-// ... Credits go to RTG Assignment 2 ;)
+/**
+ * Base of all components: plain data structs attached to an instance through the ECS.
+ *
+ * Credits go to RTG Assignment 2.
+ *
+ *  - Components are stored by value in a `ComponentArray` (copied on insert, moved around on removal), so they must
+ *    stay copyable.
+ *  - A new component type must be registered with `EngineECS::RegisterComponent` in `Game::init()` before use.
+ *  - Derived types inherit the constructors (`using Component::Component;`).
+ */
 struct Component
 {
-    // Backreference from Component to Entity
+    /**
+     * Back-pointer to the owning instance. Prefer `EngineECS::GetInstance({handle_value})`.
+     *
+     * TODO: Can be stale: the `World` moves instances when another one is destroyed. Remove it or keep it updated.
+     */
     Instance* instance = nullptr;
-    uint32_t handle_value = uint32_t(-1);
+    uint32_t handle_value = uint32_t(-1); ///< Handle value of the owning instance.
 
+    /// Creates a component that is not attached to an instance yet.
     Component() = default;
-    // A component can only be created for a given entity
-    Component(Instance* i) : instance(i) {}
 
-    // Forbid copying of components to prevent usage errors
-    // Component(Component const&) = delete;
-    // Component& operator=(Component const&) = delete;
+    /// Creates a component for the instance `i`.
+    Component(Instance* i) : instance(i) {}
 
     // Destructor must be virtual in order to safely delete subclasses
     virtual ~Component() {}

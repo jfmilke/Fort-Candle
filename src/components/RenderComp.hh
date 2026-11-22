@@ -3,13 +3,13 @@
 
 namespace gamedev
 {
-// Marks object to be rendered by the Rendering System
+/// Marks an instance to be drawn by the `RenderSystem` and controls mouse interaction with it.
 struct Render : Component
 {
     using Component::Component;
-    
-    transform* inheritTransform = nullptr;
-    bool selectable = false;
-    bool targetable = false;
+
+    transform* inheritTransform = nullptr; ///< Unused.
+    bool selectable = false;               ///< Can be selected with a left click.
+    bool targetable = false;               ///< Can be targeted with a right click (e.g. as attack target).
 };
 }

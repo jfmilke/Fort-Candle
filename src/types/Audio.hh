@@ -4,6 +4,7 @@
 
 namespace gamedev
 {
+/// Priority of a sound emitter. Stored but unused (sorting by priority is disabled in `AudioSystem::Update`).
 enum SoundPriority
 {
     low,
@@ -12,19 +13,22 @@ enum SoundPriority
     always
 };
 
+/// Volume group of a sound; index into the per-type volumes of the `AudioSystem`.
 enum SoundType
 {
-    effect,
-    ambient,
-    music,
-    ui
+    effect,  ///< Game effects (combat, building, ...).
+    ambient, ///< Ambient loops (water, wind, ...).
+    music,   ///< Music.
+    ui       ///< Interface clicks.
 };
 
+/// An OpenAL source and whether an emitter currently uses it.
 struct OALSource
 {
-    ALuint source;
-    bool inUse;
+    ALuint source; ///< OpenAL source name.
+    bool inUse;    ///< Attached to an emitter.
 
+    /// Wraps the existing source `src` (not in use).
     OALSource(ALuint src)
     {
         source = src;

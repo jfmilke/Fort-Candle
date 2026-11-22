@@ -6,21 +6,19 @@
 
 namespace gamedev
 {
-/***
- * https://austinmorlan.com/posts/entity_component_system/
+/**
+ * Owns all registered systems and their signatures.
  *
- * The System Manager registers System Types at runtime.
- * It also is in charge of maintaining a record of registered Systems and their Signatures.
+ * Keeps each system's entity set in sync with the entity signatures.
+ * Based on https://austinmorlan.com/posts/entity_component_system/.
  *
- * Fun Facts:
- *    - Like the ComponentManager again the typeid(..).name() pointer is used as a unique key to map to the systems.
- *
- ***/
-
+ *  - Owned by `EngineECS`.
+ *  - Like the `ComponentManager`, it keys systems by the `typeid(SysT).name()` pointer.
+ */
 class SystemManager
 {
 public:
-    // Registers a new System Type.
+    /// Creates and stores a system of type `SysT` and returns a shared pointer to it. Asserts if registered twice.
     template <typename SysT>
     std::shared_ptr<SysT> RegisterSystem()
     {
@@ -33,7 +31,10 @@ public:
         return system;
     }
 
-    // Defines the Signature for a System Type.
+    /**
+     * Sets the component signature that entities need to be added to system `SysT`. Only the first call per system has an
+     * effect (`insert` does not overwrite). Does not re-check existing entities.
+     */
     template <typename SysT>
     void SetSignature(Signature signature)
     {
@@ -44,7 +45,7 @@ public:
         mSignatures.insert({typeName, signature});
     }
 
-    // Removes the destroyed Entity from all Systems if necessary.
+    /// Removes `handle` from every system.
     void EntityDestroyed(InstanceHandle handle)
     {
         for (const auto& pair : mSystems)
@@ -55,7 +56,7 @@ public:
         }
     }
 
-    // Notifies all systems, that all entities have been destroyed.
+    /// Removes all entities from every system.
     void AllEntitiesDestroyed()
     {
         for (const auto& pair : mSystems)
@@ -66,7 +67,7 @@ public:
         }
     }
 
-    // Checks the (new) Entity Signature against all System Signatures to add or remove them from Systems.
+    /// Adds `handle` to every system whose signature is contained in `entitySignature` and removes it from all others.
     void EntitySignatureChanged(InstanceHandle handle, Signature entitySignature)
     {
         for (const auto& pair : mSystems)
@@ -87,8 +88,7 @@ public:
     }
 
 private:
-    // Map typeid(..).name() to a Signature
-    std::unordered_map<const char*, Signature> mSignatures{};
-    std::unordered_map<const char*, std::shared_ptr<System>> mSystems{};
+    std::unordered_map<const char*, Signature> mSignatures{};            ///< System type name -> required signature.
+    std::unordered_map<const char*, std::shared_ptr<System>> mSystems{}; ///< System type name -> system.
 };
 }

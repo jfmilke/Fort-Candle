@@ -348,6 +348,6 @@ constexpr void introspect(I&& i, quadric<D, ScalarT>& v)
         i(v.c, "c");
     }
     else
-        static_assert(always_false<D>, "quadrics are only defined for 2D and 3D");
+        static_assert(always_false<std::integral_constant<int, D>>, "quadrics are only defined for 2D and 3D");
 }
 }

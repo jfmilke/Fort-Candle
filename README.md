@@ -1,9 +1,14 @@
+> [!IMPORTANT]
+> This is the `v1` branch. It contains minimal fixes in the code and dependencies to keep the original code running.
+> See [`v2`](https://github.com/jfmilke/Fort-Candle/tree/v2) for a development version.
+
 # Fort Candle
 
 Result of the GameDevelopment Practical 2021 at RWTH Aachen.
 Features a small strategy game which only aims to demonstrate the capabilities of the self-designed game engine.
 
-**Note:** This is a reupload to GitHub from another inaccessible Git repository, now initially reflecting the code state at submission.
+**Note:** This is a reupload to GitHub from another inaccessible Git repository, initially reflecting the code state at submission.
+Since then, the build was modernized for current compilers and a few bugs were fixed.
 
 ![Cover Image](images/FC01_Start.jpg)
 
@@ -57,64 +62,69 @@ The rendering equation involved the following processing:
 
 ## Requirements
 
-- CMake 3.8+
-- C++17
-    - Windows: Visual Studio 2017+
-    - Linux: Clang or GCC
+- CMake 3.21+
+- A C++17 compiler. Tested with:
+    - Windows: Visual Studio 2026 (MSVC 19.52), CMake 4.4
+    - Linux: GCC 15.2 and Clang 21.1, CMake 4.2 (Ubuntu 26.04 in WSL2)
 - OpenGL 4.5
 
 ## Dependencies
 
-All dependencies are included in the `extern` folder.
+All dependencies are vendored in the `extern` folder; nothing has to be installed besides the system libraries listed under Linux.
 
-- GLFW3
+- GLFW 3.4 (pre-release snapshot)
 - Glad
-- GLOW *(modern OpenGL wrapper)*
-- ImGUI
+- GLOW *(modern OpenGL wrapper)* and glow-extras
+- Dear ImGui 1.77 *(UI)* with ImGuizmo
 - Polymesh *(mesh library)*
 - Typed-Geometry *(math library)*
-- OpenAL *(audio library)*
+- Clean-Core *(base library of GLOW, Polymesh and Typed-Geometry)*
+- OpenAL Soft 1.21.1 *(audio library)*
+- dr_wav *(WAV loading)*
+
+Some of them carry small local changes (course-framework patches and fixes for current compilers); see `CLAUDE.md` for their exact versions and patches.
 
 ## Building
 
-OS-specific build instructions can be seen below.
-Be aware that a Debug-Build has *much* slower performance than Release.
-RelWithDebugInfo (standard) is a compromise between performance & debugging.
+Build a `RelWithDebInfo` (or `Release`) configuration: a Debug build runs *much* slower.
+Executables are written to `bin/<config>/`.
+The game loads its assets from `../data`, so it has to be started from a direct subfolder of the repository, e.g. `bin/`.
 
 ### Windows
 
-- Open CMake-Gui and enter the directory of the source code.
-- Now specify where to build the project.
-- Click "Generate", choose "Visual Studio 15 2017 Win64" (or newer version that is also Win64) as the generator.
-- Open the .sln file in the build folder with Visual Studio.
-- Set GameDevSS21 as the Startup Project (right-click on the project -> Set as StartUp Project)
-- Build the project
-- Run the software from `bin\RelWithDebInfo\GameDevSS21.exe`
+```powershell
+cmake -S . -B build
+cmake --build build --config RelWithDebInfo --parallel
+cd bin
+.\RelWithDebInfo\GameDevSS21.exe
+```
 
-If it doesn't work, try setting the working directory to the bin folder (right-click project -> Properties -> Debugging -> Working Directory), `$(TargetDir)/../` should work.
+Alternatively open the solution in `build/` (`GameDevSS21.slnx`) in Visual Studio.
+`GameDevSS21` is already the startup project and runs with `bin/` as its working directory.
 
 ### Linux
 
-- Create a build directory `mkdir build` and change directory `cd build`
-- Generate the build files using with CMake via `cmake <path_to_source>`
-- Compile the software via `make`
-- Run the software via `../bin/<build_mode>/GameDevSS21`
+Install a compiler, CMake and the development packages for OpenGL, X11 and audio, e.g. on Debian/Ubuntu:
 
-If it doesn't work start CMake with GUI via `cmake-gui <path_to_source>` (while still in the buid directory) and try to toggle off/on possible sources of error.
-Specifically, if you get an error from OpenAL you may try to toggle of/on a specific backend.
-You can resolve the error `undefined symbol: jack_error_callback` by simply deactivating `ALSOFT_BACKEND_JACK`.
-Then click `Configure` and `Generate`, close GUI and again type `make` to compile.
-
-E.g.:
 ```bash
-git clone https://github.com/rovedit/Fort-Candle.git
-cd Fort-Candle
-mkdir build
-cd build
-cmake ..
-make
-../bin/RelWithDebugInfo/GameDevSS21
+sudo apt install build-essential cmake ninja-build libgl-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libpulse-dev libasound2-dev
 ```
+
+Then build and run (single-config generators default to `RelWithDebInfo`):
+
+```bash
+git clone https://github.com/jfmilke/Fort-Candle.git
+cd Fort-Candle
+cmake -S . -B build -G Ninja
+cmake --build build --parallel
+cd bin
+./RelWithDebInfo/GameDevSS21
+```
+
+Notes:
+- OpenAL needs PulseAudio or ALSA development files (`libpulse-dev` or `libasound2-dev`), otherwise it has no audio backend.
+- GLFW is built for X11 only; Wayland sessions run the game through XWayland.
+- The OpenAL JACK backend is disabled because it fails to link (`undefined symbol: jack_error_callback`).
 
 ## Images
 
@@ -122,38 +132,3 @@ make
 [ ![](images/thumbnails/FC03_Highlighted_thumb.jpg) ](images/FC03_Highlighted.jpg)
 [ ![](images/thumbnails/FC04_Combat_thumb.jpg) ](images/FC04_Combat.jpg)
 [ ![](images/thumbnails/FC05_Progress_thumb.jpg) ](images/FC05_Progress.jpg)
-
-<!-- 
-## Building the project (with QtCreator on Linux)
-
-Open `CMakeLists.txt` with `qtcreator` (or `cmake`).
-
-A modern QtCreator will ask you to configure the project.
-You can choose the compiler (Clang and GCC work) and which targets to build:
-
-* Debug: no optimizations but with full debug information (you should use this as long as it's fast enough)
-* RelWithDebInfo: most optimizations but still a lot of debug information
-* Release: full optimization and no debug info (you will have a hard time to debug this)
-
-The hammer icon in the bottom-left corner will build your project (shortcut Ctrl-B).
-
-Before you can run the project you have to setup the Working Directory and the command line arguments.
-Go to the `Projects` tab (on the left side) and choose `Run` of your current kit (on the top).
-The working directory will be `REPO-DIR/bin/(Debug|Release|RelWithDebInfo)/` (depending on your configuration) but you have to *change* it to `REPO-DIR/bin`.
-
-## Building the project (with Visual Studio 2017 (or newer), on Windows)
-
-Requirements:
-
-* Visual Studio 2017 or newer (C++)
-* CMake 3.8+
-
-Steps:
-* Open CMake-Gui and enter the directory of the source code.
-* Now specify where to build the project (this should *not* be inside the git repository).
-* Click "Generate", choose "Visual Studio 15 2017 Win64" (or newer version that is also Win64) as the generator.
-* Open the .sln file in the build folder with Visual Studio.
-* Set GameDevSS21 as the Startup Project (right-click on the project -> Set as StartUp Project)
-* Set working directory to the bin folder (right-click project -> Properties -> Debugging -> Working Directory), `$(TargetDir)/../` should work.
-* Build the project
--->

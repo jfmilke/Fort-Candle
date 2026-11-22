@@ -15,7 +15,6 @@ function(arcana_configure_lib_options LIB_TARGET)
             -Werror=return-type # error on missing return
             -Werror=format # printf warnings as errors
         )
-        target_link_libraries(${LIB_TARGET} PUBLIC -fuse-ld=gold)
 
         if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         else() # GCC

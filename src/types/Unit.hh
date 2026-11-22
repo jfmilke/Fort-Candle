@@ -6,6 +6,7 @@
 
 namespace gamedev
 {
+/// Unit commands. Unused.
 enum UnitAction
 {
     None = -1,
@@ -13,10 +14,11 @@ enum UnitAction
     Move,
     Aim,
     Attack,
-    SpecialPrimary,     // i.e. climb wall, produce gold
-    SpecialSecondary,   // i.e. repair
-    SpecialTertiary,    // placeholder
+    SpecialPrimary,   ///< e.g. climb wall, produce gold
+    SpecialSecondary, ///< e.g. repair
+    SpecialTertiary,  ///< placeholder
 };
 
+/// Storage type of a `UnitAction`. Unused.
 typedef std::uint8_t UnitActionType;
 }

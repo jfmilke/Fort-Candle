@@ -8,41 +8,50 @@
 
 namespace gamedev
 {
-/***
-* https://austinmorlan.com/posts/entity_component_system/
-* 
-* A Component Array holds all Components of a certain type.
-* It is always packed and accessed by the InstanceHandle.
-* 
-***/
-
-// Interface of different ComponentArrays.
+/// Type-erased interface of `ComponentArray`, so the `ComponentManager` can notify the arrays of all component types.
 class IComponentArray
 {
 public:
     virtual ~IComponentArray() = default;
+
+    /// `ComponentArray::GetData` as a pointer to the `Component` base.
     virtual gamedev::Component* GetBaseComponent(InstanceHandle handle) = 0;
+
+    /// `ComponentArray::TryGetData` as a pointer to the `Component` base.
     virtual gamedev::Component* TryGetBaseComponent(InstanceHandle handle) = 0;
+
+    /// See `ComponentArray::TryRemoveData`.
     virtual void TryRemoveData(InstanceHandle handle) = 0;
+
+    /// See `ComponentArray::CloneEntityComponent`.
     virtual void CloneEntityComponent(InstanceHandle& handle_source, InstanceHandle& handle_copy) = 0;
+
+    /// See `ComponentArray::EntityDestroyed`.
     virtual void EntityDestroyed(InstanceHandle handle) = 0;
+
+    /// See `ComponentArray::AllEntitiesDestroyed`.
     virtual void AllEntitiesDestroyed() = 0;
 };
 
-// Actual ComponentArray for a single Component.
+/**
+ * Stores all components of type `CompT`, densely packed in a fixed-size array, and maps instance handles to slots.
+ *
+ * Based on https://austinmorlan.com/posts/entity_component_system/.
+ * Created and owned by the `ComponentManager` when `CompT` is registered; accessed through `EngineECS`.
+ *
+ * Removing a component moves the last element into the gap. A pointer returned by `GetData` may therefore refer to
+ * another entity's component after any removal of this type.
+ */
 template <typename CompT>
 class ComponentArray : public IComponentArray
 {
 public:
-    // Creates a mapping from InstanceHandle to Array,
-    // and adds the component to the array.
+    /// Stores a copy of `component` for `handle`. Asserts if `handle` already has a component of this type.
     void InsertData(InstanceHandle handle, CompT& component)
     {
         assert(mEntityToIndexMap.find(handle) == mEntityToIndexMap.end() && "Component added to same entity more than once.");
-        
+
         size_t newIndex = mSize;
-        //mEntityToIndexMap[handle] = newIndex;
-        //mIndexToEntityMap[newIndex] = handle;
         mEntityToIndexMap.insert_or_assign(handle, newIndex);
         mIndexToEntityMap.insert_or_assign(newIndex, handle);
         mComponentArray[newIndex] = component;
@@ -52,6 +61,7 @@ public:
         IntegrityCheck();
     }
 
+    /// Like `InsertData`, but if `handle` already has a component of this type it only logs and keeps the existing one.
     void TryInsertData(InstanceHandle handle, CompT& component)
     {
         if(mEntityToIndexMap.find(handle) != mEntityToIndexMap.end())
@@ -61,8 +71,6 @@ public:
         }
 
         size_t newIndex = mSize;
-        //mEntityToIndexMap[handle] = newIndex;
-        //mIndexToEntityMap[newIndex] = handle;
         mEntityToIndexMap.insert_or_assign(handle, newIndex);
         mIndexToEntityMap.insert_or_assign(newIndex, handle);
         mComponentArray[newIndex] = component;
@@ -71,20 +79,18 @@ public:
         IntegrityCheck();
     }
 
-    // Removes the component from the Instance by updating the mapping into the array.
+    /// Removes `handle`'s component and moves the last element into its slot. Asserts if `handle` has none.
     void RemoveData(InstanceHandle handle)
     {
         assert(mEntityToIndexMap.find(handle) != mEntityToIndexMap.end() && "Removing non-existent component.");
 
-		    // Copy element at end into deleted element's place to maintain density
+        // Copy element at end into deleted element's place to maintain density
         size_t indexOfRemovedEntity = mEntityToIndexMap[handle];
         size_t indexOfLastElement = mSize - 1;
         mComponentArray[indexOfRemovedEntity] = mComponentArray[indexOfLastElement];
 
         // Update map to the moved position
         InstanceHandle entityOfLastElement = mIndexToEntityMap[indexOfLastElement];
-        //mEntityToIndexMap[entityOfLastElement] = indexOfRemovedEntity;
-        //mIndexToEntityMap[indexOfLastElement] = entityOfLastElement;
         mEntityToIndexMap.insert_or_assign(entityOfLastElement, indexOfRemovedEntity);
         mIndexToEntityMap.insert_or_assign(indexOfRemovedEntity, entityOfLastElement);
 
@@ -98,7 +104,7 @@ public:
         IntegrityCheck();
     }
 
-    // Removes the component from the Instance by updating the mapping into the array.
+    /// Like `RemoveData`, but does nothing if `handle` has no component of this type.
     void TryRemoveData(InstanceHandle handle)
     {
         if(mEntityToIndexMap.find(handle) == mEntityToIndexMap.end())
@@ -113,8 +119,6 @@ public:
 
         // Update map to the moved position
         InstanceHandle entityOfLastElement = mIndexToEntityMap[indexOfLastElement];
-        //mEntityToIndexMap[entityOfLastElement] = indexOfRemovedEntity;
-        //mIndexToEntityMap[indexOfLastElement] = entityOfLastElement;
         mEntityToIndexMap.insert_or_assign(entityOfLastElement, indexOfRemovedEntity);
         mIndexToEntityMap.insert_or_assign(indexOfRemovedEntity, entityOfLastElement);
 
@@ -128,7 +132,7 @@ public:
         IntegrityCheck();
     }
 
-    // Remove the component from all instances
+    /// Forgets the components of all instances. The stored objects are not destroyed until overwritten.
     void RemoveAll()
     {
         mEntityToIndexMap.clear();
@@ -136,7 +140,7 @@ public:
         mSize = 0;
     }
 
-    // Returns a reference to the Instances component
+    /// Returns `handle`'s component. Logs an error and asserts if `handle` has none.
     CompT* GetData(InstanceHandle handle)
     {
         if (mEntityToIndexMap.find(handle) == mEntityToIndexMap.end())
@@ -148,7 +152,7 @@ public:
         return &mComponentArray[mEntityToIndexMap[handle]];
     }
 
-    // Tries to return a reference to the Instance component, else it will return an empty component.
+    /// Returns `handle`'s component, or nullptr if it has none.
     CompT* TryGetData(InstanceHandle handle)
     {
         if (mEntityToIndexMap.find(handle) == mEntityToIndexMap.end())
@@ -157,17 +161,22 @@ public:
         return &mComponentArray[mEntityToIndexMap[handle]];
     }
 
+    /// `GetData` as a pointer to the `Component` base.
     Component* GetBaseComponent(InstanceHandle handle)
     {
         return reinterpret_cast<Component*>(GetData(handle));
     }
 
+    /// `TryGetData` as a pointer to the `Component` base.
     Component* TryGetBaseComponent(InstanceHandle handle)
     {
         return reinterpret_cast<Component*>(TryGetData(handle));
     }
 
-    // Clones the component of source if it exists & sets the instance reference to nullptr (correct this before using!)
+    /**
+     * Copies `handle_source`'s component (if it has one) to `handle_copy`, overwriting an existing one, and sets the copy's
+     * `handle_value`. The copy's `instance` pointer is set to nullptr; the caller must set it before use.
+     */
     void CloneEntityComponent(InstanceHandle& handle_source, InstanceHandle& handle_copy)
     {
         if (mEntityToIndexMap.find(handle_source) == mEntityToIndexMap.end())
@@ -189,20 +198,26 @@ public:
         GetBaseComponent(handle_copy)->instance = nullptr;
     }
 
-    // Will check if the entity had this component and destroy it.
+    /// Removes `handle`'s component if it has one.
     void EntityDestroyed(InstanceHandle handle)
     {
         if (mEntityToIndexMap.find(handle) != mEntityToIndexMap.end())
             RemoveData(handle);
     }
 
-    // Will check if the entity had this component and destroy it.
+    /// Removes the components of all instances (`RemoveAll`).
     void AllEntitiesDestroyed()
     {
         RemoveAll();
     }
 
-    // Checks integrity.
+    /**
+     * Debugging aid, called after every insertion and removal. Set breakpoints on the `int i = 0;` lines to catch
+     * duplicate slots or handles.
+     *
+     * TODO: Walks all slot pairs (O(n^2) per insertion/removal) but checks nothing, because the assert is commented
+     * out. Remove it or enable the check in debug builds only.
+     */
     void IntegrityCheck()
     {
         for (const auto& i1 : mIndexToEntityMap)
@@ -224,19 +239,10 @@ public:
     }
 
 private:
-    // Densely packed array of components.
-    // Maximum corresponds to the maximum of living instances.
-    std::array<CompT, MAX_INSTANCES> mComponentArray;
-
-    // Maps InstanceHandle to array index.
-    std::unordered_map<InstanceHandle, size_t, InstanceHandleHash> mEntityToIndexMap;
-    
-    // Maps array index to InstanceHandle.
-    std::unordered_map<size_t, InstanceHandle> mIndexToEntityMap;
-
-    // Valid entries in the array.
-    size_t mSize;
-
-    CompT mDummy;
+    std::array<CompT, MAX_INSTANCES> mComponentArray;                                 ///< Slots [0, mSize) are in use.
+    std::unordered_map<InstanceHandle, size_t, InstanceHandleHash> mEntityToIndexMap; ///< Instance handle -> slot.
+    std::unordered_map<size_t, InstanceHandle> mIndexToEntityMap;                     ///< Slot -> instance handle.
+    size_t mSize;                                                                     ///< Number of used slots.
+    CompT mDummy;                                                                     ///< Unused.
 };
 }

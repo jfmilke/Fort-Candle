@@ -1,7 +1,4 @@
 #include "systems/ParticleSystem.hh"
-//#include <glow/objects/Program.hh>
-//#include <glow/objects/ArrayBuffer.hh>
-//#include <glow/objects/VertexArray.hh>
 #include <glow/objects.hh>
 #include "typed-geometry/types/vec.hh"
 #include "typed-geometry/types/pos.hh"
@@ -11,7 +8,7 @@
 
 void gamedev::ParticleSystem::AddEntity(InstanceHandle& handle, Signature entitySignature)
 {
-    // Only include rendered systems
+    // Meant to only include rendered entities, but the handle is inserted in any case
     if (!mECS->TestSignature<Render>(handle))
     {
         mEntities.erase(handle);
@@ -46,7 +43,6 @@ void gamedev::ParticleSystem::SetupParticleCount(int particleCount)
 {
     MAX_PARTICLES = particleCount;
     mParticlePool.resize(MAX_PARTICLES);
-    //mShadowParticlePool.resize(MAX_PARTICLES);
 
     auto vao = mVaoCube->bind();
     auto vbo = mVboParticles->bind();
@@ -135,8 +131,6 @@ void gamedev::ParticleSystem::EmitParticle(const ParticleProperties& particlePro
 {
     Particle& particle = mParticlePool[mFreeIndex];
     particle.active = true;
-    //particle.position = affine_to_mat4(xform.transform_mat()) * particleProperties.basePosition;
-    //auto vary = affine_to_mat4(xform.transform_mat()) * particleProperties.varyPosition;
     particle.position = affine_to_mat4(xform.transform_mat()) * particleProperties.basePosition;
     auto vary = xform.scale_mat() * particleProperties.varyPosition;
     particle.position.x += vary.x * (RandomFloat() - 0.5f);
@@ -273,6 +267,7 @@ void gamedev::ParticleSystem::Init_BuildingDestroyedParticles()
 
 
 // =========================================================================================
+// Unfinished GPU particle system (does not compile), kept for reference; see ParticleSystem.hh.
 // =========================================================================================
 /*
 void gamedev::GPUParticleSystem::AddEntity(InstanceHandle& handle, Signature entitySignature)

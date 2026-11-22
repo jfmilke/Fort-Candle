@@ -35,7 +35,7 @@
 #include "Components.hh"
 
 
-#define GAMEDEV_ADVANCED 1
+#define GAMEDEV_ADVANCED 1 // unused
 
 Game::Game() : GlfwApp(Gui::ImGui) {}
 
@@ -56,8 +56,7 @@ void Game::init()
     // IMPORTANT: call to base class
     GlfwApp::init();
 
-    // set the GUI color theme
-    // glow::debugging::applyGlowImguiTheme(true);
+    // set the GUI color theme (and load the fonts)
     applyCustomImguiTheme();
 
     // set window title
@@ -65,8 +64,6 @@ void Game::init()
 
     // set initial camera state
     mEnableTopDownCamera = false;
-    /*mCamera.target.position = tg::pos3(-5.f,1.f,0.f);
-    mCamera.target.forward = tg::normalize(tg::vec3(1.f, -0.7f, 0.f));*/
     mCamera.physical = mCamera.target;
 
     mAdvancedFeatures.initialize();
@@ -415,9 +412,7 @@ void Game::render(float elapsedSeconds)
     mRenderSys->UpdateWindowResolution(getWindowSize());
     mRenderSys->UpdateCamera(mCamera.physical.position, mCamera.physical.forward, tg::vec3::unit_y);
     mRenderSys->UpdateSepia(mSepiaStrength);
-   // mRenderSys->UpdateDesaturation(mDesaturationStrength);
     mRenderSys->UpdateDesaturation(mGamelogicSys->GetDesaturation());
-    //mRenderSys->UpdateVignette(mVignetteColor, mVignetteRadius, mVignetteSoftness, mVignetteIntensity);
     mRenderSys->UpdateVignette(mVignetteColor, mGamelogicSys->GetVignetteRadius(), mVignetteSoftness, mVignetteIntensity);
     mRenderSys->UpdateDistFadeoff(mDistFadeoffColor, mDistFadeoffIntensity);
     mRenderSys->UpdateSelected(mAdvancedFeatures.mSelectedInstance);
@@ -436,7 +431,6 @@ void Game::render(float elapsedSeconds)
     if (mEnablePointLight)
     {
         mRenderSys->UpdateRegularPointLights(mLightSys->GetLights());
-        //mRenderSys->UpdateShadowingPointLight(mEnvironmentSys->GeneratePointlight(mGamelogicSys->mHome.center + tg::vec3::unit_y * 1.f, mSPLColor, mSPLIntensity, mSPLRadius));
         mRenderSys->UpdateShadowingPointLight(mLightSys->GetShadowingPointlight());
     }
 
@@ -718,7 +712,6 @@ void Game::onGui()
                 ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar;
                 if (ImGui::Begin("Paused", 0, window_flags))
                 {
-                    // ImGui::NewLine();
                     ImGui::Text("Game Paused");
                     ImGui::NewLine();
                 }
@@ -742,7 +735,7 @@ void Game::onClose()
 // Called when window is resized
 void Game::onResize(int w, int h) { mRenderSys->ResizeRenderTargets(w, h); }
 
-// called once per frame
+// called once per frame (from render)
 void Game::updateCamera(float elapsedSeconds)
 {
     float speedMultiplier = 15.f;
@@ -815,7 +808,7 @@ void Game::updateCamera(float elapsedSeconds)
 
                 mCamera.physical.position = tg::translation(origin_to_focus) * tg::rotation_y(60_deg * mouse_delta.x)
                                             * tg::translation(-origin_to_focus) * mCamera.physical.position;
-                mCamera.physical.forward = tg::normalize(focus - mCamera.physical.position); // tg::rotation_y(60_deg * mouse_delta.x) * mCamera.physical.forward;
+                mCamera.physical.forward = tg::normalize(focus - mCamera.physical.position);
 
                 mCamera.target.position = mCamera.physical.position;
                 mCamera.target.forward = mCamera.physical.forward;
@@ -1158,7 +1151,6 @@ void Game::gameUI()
                 auto total = mGamelogicSys->GetPioneerCount();
 
                 ImGui::Text("Current Pioneers: %i / %i", total, mGamelogicSys->GetMaxPioneers());
-                // ImGui::Text("Maximum: %i", mGamelogicSys->GetMaxPioneers());
                 ImGui::Text("Unassigned: %i", total - soldiers - artisans);
                 ImGui::Text("Artisans: %i", artisans);
                 ImGui::Text("Soldiers: %i", soldiers);
@@ -1169,7 +1161,6 @@ void Game::gameUI()
 
             if (ImGui::TreeNodeEx("Expenses", ImGuiTreeNodeFlags_Framed))
             {
-                // ImGui::Text("Expenses");
                 ImGui::Text("Train Artisans: %i g", mGamelogicSys->GetArtisanPrice());
                 ImGui::Text("Train Milita: %i g", mGamelogicSys->GetSoldierPrice());
                 ImGui::Text("Chop Wood: %i g", mGamelogicSys->GetWoodPrice());
@@ -1210,7 +1201,6 @@ void Game::gameUI()
 
             ImGui::NewLine();
             ImGui::Separator();
-            //ImGui::NewLine();
             ImGui::Text("Supply Route Progress");
             if (mGamelogicSys->GetSupplyLevel() == 0)
             {
@@ -1231,7 +1221,6 @@ void Game::gameUI()
 
             ImGui::NewLine();
             ImGui::Separator();
-            //ImGui::NewLine();
 
             ImGui::TextUnformatted("Fortifications");
             if (ImGui::Button(mGamelogicSys->GetFortificationUpgrade().data(), {menuWidth - 20, 50}))
@@ -1254,7 +1243,6 @@ void Game::gameUI()
                     mGamelogicSys->CRAZY_CHEAT_YOU_WONT_BELIEVE();
             }
 
-            //ImGui::TreePop();
         }
         ImGui::PopStyleVar();
         ImGui::End();
@@ -1462,6 +1450,7 @@ void Game::spawn(tg::pos3 position)
         else
             mCreatedLast = mSelectedFac->Create(mSelectedObject, position);
 
+    // TODO: Outside the check above: crashes if no preset was selected, and re-marks the previous object.
     mSelectedFac->MarkLastCreated();
 }
 
@@ -1473,6 +1462,7 @@ void Game::spawnRandomly(tg::pos3 position)
     if (mSelectedFac && !mSelectedObject.empty())
         mSelectedFac->Create(mSelectedObject, position, tg::quat::from_axis_angle(tg::dir3::pos_y, randomRotation), randomScale);
 
+    // TODO: Outside the check above (see spawn).
     mSelectedFac->MarkLastCreated();
 }
 
@@ -1497,7 +1487,6 @@ void Game::toggleMenu()
 void Game::applyCustomImguiTheme() 
 {
     ImGuiIO& io = ImGui::GetIO();
-    //io.Fonts->AddFontFromFileTTF("../data/fonts/Calibri.ttf", 20);
     font1 = io.Fonts->AddFontFromFileTTF("../data/fonts/SourceSans3.ttf", 25);
     font2 = io.Fonts->AddFontFromFileTTF("../data/fonts/SheilaCrayon.ttf", 45);
 

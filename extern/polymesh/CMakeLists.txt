@@ -27,7 +27,6 @@ if (MSVC)
 else()
     target_compile_options(polymesh PRIVATE -Wall)
     if (LINUX)
-        target_link_libraries(polymesh PUBLIC -fuse-ld=gold)
     endif()
 endif()
 

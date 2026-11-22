@@ -1,4 +1,6 @@
 #pragma once
+// Unused: an unfinished quadtree, superseded by the spatial hash map `Hash2D` (HashMap.hh).
+// Everything below (and in QuadTree.cc) is commented out.
 /*
 #include "advanced/World.hh"
 #include "advanced/transform.hh"

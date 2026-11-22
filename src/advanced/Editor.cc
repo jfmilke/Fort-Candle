@@ -61,7 +61,6 @@ void gamedev::manipulateTransform(EditorState& state, tg::mat4 const& view, tg::
 
 void gamedev::manipulatePhysics(EditorState& state, Physics* body)
 {
-    // run imguizmo on mat
     {
         if (ImGui::Begin("Physics"))
         {
@@ -90,7 +89,6 @@ void gamedev::manipulatePhysics(EditorState& state, Physics* body)
 
 void gamedev::showCollisionShape(EditorState& state, BoxShape* bshape, transform& xform)
 {
-    // run imguizmo on mat
     {
         if (ImGui::Begin("Collision Shape"))
         {

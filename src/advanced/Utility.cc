@@ -14,8 +14,10 @@
 
 namespace
 {
+/// Mixes `b` into the hash `a`.
 constexpr uint64_t hash_combine(uint64_t a, uint64_t b) noexcept { return a * 6364136223846793005ULL + b + 0xda3e39cb94b95bdbULL; }
 
+/// 64-bit hash of a null-terminated string (0 for nullptr).
 constexpr uint64_t stringhash(char const* s)
 {
     if (!s)
@@ -30,26 +32,28 @@ constexpr uint64_t stringhash(char const* s)
     return h;
 }
 
+/// One statistic: its current frame value and its history.
 struct statistic_slot
 {
-    char const* identifier = nullptr;
-    uint64_t identifier_hash = 0;
-    float* buffer = nullptr;
-    float frame_value = 0.0;
-    gamedev::StatType type = gamedev::StatType::NONE;
+    char const* identifier = nullptr;                 ///< Name (not owned).
+    uint64_t identifier_hash = 0;                     ///< `stringhash(identifier)`, used for lookup.
+    float* buffer = nullptr;                          ///< History of `num_frames` values, oldest first.
+    float frame_value = 0.0;                          ///< Value accumulated in the current frame.
+    gamedev::StatType type = gamedev::StatType::NONE; ///< Display type.
 };
 }
 
+/// All statistics: one slot per stat with its history (see `initializeStatistics`).
 struct gamedev::StatisticsState
 {
-    std::mutex mtx;
-    float* full_buffer = nullptr;
-    statistic_slot* stats = nullptr;
+    std::mutex mtx;                  ///< Guards all members.
+    float* full_buffer = nullptr;    ///< History of all slots in one allocation.
+    statistic_slot* stats = nullptr; ///< `max_num_stats` slots.
 
-    unsigned num_frames;
-    unsigned max_num_stats;
+    unsigned num_frames;    ///< History length per stat.
+    unsigned max_num_stats; ///< Number of slots.
 
-    unsigned num_stats = 0;
+    unsigned num_stats = 0; ///< Number of slots in use.
 };
 
 gamedev::StatisticsState* gamedev::initializeStatistics(uint32_t maxNumStats, uint32_t numFrames)
@@ -85,7 +89,6 @@ void gamedev::destroyStatistics(StatisticsState* state)
 
 void gamedev::newStatFrame(StatisticsState* state)
 {
-    //  OPTICK_EVENT();
     auto lg = std::lock_guard(state->mtx);
     auto const moveSize = sizeof(float) * (state->num_frames - 1);
 
@@ -101,7 +104,6 @@ void gamedev::newStatFrame(StatisticsState* state)
 
 float* gamedev::getStat(StatisticsState* state, char const* identifier, StatType type)
 {
-    // OPTICK_EVENT();
     auto const identifier_hash = stringhash(identifier);
 
     auto lg = std::lock_guard(state->mtx);
@@ -129,8 +131,6 @@ float* gamedev::getStat(StatisticsState* state, char const* identifier, StatType
 
 void gamedev::runStatImgui(StatisticsState* state)
 {
-    // OPTICK_EVENT();
-
     auto lg = std::lock_guard(state->mtx);
 
     char imgui_label_buf[1024];

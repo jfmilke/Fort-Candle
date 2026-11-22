@@ -53,7 +53,7 @@ int gamedev::PhysicsSystem::Update(float dt)
             // Gravity
             if (InstanceBody->gravity)
             {
-                InstanceBody->velocity += dt * mGravity;
+                InstanceBody->velocity += dt * mGravity; // TODO: adds to all three components, not only y
             }
 
             // Arrow parabola (fake gravity)
@@ -81,6 +81,7 @@ int gamedev::PhysicsSystem::Update(float dt)
             Instance.xform.translation.y = h;
         }
 
+        // TODO: true on 9 of 10 updates (probably meant 1 of 10), and new_position is never reset
         if (Instance.new_position && (mUpdateControl % 10))
         {
             auto e = Event(EventType::NewPosition, handle, handle);
