@@ -22,12 +22,6 @@ struct Hash2Client
     tg::vec2 translation;                        ///< Position on the ground plane (world x, z).
     tg::aabb2 dimensions;                        ///< Extent relative to `translation` (local x/z bounds).
     Hash2Indices indicies;                       ///< Cells covered by the rectangle.
-    /**
-     * ID of the last query that returned this entry.
-     *
-     * Each cell stores its own copy, so this does not deduplicate across cells; the result set of `Hash2D::FindNear` does.
-     */
-    int queryID = -1;
 
     const bool operator<(const Hash2Client& rhs) const { return handle._value < rhs.handle._value; }
     const bool operator==(const Hash2Client& rhs) const { return handle._value == rhs.handle._value; }

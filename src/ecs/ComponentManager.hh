@@ -1,8 +1,9 @@
 #pragma once
 #include "ecs/ComponentArray.hh"
 #include "advanced/World.hh"
-#include <unordered_map>
-#include <assert.h>
+#include <clean-core/assert.hh>
+#include <array>
+#include <memory>
 
 namespace gamedev
 {
@@ -12,37 +13,37 @@ namespace gamedev
  * Based on https://austinmorlan.com/posts/entity_component_system/.
  *
  *  - Owned by `EngineECS`, which also updates the instance signatures; this class only stores the component data.
- *  - Types are keyed by the `typeid(CompT).name()` pointer.
- *  - Types get consecutive `ComponentType` IDs (bit indices into a `Signature`) in registration order.
+ *  - Each type gets a `ComponentType` ID (bit index into a `Signature`) on first use; it indexes `mComponentArrays` directly.
+ *    IDs are process-wide (shared by all managers), so different managers may register different subsets.
  */
 class ComponentManager
 {
 public:
-    /// Registers `CompT`: assigns the next `ComponentType` ID and creates its array. Asserts if registered twice.
-    template <typename CompT>
+    /**
+     * Creates a manager without registered types.
+     *
+     * @param world Instance storage, passed on to every `ComponentArray`; must outlive this manager.
+     */
+    explicit ComponentManager(World const& world) : mWorld(world) {}
+
+    /// Registers `CompT`: creates its array. Asserts if registered twice.
+    template <EcsComponent CompT>
     void RegisterComponent()
     {
-      const char* typeName = typeid(CompT).name();
+        auto& array = mComponentArrays[TypeId<CompT>()];
+        CC_ASSERT_MSG(!array, "Registering component type more than once.");
 
-      assert(mComponentTypes.find(typeName) == mComponentTypes.end() && "Registering component type more than once.");
-
-      // Add ComponentType to map
-      mComponentTypes.insert({typeName, mNextComponentType});
-      // Create ComponentType pool and add it to map
-      mComponentArrays.insert({typeName, std::make_shared<ComponentArray<CompT>>()});
-      // Update free ComponentType bit
-      ++mNextComponentType;
+        array = std::make_unique<ComponentArray<CompT>>(mWorld);
     }
 
     /// Returns the ID (signature bit) of `CompT`. Asserts if `CompT` is not registered.
-    template <typename CompT>
-    ComponentType GetComponentType()
+    template <EcsComponent CompT>
+    ComponentType GetComponentType() const
     {
-        const char* typeName = typeid(CompT).name();
+        auto const type = TypeId<CompT>();
+        CC_ASSERT_MSG(mComponentArrays[type], "Component not registered before use.");
 
-        assert(mComponentTypes.find(typeName) != mComponentTypes.end() && "Component not registered before use.");
-
-        return mComponentTypes[typeName];
+        return type;
     }
 
     /**
@@ -50,50 +51,48 @@ public:
      *
      * Does not touch the signature; use `EngineECS::CreateComponent`, which does.
      *
-     * @param handle Instance to add the component to.
-     * @param instance Data of `handle`; becomes the component's `instance` pointer.
+     * @param handle Live instance to add the component to.
      * @return The new component, valid until the next removal of a `CompT`.
      */
-    template <typename CompT>
-    CompT* CreateComponent(InstanceHandle handle, Instance& instance)
+    template <EcsComponent CompT>
+    CompT* CreateComponent(InstanceHandle handle)
     {
-        CompT Component(&instance);
-        Component.handle_value = handle._value;
+        CompT component;
+        component.handle_value = handle._value;
 
-        auto CompArray = GetComponentArray<CompT>();
-        CompArray->InsertData(handle, Component);
-        return CompArray->GetData(handle);
+        auto& array = GetComponentArray<CompT>();
+        array.InsertData(handle, std::move(component));
+        return array.GetData(handle);
     }
 
     /**
      * Like `CreateComponent`, but if the instance already has a `CompT` it is kept and returned.
      *
-     * @param handle Instance to add the component to.
-     * @param instance Data of `handle`; becomes the new component's `instance` pointer.
+     * @param handle Live instance to add the component to.
      * @return The new or existing component, valid until the next removal of a `CompT`.
      */
-    template <typename CompT>
-    CompT* TryCreateComponent(InstanceHandle handle, Instance& instance)
+    template <EcsComponent CompT>
+    CompT* TryCreateComponent(InstanceHandle handle)
     {
-        CompT Component(&instance);
-        Component.handle_value = handle._value;
+        CompT component;
+        component.handle_value = handle._value;
 
-        auto CompArray = GetComponentArray<CompT>();
-        CompArray->TryInsertData(handle, Component);
-        return CompArray->GetData(handle);
+        auto& array = GetComponentArray<CompT>();
+        array.TryInsertData(handle, std::move(component));
+        return array.GetData(handle);
     }
 
     /**
      * Adds a copy of a component to an instance. Asserts if the instance already has a `CompT`. Unused.
      *
-     * @param handle Instance to add the component to.
-     * @param component Component to copy; the copy gets `handle`'s `handle_value` and keeps the `instance` pointer.
+     * @param handle Live instance to add the component to.
+     * @param component Component to copy; the copy gets `handle`'s `handle_value`.
      */
-    template <typename CompT>
+    template <EcsComponent CompT>
     void AddComponent(InstanceHandle handle, CompT component)
     {
         component.handle_value = handle._value;
-        GetComponentArray<CompT>()->InsertData(handle, component);
+        GetComponentArray<CompT>().InsertData(handle, std::move(component));
     }
 
     /**
@@ -101,18 +100,21 @@ public:
      *
      * @param handle Instance to remove the component from.
      */
-    template <typename CompT>
-    void RemoveComponent(InstanceHandle handle) { GetComponentArray<CompT>()->RemoveData(handle); }
+    template <EcsComponent CompT>
+    void RemoveComponent(InstanceHandle handle)
+    {
+        GetComponentArray<CompT>().RemoveData(handle);
+    }
 
     /**
      * Removes an instance's `CompT` if it has one.
      *
      * @param handle Instance to remove the component from.
      */
-    template <typename CompT>
+    template <EcsComponent CompT>
     void TryRemoveComponent(InstanceHandle handle)
     {
-        GetComponentArray<CompT>()->TryRemoveData(handle);
+        GetComponentArray<CompT>().TryRemoveData(handle);
     }
 
     /**
@@ -122,44 +124,43 @@ public:
      */
     void RemoveAllComponents(InstanceHandle handle)
     {
-        for (auto& arr : mComponentArrays)
-        {
-            arr.second->TryRemoveData(handle);
-        }
+        for (auto const& array : mComponentArrays)
+            if (array)
+                array->TryRemoveData(handle);
     }
 
     /// Returns `handle`'s `CompT`. Asserts if it has none.
-    template <typename CompT>
-    CompT* GetComponent(InstanceHandle handle) { return GetComponentArray<CompT>()->GetData(handle); }
+    template <EcsComponent CompT>
+    CompT* GetComponent(InstanceHandle handle)
+    {
+        return GetComponentArray<CompT>().GetData(handle);
+    }
 
     /// Returns `handle`'s `CompT`, or nullptr if it has none.
-    template <typename CompT>
-    CompT* TryGetComponent(InstanceHandle handle) { return GetComponentArray<CompT>()->TryGetData(handle); }
+    template <EcsComponent CompT>
+    CompT* TryGetComponent(InstanceHandle handle)
+    {
+        return GetComponentArray<CompT>().TryGetData(handle);
+    }
 
     /**
-     * Removes a destroyed instance's components from all component arrays.
+     * Removes the components of an instance that is being destroyed from all component arrays.
      *
-     * @param handle Destroyed instance.
+     * @param handle Instance that is still alive in the `World`.
      */
     void EntityDestroyed(InstanceHandle handle)
     {
-        for (const auto& pair : mComponentArrays)
-        {
-            const auto& component = pair.second;
-
-            component->EntityDestroyed(handle);
-        }
+        for (auto const& array : mComponentArrays)
+            if (array)
+                array->EntityDestroyed(handle);
     }
 
     /// Clears all component arrays.
     void AllEntitiesDestroyed()
     {
-        for (const auto& pair : mComponentArrays)
-        {
-            const auto& component = pair.second;
-
-            component->AllEntitiesDestroyed();
-        }
+        for (auto const& array : mComponentArrays)
+            if (array)
+                array->AllEntitiesDestroyed();
     }
 
     /**
@@ -167,35 +168,40 @@ public:
      *
      * Does not update the copy's signature.
      *
-     * @param instance_source Instance to copy from.
-     * @param instance_copy Instance to copy to; becomes the copies' `instance` pointer.
+     * @param handle_source Live instance to copy from.
+     * @param handle_copy Live instance to copy to.
      */
-    void CloneEntityComponents(Instance& instance_source, Instance& instance_copy)
+    void CloneEntityComponents(InstanceHandle handle_source, InstanceHandle handle_copy)
     {
-        for (const auto& cArray : mComponentArrays)
-        {
-            cArray.second->CloneEntityComponent(instance_source.mHandle, instance_copy.mHandle);
-            auto clone = cArray.second->TryGetBaseComponent(instance_copy.mHandle);
-
-            if (clone)
-                clone->instance = &instance_copy;
-        }
+        for (auto const& array : mComponentArrays)
+            if (array)
+                array->CloneEntityComponent(handle_source, handle_copy);
     }
 
 private:
-    std::unordered_map<const char*, ComponentType> mComponentTypes{};                     ///< Type name -> type ID.
-    std::unordered_map<const char*, std::shared_ptr<IComponentArray>> mComponentArrays{}; ///< Type name -> array.
-    ComponentType mNextComponentType{};                                                   ///< ID for the next registered type.
+    World const& mWorld;                                                           ///< Passed to new arrays.
+    std::array<std::unique_ptr<IComponentArray>, MAX_COMPONENTS> mComponentArrays; ///< Type ID -> array (null: not registered).
+
+    /// Next free ID for `TypeId`.
+    static inline ComponentType sNextTypeId = 0;
+
+    /// Process-wide ID of `CompT`, assigned on first use (the function-local static exists once per type).
+    template <EcsComponent CompT>
+    static ComponentType TypeId()
+    {
+        static ComponentType const id = [] {
+            CC_ASSERT_MSG(sNextTypeId < MAX_COMPONENTS, "More component types than MAX_COMPONENTS.");
+            return sNextTypeId++;
+        }();
+        return id;
+    }
 
     /// Returns the array of `CompT`, cast to its concrete type. Asserts if `CompT` is not registered.
-    template <typename CompT>
-    std::shared_ptr<ComponentArray<CompT>> GetComponentArray()
+    template <EcsComponent CompT>
+    ComponentArray<CompT>& GetComponentArray()
     {
-        const char* typeName = typeid(CompT).name();
-
-        assert(mComponentTypes.find(typeName) != mComponentTypes.end() && "Component not registered before use.");
-
-        return std::static_pointer_cast<ComponentArray<CompT>>(mComponentArrays[typeName]);
+        auto const& array = mComponentArrays[GetComponentType<CompT>()];
+        return static_cast<ComponentArray<CompT>&>(*array);
     }
 };
 }

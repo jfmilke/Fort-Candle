@@ -1,17 +1,17 @@
 #pragma once
 #include "ecs/Event.hh"
 #include "advanced/World.hh"
-#include <unordered_map>
-#include <assert.h>
+#include <array>
 #include <functional>
-#include <list>
+#include <utility>
+#include <vector>
 
 /**
  * Expands to the `(type, listener)` arguments of `AddFunctionalListener` for a member function of the calling object.
  *
  * Use inside a member function: `AddFunctionalListener(FUNCTIONAL_LISTENER(EventType::X, MyClass::OnX))`.
  */
-#define FUNCTIONAL_LISTENER(EventType, Listener) EventType, std::bind(&Listener, this, std::placeholders::_1)
+#define FUNCTIONAL_LISTENER(EventType, Listener) EventType, std::bind_front(&Listener, this)
 
 namespace gamedev
 {
@@ -45,12 +45,14 @@ public:
     /**
      * Registers a listener for every functional event of one type. Listeners cannot be removed.
      *
+     * Register listeners during initialization: adding one from inside a listener of the same type invalidates the running dispatch.
+     *
      * @param type Event type to listen to.
      * @param listener Function to call with the event.
      */
-    void AddFunctionalListener(EventType type, std::function<void(Event&)> const& listener)
+    void AddFunctionalListener(EventType type, std::function<void(Event&)> listener)
     {
-        mFunctionalListeners[type].push_back(listener);
+        mFunctionalListeners[std::to_underlying(type)].push_back(std::move(listener));
     }
 
     /**
@@ -60,10 +62,8 @@ public:
      */
     void SendFunctionalEvent(Event& event)
     {
-        for (auto const& listener : mFunctionalListeners[event.mType])
-        {
+        for (auto const& listener : mFunctionalListeners[std::to_underlying(event.mType)])
             listener(event);
-        }
     }
 
     /**
@@ -78,6 +78,8 @@ public:
 
 private:
     std::vector<Event> mPendingEvents; ///< Events sent with `SendEvent`, not handled by the manager.
-    std::unordered_map<EventType, std::list<std::function<void(Event&)>>> mFunctionalListeners; ///< Listeners per event type.
+
+    /// Listeners per event type, indexed by `std::to_underlying(EventType)`.
+    std::array<std::vector<std::function<void(Event&)>>, std::to_underlying(EventType::Count)> mFunctionalListeners;
 };
 }

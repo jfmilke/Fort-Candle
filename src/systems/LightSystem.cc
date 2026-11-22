@@ -1,9 +1,9 @@
 #include "systems/LightSystem.hh"
 #include "utility/Random.hh"
 
-void gamedev::LightSystem::Init(std::shared_ptr<EngineECS>& ecs)
+void gamedev::LightSystem::Init(EngineECS& ecs)
 {
-    mECS = ecs;
+    mECS = &ecs;
 }
 
 int gamedev::LightSystem::AddFreeLight(PointLight& pl)

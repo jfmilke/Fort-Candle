@@ -29,7 +29,7 @@ struct AdvancedFeatures
     float* mStatNumDraws = nullptr;             ///< Stat "num_drawcalls": draw calls per frame.
 
     gamedev::World mWorld;                      ///< Storage of all instances, wrapped by the ECS.
-    std::shared_ptr<gamedev::EngineECS> mECS;   ///< Notified when instances are destroyed through this object (UI, `destroy`).
+    gamedev::EngineECS* mECS = nullptr;         ///< Notified when instances are destroyed through this object (UI, `destroy`); not owned.
     gamedev::InstanceHandle mInstanceGenerated; ///< Demo instance. Unused.
 
     gamedev::InstanceHandle mSelectedInstance; ///< Instance picked with the mouse; outlined and editable in the editor.
@@ -38,7 +38,7 @@ struct AdvancedFeatures
     /**
      * Creates the statistics and the instance pool.
      *
-     * Room for 100 stats with a history of 256 frames each, and for 2048 instances (keep in sync with `MAX_INSTANCES`).
+     * Room for 100 stats with a history of 256 frames each, and for `MAX_INSTANCES` instances.
      */
     void initialize()
     {
@@ -49,11 +49,11 @@ struct AdvancedFeatures
         mStatNumDraws = gamedev::getStat(mStats, "num_drawcalls", gamedev::StatType::counter); // amount of drawcalls per frame
 
         // initialize world
-        mWorld.initialize(2048);
+        mWorld.initialize(MAX_INSTANCES);
     }
 
     /// Sets the ECS that is notified when instances are destroyed through this object.
-    void setECS(std::shared_ptr<gamedev::EngineECS> ecs);
+    void setECS(gamedev::EngineECS* ecs);
 
     /// Frees the statistics and all instances, and clears all components, systems and the spatial hash map.
     void destroy();

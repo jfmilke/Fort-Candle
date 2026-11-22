@@ -1,5 +1,4 @@
 #include "World.hh"
-#include <assert.h>
 #include <clean-core/assert.hh>
 
 gamedev::InstanceHandle gamedev::World::createInstance(glow::SharedVertexArray const& vao,
@@ -45,14 +44,14 @@ void gamedev::World::destroy() { mCPoolInstances.destroy(); }
 
 void gamedev::World::SetSignature(InstanceHandle handle, Signature signature)
 {
-    assert(isLiveHandle(handle) && "Entity not valid.");
+    CC_ASSERT_MSG(isLiveHandle(handle), "Entity not valid.");
 
     getInstance(handle).mSignature = signature;
 }
 
 Signature gamedev::World::GetSignature(InstanceHandle handle)
 {
-    assert(isLiveHandle(handle) && "Entity not valid.");
+    CC_ASSERT_MSG(isLiveHandle(handle), "Entity not valid.");
 
     return getInstance(handle).mSignature;
 }

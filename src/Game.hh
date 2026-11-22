@@ -197,7 +197,7 @@ private:
     std::shared_ptr<gamedev::Terrain> mTerrain; ///< Ground, water and height map.
 
     // ECS
-    std::shared_ptr<gamedev::EngineECS> mECS;                    ///< The ECS.
+    std::unique_ptr<gamedev::EngineECS> mECS;                    ///< The ECS; owns the registered systems. Destroyed in `onClose`.
     std::shared_ptr<gamedev::CollisionSystem> mCollisionSys;     ///< See `CollisionSystem`.
     std::shared_ptr<gamedev::RenderSystem> mRenderSys;           ///< See `RenderSystem`.
     std::shared_ptr<gamedev::PhysicsSystem> mPhysicsSys;         ///< See `PhysicsSystem`.
@@ -286,7 +286,7 @@ public:
     /// Called once per frame to build the UI: main menu, HUD and dialogs, or the editor windows.
     void onGui() override;
 
-    /// Releases the statistics and all instances before the window closes.
+    /// Releases the statistics, all instances, the factories, the systems and the ECS while the GL context still exists.
     void onClose() override;
 
     /**

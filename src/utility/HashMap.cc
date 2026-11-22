@@ -1,4 +1,5 @@
 #include "utility/HashMap.hh"
+#include <algorithm>
 #include <string>
 
 void gamedev::Hash2D::Init(tg::size2 cellCount, tg::aabb2 bounds)
@@ -19,7 +20,8 @@ void gamedev::Hash2D::Init(tg::size2 cellCount, tg::aabb3 bounds)
     Init(cellCount, bounds2D);
 }
 
-int gamedev::Hash2D::GetIndexID_(tg::ipos2 pos) { return pos.y * mMaxCells.width + pos.x; }
+// mMaxCells holds the highest index, so a row has mMaxCells.width + 1 cells
+int gamedev::Hash2D::GetIndexID_(tg::ipos2 pos) { return pos.y * (mMaxCells.width + 1) + pos.x; }
 
 tg::ipos2 gamedev::Hash2D::PositionToGrid_(const tg::pos2& position)
 {
@@ -58,15 +60,11 @@ void gamedev::Hash2D::Insert_(Hash2Client& c)
             tg::ipos2 pos{x, y};
             auto k = GetIndexID_(pos);
 
-            if (mBinMap.find(k) == mBinMap.end())
-            {
-                mBinMap.insert({k, std::vector<Hash2Client>()});
-            }
-
             mBinMap[k].push_back(c);
-            mClientMap.insert_or_assign(c.handle, c);
         }
     }
+
+    mClientMap.insert_or_assign(c.handle, c);
 }
 
 void gamedev::Hash2D::Remove_(Hash2Client& c)
@@ -81,14 +79,17 @@ void gamedev::Hash2D::Remove_(Hash2Client& c)
             tg::ipos2 pos{x, y};
             auto k = GetIndexID_(pos);
 
-            auto& container = mBinMap[k];
-            for (int i = 0; i < container.size(); i++)
+            auto bin = mBinMap.find(k);
+            if (bin == mBinMap.end())
+                continue;
+
+            // Each client is stored at most once per cell
+            auto& clients = bin->second;
+            auto it = std::ranges::find(clients, c.handle, &Hash2Client::handle);
+            if (it != clients.end())
             {
-                if (container[i].handle == c.handle)
-                {
-                    std::swap(container[i], container.back());
-                    container.pop_back();
-                }
+                *it = clients.back();
+                clients.pop_back();
             }
         }
     }
@@ -105,16 +106,16 @@ void gamedev::Hash2D::AddInstance(const InstanceHandle handle, const tg::vec3& t
     tg::pos2 max = {dimensions.max.x, dimensions.max.z};
 
     // Create a new internal client which holds some easy access information
-    Hash2Client hc2{handle, {translation.x, translation.z}, {min, max}, {}, 0};
+    Hash2Client hc2{handle, {translation.x, translation.z}, {min, max}, {}};
 
     Insert_(hc2);
 }
 
 void gamedev::Hash2D::UpdateInstance(const InstanceHandle handle, const tg::vec3& translation)
 {
-    if (mClientMap.find(handle) != mClientMap.end())
+    if (auto client = mClientMap.find(handle); client != mClientMap.end())
     {
-        auto& c = mClientMap[handle];
+        auto& c = client->second;
         c.translation.x = translation.x;
         c.translation.y = translation.z;
 
@@ -125,9 +126,9 @@ void gamedev::Hash2D::UpdateInstance(const InstanceHandle handle, const tg::vec3
 
 void gamedev::Hash2D::UpdateInstance(const InstanceHandle handle, const tg::vec3& translation, const tg::aabb3& dimensions)
 {
-    if (mClientMap.find(handle) != mClientMap.end())
+    if (auto client = mClientMap.find(handle); client != mClientMap.end())
     {
-        auto& c = mClientMap[handle];
+        auto& c = client->second;
         c.translation.x = translation.x;
         c.translation.y = translation.z;
         c.dimensions.min = {dimensions.min.x, dimensions.min.z};
@@ -140,26 +141,21 @@ void gamedev::Hash2D::UpdateInstance(const InstanceHandle handle, const tg::vec3
 
 void gamedev::Hash2D::RemoveInstance(InstanceHandle handle)
 {
-    if (mClientMap.find(handle) == mClientMap.end())
-    {
+    auto client = mClientMap.find(handle);
+    if (client == mClientMap.end())
         return;
-    }
 
-    auto c = mClientMap[handle];
-    Remove_(c);
+    Remove_(client->second);
+    mClientMap.erase(client);
 }
 
-std::unordered_set<gamedev::InstanceHandle, gamedev::InstanceHandleHash> gamedev::Hash2D::FindNear(const tg::vec3& translation, const tg::pos3& min, const tg::pos3& max)
+std::vector<gamedev::InstanceHandle> gamedev::Hash2D::FindNear(const tg::vec3& translation, const tg::pos3& min, const tg::pos3& max)
 {
     // find area to search for instances
     auto i1 = PositionToGrid_(min + translation);
     auto i2 = PositionToGrid_(max + translation);
 
-    // instance container
-    std::unordered_set<InstanceHandle, InstanceHandleHash> handles;
-
-    // ensure uniqueness
-    int queryID = mQueryIDs++;
+    std::vector<InstanceHandle> handles;
 
     // search whole area
     for (int x = i1.x; x <= i2.x; x++)
@@ -167,38 +163,32 @@ std::unordered_set<gamedev::InstanceHandle, gamedev::InstanceHandleHash> gamedev
         for (int y = i1.y; y <= i2.y; y++)
         {
             tg::ipos2 pos{x, y};
-            auto k = GetIndexID_(pos);
 
-            // sanity check + instance retrieval
-            if (mBinMap.find(k) != mBinMap.end())
-            {
-                for (auto& v : mBinMap[k])
-                {
-                    // uniqueness check: if instance was already added during this query, its queryID will match
-                    if (v.queryID != queryID)
-                    {
-                        v.queryID = queryID;
-                        handles.insert(v.handle);
-                    }
-                }
-            }
+            if (auto bin = mBinMap.find(GetIndexID_(pos)); bin != mBinMap.end())
+                for (auto const& client : bin->second)
+                    handles.push_back(client.handle);
         }
     }
+
+    // instances overlapping several cells were collected once per cell
+    std::ranges::sort(handles);
+    auto const duplicates = std::ranges::unique(handles);
+    handles.erase(duplicates.begin(), duplicates.end());
 
     return handles;
 }
 
-std::unordered_set<gamedev::InstanceHandle, gamedev::InstanceHandleHash> gamedev::Hash2D::FindNear(const tg::vec3& translation, const tg::aabb3& bounds)
+std::vector<gamedev::InstanceHandle> gamedev::Hash2D::FindNear(const tg::vec3& translation, const tg::aabb3& bounds)
 {
     return FindNear(translation, bounds.min, bounds.max);
 }
 
-std::unordered_set<gamedev::InstanceHandle, gamedev::InstanceHandleHash> gamedev::Hash2D::FindNear(const tg::vec3& translation, const tg::size3& bounds)
+std::vector<gamedev::InstanceHandle> gamedev::Hash2D::FindNear(const tg::vec3& translation, const tg::size3& bounds)
 {
     return FindNear(translation, {-bounds.width, 0, -bounds.depth}, {bounds.width, 0, bounds.depth});
 }
 
-std::unordered_set<gamedev::InstanceHandle, gamedev::InstanceHandleHash> gamedev::Hash2D::FindNear(const tg::pos3& position)
+std::vector<gamedev::InstanceHandle> gamedev::Hash2D::FindNear(const tg::pos3& position)
 {
     return FindNear(tg::vec3(position), tg::pos3::zero, tg::pos3::zero);
 }

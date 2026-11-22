@@ -35,7 +35,7 @@ class Factory
 {
 public:
     /// Sets the ECS and the asset manager. Must be called before any other function.
-    void Init(SharedEngineECS& ecs, SharedGameObjects& obj);
+    void Init(EngineECS& ecs, SharedGameObjects& obj);
 
     /// Sets the terrain; created instances are then placed on its surface.
     void AttachTerrain(std::shared_ptr<Terrain>& terrain);
@@ -322,7 +322,7 @@ protected:
     virtual void PostProcessRegistration(InstanceHandle presetHandle){};
 
 protected:
-    SharedEngineECS mECS;                                                            ///< Shared ECS.
+    EngineECS* mECS = nullptr;                                                       ///< ECS (not owned).
     SharedGameObjects mObj;                                                          ///< Asset manager (meshes, textures).
     std::shared_ptr<Terrain> mT;                                                     ///< Terrain for placement, may be null.
     int mFreeID = 0;                                                                 ///< Next preset ID.

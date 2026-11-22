@@ -32,9 +32,9 @@ public:
     /**
      * Sets the default sun, ambient light, a day length of 0.2 real minutes, sunrise at 6:00 and sunset at 21:00.
      *
-     * @param ecs Shared ECS. Unused: only stored.
+     * @param ecs The ECS; must outlive this object. Unused: only stored.
      */
-    void Init(std::shared_ptr<EngineECS>& ecs);
+    void Init(EngineECS& ecs);
 
     /**
      * Advances the game time, counts days (`mNewDay`) and interpolates the sun.
@@ -112,7 +112,7 @@ private:
     void CalculateSun();
 
 private:
-    std::shared_ptr<EngineECS> mECS; ///< Shared ECS. Unused.
+    EngineECS* mECS = nullptr; ///< ECS (not owned). Unused.
 
     const float secondsPerDay = 86400.f; ///< Game seconds per day (60 * 60 * 24).
     float mSecondToGameSecond;           ///< Game seconds per real second.

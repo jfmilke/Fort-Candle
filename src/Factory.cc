@@ -3,9 +3,9 @@
 #include <glow/common/log.hh>
 #include <fstream>
 
-void gamedev::Factory::Init(SharedEngineECS& ecs, SharedGameObjects& obj)
+void gamedev::Factory::Init(EngineECS& ecs, SharedGameObjects& obj)
 {
-    mECS = ecs;
+    mECS = &ecs;
     mObj = obj;
 }
 

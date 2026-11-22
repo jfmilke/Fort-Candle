@@ -21,13 +21,12 @@ class AnimationSystem : public System
 {
 public:
     /// Stores the ECS.
-    void Init(std::shared_ptr<EngineECS>& ecs);
+    void Init(EngineECS& ecs);
 
     /// Sorts the entity into the arrow set or the animated set.
-    void AddEntity(InstanceHandle& handle, Signature entitySignature);
-    void RemoveEntity(InstanceHandle& handle, Signature entitySignature);
-    void RemoveEntity(InstanceHandle& handle);
-    void RemoveAllEntities();
+    void AddEntity(InstanceHandle handle, Signature entitySignature) override;
+    void RemoveEntity(InstanceHandle handle) override;
+    void RemoveAllEntities() override;
 
     /**
      * Advances arrows and animations. Expired arrows are marked for destruction.
@@ -74,7 +73,7 @@ public:
     void AlignTrajectory(Instance& instance, Physics* physics);
 
 private:
-    std::shared_ptr<EngineECS> mECS; ///< Shared ECS.
+    EngineECS* mECS = nullptr; ///< ECS (not owned).
 
     std::set<InstanceHandle> mArrows; ///< Entities with an `Arrow` component.
     std::set<InstanceHandle> mLiving; ///< Unused.

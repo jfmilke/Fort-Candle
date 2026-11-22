@@ -21,7 +21,7 @@ class Terrain
 {
 public:
     /// Stores the ECS.
-    void Init(SharedEngineECS& ecs);
+    void Init(EngineECS& ecs);
 
     /**
      * Loads the ground mesh (also needed for the height map) and uploads it.
@@ -115,7 +115,7 @@ private:
     pm::minmax_t<tg::pos3> getMapWaterExtents();
 
 private:
-    SharedEngineECS mECS; ///< Shared ECS.
+    EngineECS* mECS = nullptr; ///< ECS (not owned).
 
     InstanceHandle mGroundHandle; ///< Ground instance.
     InstanceHandle mWaterHandle;  ///< Water instance.

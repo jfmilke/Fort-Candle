@@ -25,17 +25,13 @@ public:
     /**
      * Stores the ECS and registers the collision listener.
      *
-     * @param ecs Shared ECS.
+     * @param ecs The ECS; must outlive this object.
      */
-    void Init(std::shared_ptr<EngineECS>& ecs);
+    void Init(EngineECS& ecs);
 
     /// Sets the terrain used for `Physics::forceGround`.
     void SetTerrain(std::shared_ptr<Terrain>& t);
 
-    void AddEntity(InstanceHandle& handle, Signature entitySignature);
-    void RemoveEntity(InstanceHandle& handle, Signature entitySignature);
-    void RemoveEntity(InstanceHandle& handle);
-    void RemoveAllEntities();
 
     /**
      * Moves all entities and publishes their positions.
@@ -73,7 +69,7 @@ private:
     float last_dt = 0.0;           ///< Unused.
 
 private:
-    std::shared_ptr<EngineECS> mECS;   ///< Shared ECS.
+    EngineECS* mECS = nullptr;         ///< ECS (not owned).
     std::shared_ptr<Terrain> mTerrain; ///< Terrain for height queries.
 };
 }
