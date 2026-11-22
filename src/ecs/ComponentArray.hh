@@ -39,14 +39,21 @@ public:
  * Based on https://austinmorlan.com/posts/entity_component_system/.
  * Created and owned by the `ComponentManager` when `CompT` is registered; accessed through `EngineECS`.
  *
- * Removing a component moves the last element into the gap. A pointer returned by `GetData` may therefore refer to
- * another entity's component after any removal of this type.
+ * Removing a component moves the last element into the gap.
+ * A pointer returned by `GetData` may therefore refer to another entity's component after any removal of this type.
+ *
+ * The asserts only fire in Debug builds; RelWithDebInfo and Release define `NDEBUG`.
  */
 template <typename CompT>
 class ComponentArray : public IComponentArray
 {
 public:
-    /// Stores a copy of `component` for `handle`. Asserts if `handle` already has a component of this type.
+    /**
+     * Stores a copy of a component in the next free slot. Asserts if the instance already has a component of this type.
+     *
+     * @param handle Instance the component belongs to.
+     * @param component Component to copy.
+     */
     void InsertData(InstanceHandle handle, CompT& component)
     {
         assert(mEntityToIndexMap.find(handle) == mEntityToIndexMap.end() && "Component added to same entity more than once.");
@@ -61,7 +68,12 @@ public:
         IntegrityCheck();
     }
 
-    /// Like `InsertData`, but if `handle` already has a component of this type it only logs and keeps the existing one.
+    /**
+     * Like `InsertData`, but if the instance already has a component of this type it only logs and keeps that one.
+     *
+     * @param handle Instance the component belongs to.
+     * @param component Component to copy.
+     */
     void TryInsertData(InstanceHandle handle, CompT& component)
     {
         if(mEntityToIndexMap.find(handle) != mEntityToIndexMap.end())
@@ -79,7 +91,11 @@ public:
         IntegrityCheck();
     }
 
-    /// Removes `handle`'s component and moves the last element into its slot. Asserts if `handle` has none.
+    /**
+     * Removes a component and moves the last element into its slot. Asserts if there is none.
+     *
+     * @param handle Instance whose component is removed.
+     */
     void RemoveData(InstanceHandle handle)
     {
         assert(mEntityToIndexMap.find(handle) != mEntityToIndexMap.end() && "Removing non-existent component.");
@@ -104,7 +120,11 @@ public:
         IntegrityCheck();
     }
 
-    /// Like `RemoveData`, but does nothing if `handle` has no component of this type.
+    /**
+     * Like `RemoveData`, but does nothing if there is no component of this type.
+     *
+     * @param handle Instance whose component is removed.
+     */
     void TryRemoveData(InstanceHandle handle)
     {
         if(mEntityToIndexMap.find(handle) == mEntityToIndexMap.end())
@@ -140,7 +160,12 @@ public:
         mSize = 0;
     }
 
-    /// Returns `handle`'s component. Logs an error and asserts if `handle` has none.
+    /**
+     * Returns `handle`'s component. Logs an error and asserts if `handle` has none.
+     *
+     * TODO: Without asserts (RelWithDebInfo, Release), a missing component returns slot 0, i.e. another instance's component,
+     * and `operator[]` adds a wrong map entry for `handle`.
+     */
     CompT* GetData(InstanceHandle handle)
     {
         if (mEntityToIndexMap.find(handle) == mEntityToIndexMap.end())
@@ -174,8 +199,13 @@ public:
     }
 
     /**
-     * Copies `handle_source`'s component (if it has one) to `handle_copy`, overwriting an existing one, and sets the copy's
-     * `handle_value`. The copy's `instance` pointer is set to nullptr; the caller must set it before use.
+     * Copies a component from one instance to another, overwriting an existing one.
+     *
+     * Sets the copy's `handle_value`.
+     * The copy's `instance` pointer is set to nullptr; the caller must set it before use.
+     *
+     * @param handle_source Instance to copy from; nothing happens if it has no component of this type.
+     * @param handle_copy Instance to copy to.
      */
     void CloneEntityComponent(InstanceHandle& handle_source, InstanceHandle& handle_copy)
     {
@@ -198,7 +228,11 @@ public:
         GetBaseComponent(handle_copy)->instance = nullptr;
     }
 
-    /// Removes `handle`'s component if it has one.
+    /**
+     * Removes the component of a destroyed instance, if it has one.
+     *
+     * @param handle Destroyed instance.
+     */
     void EntityDestroyed(InstanceHandle handle)
     {
         if (mEntityToIndexMap.find(handle) != mEntityToIndexMap.end())
@@ -212,11 +246,12 @@ public:
     }
 
     /**
-     * Debugging aid, called after every insertion and removal. Set breakpoints on the `int i = 0;` lines to catch
-     * duplicate slots or handles.
+     * Debugging aid, called after every insertion and removal.
      *
-     * TODO: Walks all slot pairs (O(n^2) per insertion/removal) but checks nothing, because the assert is commented
-     * out. Remove it or enable the check in debug builds only.
+     * Set breakpoints on the `int i = 0;` lines to catch duplicate slots or handles.
+     *
+     * TODO: Walks all slot pairs (O(n^2) per insertion/removal) but checks nothing, because the assert is commented out.
+     * Remove it or enable the check in debug builds only.
      */
     void IntegrityCheck()
     {

@@ -8,12 +8,21 @@
 
 namespace gamedev
 {
-/// Returns `string` converted to lower case (ASCII), e.g. to normalize preset and asset names.
+/**
+ * Converts a string to lower case (ASCII), e.g. to normalize preset and asset names.
+ *
+ * @param string String to convert.
+ * @return The lower-case copy.
+ */
 std::string lowerString(std::string string);
 
 /**
- * Solves a*x^2 + b*x + c = 0. Returns both real solutions (s1 >= s2 for a > 0), or (0, 0) if there is none.
- * `a` must not be zero.
+ * Solves the quadratic equation a*x^2 + b*x + c = 0.
+ *
+ * @param a Quadratic coefficient; must not be zero.
+ * @param b Linear coefficient.
+ * @param c Constant term.
+ * @return Both real solutions (s1 >= s2 for a > 0), or (0, 0) if there is none.
  */
 template<typename T>
 std::pair<float, float> solveQuadratic(T a, T b, T c)

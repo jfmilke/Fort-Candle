@@ -18,8 +18,8 @@ class EngineECS;
  *  - the frame statistics,
  *  - the selected instance and the editor gizmo state.
  *
- * The demo functions (`createDemoInstances`, `drawWorld`, `drawPolyWorld`, `drawOutlineIfSelected`,
- * `updateAnimationsInWorld`) are leftovers and not called by the game.
+ * The demo functions are leftovers of the course framework and unused:
+ * `createDemoInstances`, `drawWorld`, `drawPolyWorld`, `drawOutlineIfSelected` and `updateAnimationsInWorld`.
  */
 struct AdvancedFeatures
 {
@@ -29,13 +29,17 @@ struct AdvancedFeatures
     float* mStatNumDraws = nullptr;             ///< Stat "num_drawcalls": draw calls per frame.
 
     gamedev::World mWorld;                      ///< Storage of all instances, wrapped by the ECS.
-    std::shared_ptr<gamedev::EngineECS> mECS;   ///< Used to keep the ECS consistent when the UI destroys instances.
-    gamedev::InstanceHandle mInstanceGenerated; ///< Demo instance (unused).
+    std::shared_ptr<gamedev::EngineECS> mECS;   ///< Notified when instances are destroyed through this object (UI, `destroy`).
+    gamedev::InstanceHandle mInstanceGenerated; ///< Demo instance. Unused.
 
     gamedev::InstanceHandle mSelectedInstance; ///< Instance picked with the mouse; outlined and editable in the editor.
     gamedev::EditorState mEditorState;         ///< ImGuizmo state for manipulating the selection.
 
-    /// Creates the statistics and the instance pool (2048 instances, same as `MAX_INSTANCES`).
+    /**
+     * Creates the statistics and the instance pool.
+     *
+     * Room for 100 stats with a history of 256 frames each, and for 2048 instances (keep in sync with `MAX_INSTANCES`).
+     */
     void initialize()
     {
         // stat setup - track various metrics as your game runs
@@ -51,10 +55,22 @@ struct AdvancedFeatures
     /// Sets the ECS that is notified when instances are destroyed through this object.
     void setECS(std::shared_ptr<gamedev::EngineECS> ecs);
 
-    /// Frees the statistics and all instances, and clears all components and systems.
+    /// Frees the statistics and all instances, and clears all components, systems and the spatial hash map.
     void destroy();
 
-    /// Demo: creates a grid of animated spheres and cubes plus one instance of `vaoGenerated`.
+    /**
+     * Demo: creates a grid of animated spheres and cubes plus one travelling instance of `vaoGenerated`. Unused.
+     *
+     * The grid instances get spin or bounce animations and color biases from a fixed palette.
+     * Selects the first instance.
+     *
+     * @param vaoSphere Mesh of the grid instances at even x and every third z.
+     * @param vaoCube Mesh of the other grid instances.
+     * @param vaoGenerated Mesh of the extra instance (`mInstanceGenerated`).
+     * @param texAlbedo Albedo texture of all instances.
+     * @param texNormal Normal map of all instances.
+     * @param texARM AO/roughness/metallic texture of all instances.
+     */
     void createDemoInstances(glow::SharedVertexArray const& vaoSphere,
                              glow::SharedVertexArray const& vaoCube,
                              glow::SharedVertexArray const& vaoGenerated,
@@ -62,13 +78,31 @@ struct AdvancedFeatures
                              glow::SharedTexture2D const& texNormal,
                              glow::SharedTexture2D const& texARM);
 
-    /// Demo: draws every instance with all three textures using the bound `shader`.
+    /**
+     * Demo: draws every instance with all three textures and adds the draw calls to the statistics. Unused.
+     *
+     * @param shader Bound program; receives `uTexAlbedo`, `uTexNormal`, `uTexARM`, `uModel`, `uPickingID` and `uAlbedoBiasPacked` per instance.
+     */
     void drawWorld(glow::UsedProgram& shader);
 
-    /// Demo: draws every instance with only the albedo texture using the bound `shader`.
+    /**
+     * Demo: like `drawWorld`, but only binds the albedo texture. Unused.
+     *
+     * @param shader Bound program; receives `uTexAlbedo`, `uModel`, `uPickingID` and `uAlbedoBiasPacked` per instance.
+     */
     void drawPolyWorld(glow::UsedProgram& shader);
 
-    /// Demo: clears `tgtOutline` and draws the selected instance into `fbOutline` with `shaderOutline`.
+    /**
+     * Demo: clears the outline target and draws the selected instance into it. Unused.
+     *
+     * Uses the depth test `GL_EQUAL`, so `fbOutline` needs the depth buffer of the already rendered scene.
+     *
+     * @param tgtOutline Color target of `fbOutline`; cleared to transparent black.
+     * @param fbOutline Framebuffer to draw the selection into.
+     * @param shaderOutline Program used for the selection; receives `uProj`, `uView` and `uModel`.
+     * @param proj Camera projection matrix.
+     * @param view Camera view matrix.
+     */
     void drawOutlineIfSelected(glow::SharedTextureRectangle const& tgtOutline,
                                glow::SharedFramebuffer const& fbOutline,
                                glow::SharedProgram const& shaderOutline,
@@ -76,12 +110,25 @@ struct AdvancedFeatures
                                tg::mat4 const& view);
 
     /**
-     * Draws the "Objects" window (edit or destroy the selection, destroy all instances) and the statistics window.
-     * Sets `outFlyToSelection`/`outCreateNewInstance` when the corresponding button was pressed.
+     * Draws the editor's "Objects" window and the statistics window.
+     *
+     * The "Objects" window edits the selection's color bias and demo animation, destroys the selection, or destroys all instances.
+     * Instances are destroyed immediately and removed from the ECS.
+     *
+     * TODO: `Game::onGui` ignores both output flags, so "Focus on Selection" and "Spawn Instance" do nothing
+     * (the **F** key still flies to the selection).
+     *
+     * @param[out] outFlyToSelection Set to true when "Focus on Selection" was pressed; left unchanged otherwise.
+     * @param[out] outCreateNewInstance Set to true when "Spawn Instance" was pressed; left unchanged otherwise.
      */
     void runImgui(bool& outFlyToSelection, bool& outCreateNewInstance);
 
-    /// Demo: advances the `Instance::anim` animations by `dt` seconds; `currentTime` is the total time in seconds.
+    /**
+     * Demo: applies the `Instance::anim` animations of all instances. Unused.
+     *
+     * @param dt Time step in seconds (spin and travel speed).
+     * @param currentTime Total time in seconds (bounce and travel phase).
+     */
     void updateAnimationsInWorld(float dt, float currentTime);
 
     /// Adds `draws` to this frame's draw call statistic.

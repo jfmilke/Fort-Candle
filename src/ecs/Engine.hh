@@ -25,8 +25,7 @@ GLOW_SHARED(class, EngineECS);
  *  - Owns the `ComponentManager`, `SystemManager` and `EventManager`.
  *  - Wraps the `World` that stores the instances (owned by `AdvancedFeatures`).
  *
- * Every function that changes a component set also updates the instance signature and re-evaluates the system
- * membership (`UpdateSystems`).
+ * Every function that changes a component set also updates the instance signature and re-evaluates the system membership (`UpdateSystems`).
  *
  * TODO: Systems and factories hold `shared_ptr`s back to this object, so it is never destroyed (reference cycle).
  */
@@ -34,10 +33,12 @@ class EngineECS
 {
 public:
     /**
-     * Creates the managers and wraps `world`, which must outlive this object.
+     * Creates the managers and wraps the instance storage.
      *
-     * TODO: `world` is wrapped in an owning `shared_ptr` although `AdvancedFeatures` owns it. This is only harmless
-     * because this object is never destroyed.
+     * TODO: `world` is wrapped in an owning `shared_ptr` although `AdvancedFeatures` owns it.
+     * This is only harmless because this object is never destroyed.
+     *
+     * @param world Instance storage; must outlive this object.
      */
     void Init(World& world)
     {
@@ -50,7 +51,17 @@ public:
     // Entity Management (world)
     // -------------------------
 
-    /// Creates an instance with the given mesh and textures, an identity transform, no components and an empty signature.
+    /**
+     * Creates an instance with an identity transform, no components and an empty signature (see `World::createInstance`).
+     *
+     * The instance is not added to the spatial hash map; the factories do that.
+     *
+     * @param vao Main mesh.
+     * @param albedo Base color texture.
+     * @param normal Normal map (the factories pass nullptr).
+     * @param arm Ambient occlusion + roughness + metallic texture (the factories pass nullptr).
+     * @return Handle of the new instance.
+     */
     [[nodiscard]] InstanceHandle CreateInstance(glow::SharedVertexArray const& vao,
                                                 glow::SharedTexture2D const& albedo,
                                                 glow::SharedTexture2D const& normal,
@@ -60,8 +71,12 @@ public:
     }
 
     /**
-     * Creates an instance that shares mesh and textures with `source_handle` and copies its albedo bias, transform and
-     * bounds. Components are not copied (see `CloneComponents`).
+     * Creates an instance that shares mesh and textures with another one and copies its albedo bias, transform and bounds.
+     *
+     * Components are not copied (see `CloneComponents`), and the copy is not added to the spatial hash map.
+     *
+     * @param source_handle Live instance to copy.
+     * @return Handle of the copy.
      */
     [[nodiscard]] InstanceHandle CloneInstance(InstanceHandle source_handle)
     {
@@ -85,15 +100,22 @@ public:
     /// Number of live instances, including prototypes.
     uint32_t getNumLiveInstances() const { return mInstanceManager->getNumLiveInstances(); }
 
-    /// Flags `handle` for destruction; `CleanupSystem` destroys it at the end of the current update.
+    /**
+     * Flags an instance for destruction; `CleanupSystem` destroys it at the end of the current update.
+     *
+     * @param handle Live instance to destroy.
+     */
     void MarkDestruction(InstanceHandle handle)
     {
         mInstanceManager->getInstance(handle).destroy = true;
     }
 
     /**
-     * Immediately frees `handle` and removes it from all components, systems and the spatial hash map.
+     * Immediately frees an instance and removes it from all components, systems and the spatial hash map.
+     *
      * Prefer `MarkDestruction` while systems iterate.
+     *
+     * @param handle Live instance to destroy.
      */
     void DestroyInstance(InstanceHandle handle)
     {
@@ -101,7 +123,11 @@ public:
         InstanceDestroyed(handle);
     }
 
-    /// Removes `handle` from all components, systems and the spatial hash map, without freeing the instance itself.
+    /**
+     * Removes an instance from all components, systems and the spatial hash map, without freeing the instance itself.
+     *
+     * @param handle Instance that was or is about to be freed in the `World`.
+     */
     void InstanceDestroyed(InstanceHandle handle)
     {
         mComponentManager->EntityDestroyed(handle);
@@ -131,8 +157,12 @@ public:
     }
 
     /**
-     * Adds a new `CompT` to `handle`, updates its signature and systems, and returns the component.
-     * Asserts if `handle` already has a `CompT`.
+     * Adds a default `CompT` to an instance and updates its signature and systems.
+     *
+     * Asserts if the instance already has a `CompT`.
+     *
+     * @param handle Live instance to add the component to.
+     * @return The new component, valid until the next removal of a `CompT`.
      */
     template <typename CompT>
     CompT* CreateComponent(InstanceHandle handle)
@@ -148,7 +178,12 @@ public:
         return Component;
     }
 
-    /// Like `CreateComponent`, but if `handle` already has a `CompT` it is kept and returned.
+    /**
+     * Like `CreateComponent`, but if the instance already has a `CompT` it is kept and returned.
+     *
+     * @param handle Live instance to add the component to.
+     * @return The new or existing component, valid until the next removal of a `CompT`.
+     */
     template <typename CompT>
     CompT* TryCreateComponent(InstanceHandle handle)
     {
@@ -164,8 +199,12 @@ public:
     }
 
     /**
-     * Adds a copy of `component` to `handle` and updates its signature and systems. The copy's `instance` pointer is
-     * taken from `component` as is. Asserts if `handle` already has a `CompT`.
+     * Adds a copy of a component to an instance and updates its signature and systems. Unused.
+     *
+     * Asserts if the instance already has a `CompT`.
+     *
+     * @param handle Live instance to add the component to.
+     * @param component Component to copy; the copy keeps its `instance` pointer as is.
      */
     template <typename CompT>
     void AddComponent(InstanceHandle handle, CompT component)
@@ -179,7 +218,12 @@ public:
         UpdateSystems(handle);
     }
 
-    /// Copies all components and the signature of `source_handle` to `copy_handle` and updates its systems.
+    /**
+     * Copies all components and the signature of one instance to another and updates the copy's systems.
+     *
+     * @param source_handle Live instance to copy from.
+     * @param copy_handle Live instance to copy to; its existing components of the same types are overwritten.
+     */
     void CloneComponents(InstanceHandle source_handle, InstanceHandle copy_handle)
     {
         auto& source_instance = GetInstance(source_handle);
@@ -192,7 +236,11 @@ public:
         UpdateSystems(copy_handle);
     }
 
-    /// Removes `handle`'s `CompT` and updates its signature and systems. Asserts if it has none.
+    /**
+     * Removes an instance's `CompT` and updates its signature and systems. Asserts if it has none.
+     *
+     * @param handle Live instance to remove the component from.
+     */
     template <typename CompT>
     void RemoveComponent(InstanceHandle handle)
     {
@@ -205,7 +253,11 @@ public:
         UpdateSystems(handle);
     }
 
-    /// Like `RemoveComponent`, but does nothing to the components if `handle` has no `CompT`.
+    /**
+     * Like `RemoveComponent`, but does nothing to the components if the instance has no `CompT`.
+     *
+     * @param handle Live instance to remove the component from.
+     */
     template <typename CompT>
     void TryRemoveComponent(InstanceHandle handle)
     {
@@ -218,7 +270,11 @@ public:
         UpdateSystems(handle);
     }
 
-    /// Removes all of `handle`'s components, clears its signature and removes it from all systems.
+    /**
+     * Removes all components of an instance, clears its signature and removes it from all systems.
+     *
+     * @param handle Live instance to remove the components from.
+     */
     void RemoveAllComponents(InstanceHandle handle)
     {
         mComponentManager->RemoveAllComponents(handle);
@@ -262,8 +318,11 @@ public:
     // -----------------
 
     /**
-     * Adds `handle` to all systems whose signature it matches and removes it from the others. `Prototype` instances are
-     * removed from all systems instead.
+     * Adds an instance to all systems whose signature it matches and removes it from the others.
+     *
+     * `Prototype` instances are removed from all systems instead.
+     *
+     * @param handle Live instance whose signature changed.
      */
     void UpdateSystems(InstanceHandle handle)
     {
@@ -284,7 +343,7 @@ public:
         return mSystemManager->RegisterSystem<SysT>();
     }
 
-    /// Sets the components an entity needs to be part of `SysT`. Only the first call per system has an effect.
+    /// Sets the components an entity needs to be part of `SysT`. Only the first call has an effect (see `SystemManager`).
     template <typename SysT>
     void SetSystemSignature(Signature signature)
     {
@@ -303,19 +362,32 @@ public:
     // Event Management
     // ----------------
 
-    /// See `EventManager::AddFunctionalListener`; use with `FUNCTIONAL_LISTENER`.
+    /**
+     * Registers a listener for all functional events of one type; use with `FUNCTIONAL_LISTENER`.
+     *
+     * @param type Event type to listen to.
+     * @param listener Called synchronously by `SendFunctionalEvent`; cannot be removed.
+     */
     void AddFunctionalListener(EventType type, std::function<void(Event&)> const&listener)
     {
         mEventManager->AddFunctionalListener(type, listener);
     }
 
-    /// Calls all listeners of `event.mType` synchronously.
+    /**
+     * Calls all listeners of the event's type synchronously, in registration order.
+     *
+     * @param event Event to send; listeners may modify it.
+     */
     void SendFunctionalEvent(Event& event)
     {
         mEventManager->SendFunctionalEvent(event);
     }
 
-    /// Queues `event` for manual handling via `GetPendingEvents`.
+    /**
+     * Queues an event for manual handling via `GetPendingEvents`. Unused.
+     *
+     * @param event Event to copy into the queue.
+     */
     void SendEvent(Event& event)
     {
         mEventManager->SendEvent(event);
@@ -326,6 +398,7 @@ public:
 
     /**
      * Spatial hash of instances on the ground plane for neighbourhood queries (e.g. targets in range, free spawn spots).
+     *
      * Factories add created instances and `PhysicsSystem` updates moved ones.
      */
     Hash2D& GetHashMap() { return mSpatialHashMap; }

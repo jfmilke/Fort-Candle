@@ -36,10 +36,14 @@ Code style: `.clang-format` (Google-based, Allman braces, 4-space indent, 150 co
 
 Documentation: Doxygen comments, written to be read in the code first (the generated docs come second).
 - Multi-line docs use `/** ... */` blocks with a ` * ` prefix per line; single-line docs use `///`, data members and enumerators a trailing `///<` (or `///` above the member if the line would exceed 150 columns). Align consecutive `///<` like clang-format's `AlignTrailingComments`.
+- Line breaks follow the text, not the column limit. A paragraph, list item or tag description that fits in about 120 columns stays on one line. A longer one starts each sentence on a new line, and a sentence that does not fit in 150 columns breaks at a clause boundary (after a comma, semicolon or colon, or before a parenthesis), never mid-phrase.
+- Within a block: if the first paragraph has more than one sentence and does not fit on one line, the first sentence becomes the summary line, followed by an empty ` *` line. Lists are written ` *  - item` / ` *  1. step`, with continuation lines aligned to the item text; `@param`/`@return` continuation lines align with the description. A `// Label` comment that heads a group of documented declarations is followed by an empty line.
 - Class docs explain purpose, ownership and how the class fits into the ECS. Give them structure: a one-line summary, then short paragraphs and `-`/`1.` lists separated by empty ` *` lines.
 - Function docs state intent and effect (side effects, ownership, units, coordinate spaces) in as few words as possible. They live at the declaration (header). Separate documented declarations by an empty line.
+- Functions that are not plain getters, setters or operators get a `/** ... */` block: a brief line, short details if they help (each its own paragraph), then `@param` for every parameter (`@param[out]`/`@param[in,out]` for output parameters) and `@return` for a non-void result. Getters, setters, operators and parameterless functions whose brief says it all keep a one-line `///`.
 - `.cc` files only get plain `//` comments for implementation details.
 - Known bugs and quirks start with `TODO:`, in the doc block (as its own paragraph) and/or as `// TODO:` at the code site. Keep existing `TODO`/`ToDo` markers until resolved.
+- Code that exists but never runs is marked `Unused:`. For a class, it is its own paragraph right after the summary (`Unused: <reason>.`). For a member, enumerator, function or parameter, its doc ends with `Unused.`, or `Unused: <reason>.` if the reason is not obvious. If a decision is pending (finish, wire up or remove), use `TODO:` instead, and `@deprecated` only for code that is going to be removed.
 - Don't keep commented-out code; git history has it. Exceptions: the unfinished `QuadTree` (`utility/QuadTree.*`) and `GPUParticleSystem` (end of `ParticleSystem.*`), kept with a note.
 
 ## Vendored libraries (`extern/`)

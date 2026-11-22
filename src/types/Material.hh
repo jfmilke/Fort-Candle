@@ -5,7 +5,11 @@
 
 namespace gamedev
 {
-/// Surface material with PBR parameters and textures. Unused by the game.
+/**
+ * Surface material with PBR parameters and textures.
+ *
+ * Unused: the `poly` shader uses fixed material parameters.
+ */
 struct Material
 {
     // material

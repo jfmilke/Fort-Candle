@@ -6,7 +6,11 @@
 
 namespace gamedev
 {
-/// Kinds of nature objects. Unused: the `NatureFactory` identifies presets by mesh name.
+/**
+ * Kinds of nature objects.
+ *
+ * Unused: the `NatureFactory` identifies presets by mesh name.
+ */
 enum class NatureType
 {
     Undefined = 0,

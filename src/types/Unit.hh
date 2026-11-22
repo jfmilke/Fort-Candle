@@ -6,7 +6,11 @@
 
 namespace gamedev
 {
-/// Unit commands. Unused.
+/**
+ * Unit commands.
+ *
+ * Unused: orders are set directly in the `Living` and `Attacker` components.
+ */
 enum UnitAction
 {
     None = -1,

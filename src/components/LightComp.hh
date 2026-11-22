@@ -15,7 +15,7 @@ struct PointLightEmitter: Component
     bool flicker = true;                      ///< Scale the intensity by a smoothed random factor every update.
     float flicker_min = 0.0;                  ///< Lower bound of the random flicker factor.
     float flicker_max = 1.0;                  ///< Upper bound of the random flicker factor.
-    int flicker_smoothing = 30;               ///< Number of random samples averaged; range (1, 50).
+    int flicker_smoothing = 30;               ///< Number of recent random samples averaged (meant to be 1 to 50).
     float flicker_sum = 0.0;                  ///< Sum of the samples in `flicker_smoothingQueue`.
     std::queue<float> flicker_smoothingQueue; ///< Most recent random samples.
 

@@ -4,8 +4,7 @@
 namespace gamedev
 {
 /**
- * Makes an instance take part in 2D collision detection (`CollisionSystem`); the shape comes from a `BoxShape` or
- * `CircleShape` component.
+ * Makes an instance take part in 2D collision detection (`CollisionSystem`); the shape comes from a `BoxShape` or `CircleShape` component.
  */
 struct Collider : public Component
 {

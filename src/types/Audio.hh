@@ -4,7 +4,11 @@
 
 namespace gamedev
 {
-/// Priority of a sound emitter. Stored but unused (sorting by priority is disabled in `AudioSystem::Update`).
+/**
+ * Priority of a sound emitter.
+ *
+ * Unused: it is stored, but sorting by priority is disabled in `AudioSystem::Update`.
+ */
 enum SoundPriority
 {
     low,

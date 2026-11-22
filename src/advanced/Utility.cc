@@ -14,10 +14,21 @@
 
 namespace
 {
-/// Mixes `b` into the hash `a`.
+/**
+ * Mixes a value into a hash.
+ *
+ * @param a Hash so far.
+ * @param b Value to mix in.
+ * @return The combined hash.
+ */
 constexpr uint64_t hash_combine(uint64_t a, uint64_t b) noexcept { return a * 6364136223846793005ULL + b + 0xda3e39cb94b95bdbULL; }
 
-/// 64-bit hash of a null-terminated string (0 for nullptr).
+/**
+ * Computes a 64-bit hash of a string.
+ *
+ * @param s Null-terminated string, or nullptr.
+ * @return Hash of `s`, 0 for nullptr.
+ */
 constexpr uint64_t stringhash(char const* s)
 {
     if (!s)

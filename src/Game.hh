@@ -41,12 +41,10 @@ enum GameState
 /**
  * The application.
  *
- * Owns the ECS, all systems and factories, the terrain, the camera and the settings, and drives them from the
- * glow-extras `GlfwApp` main loop:
+ * Owns the ECS, all systems and factories, the terrain, the camera and the settings, and drives them from the glow-extras `GlfwApp` main loop:
  *
  *  - `init()` wires everything up (component and system registration, asset scan, preset setup, start layout).
- *  - `update()` runs the simulation systems at a fixed 60 Hz (only while playing, except audio, particles and
- *    lights).
+ *  - `update()` runs the systems at a fixed 60 Hz: audio always, particles and lights except while paused, all other systems only while playing.
  *  - `render()` handles mouse/keyboard input, passes the per-frame state to the `RenderSystem` and renders.
  *  - `onGui()` builds the menus, the in-game HUD and, in editor mode (key E), the debug, editor and spawn windows.
  */
@@ -63,11 +61,11 @@ private:
     // Features
     gamedev::AdvancedFeatures mAdvancedFeatures; ///< Instance world, statistics, selection and gizmo state.
 
-    gamedev::AudioSystem mAudioSystem; ///< Unused (the ECS-registered `mAudioSys` is used).
+    gamedev::AudioSystem mAudioSystem; ///< Unused: the ECS-registered `mAudioSys` plays the sounds.
 
     //UI
-    ImFont* font1; ///< HUD font (Source Sans 3).
-    ImFont* font2; ///< Title font of the main menu (Sheila Crayon).
+    ImFont* font1; ///< Default UI font (Source Sans 3, 25 px): added first, so ImGui uses it for all other text.
+    ImFont* font2; ///< Title font of the main menu (Sheila Crayon, 45 px).
 
     float menuWidth = 280; ///< Width of the side panel and menu buttons in pixels.
 
@@ -94,7 +92,7 @@ private:
     bool mPlayedTrack = false;    ///< The defeat sound was played.
 
     // FFX
-    bool mEnablePostProcess = true; ///< Unused (not passed to the renderer).
+    bool mEnablePostProcess = true; ///< Unused: the debug UI's "Invert colors" sets it, but the renderer never gets it.
     bool mEnableTonemap = true;     ///< Tonemapping.
     bool mEnableSRGBCurve = true;   ///< Gamma correction.
     bool mEnableSepia = true;       ///< Sepia.
@@ -123,7 +121,7 @@ private:
     float mTime_GamelogicSys = 0.0;   ///< `GamelogicSystem`.
     float mTime_AnimationSys = 0.0;   ///< `AnimationSystem`.
     float mTime_CleanSys = 0.0;       ///< `CleanupSystem`.
-    float mTime_AllSys = 0.0;         ///< All simulation systems together.
+    float mTime_AllSys = 0.0;         ///< Everything that runs only while playing (physics to cleanup, with the waves).
 
     // Shadows
     int mPointShadowResolution = 1024; ///< Edge length of the point shadow cube map faces.
@@ -138,10 +136,10 @@ private:
     tg::vec3 mSunColor = {0.985, 1.0, 0.876}; ///< Sun color.
     float mSunIntensity = 1.0;                ///< Sun intensity.
 
-    tg::pos3 mSPLPosition = {0.0, 0.0, 0.0}; ///< Unused (editable in the debug UI only).
-    tg::vec3 mSPLColor = {1.0, 1.0, 1.0};    ///< Unused (editable in the debug UI only).
-    float mSPLIntensity = 1.0;               ///< Unused (editable in the debug UI only).
-    float mSPLRadius = 50.0;                 ///< Unused (editable in the debug UI only).
+    tg::pos3 mSPLPosition = {0.0, 0.0, 0.0}; ///< Unused: editable in the debug UI only.
+    tg::vec3 mSPLColor = {1.0, 1.0, 1.0};    ///< Unused: editable in the debug UI only.
+    float mSPLIntensity = 1.0;               ///< Unused: editable in the debug UI only.
+    float mSPLRadius = 50.0;                 ///< Unused: editable in the debug UI only.
 
     // FFX
     float mDesaturationStrength = 0.3;                        ///< Unused: the desaturation comes from the `GamelogicSystem`.
@@ -165,18 +163,19 @@ private:
     bool mFullscreen = false; ///< Requested fullscreen state (F11); applied in `render()`.
 
     bool mNewGame = true;   ///< Show the intro window (and "New Game" instead of "Continue").
-    bool mGameLost = false; ///< Defeat: the firewood ran out.
-    bool mGameWon = false;  ///< Victory: all supply route upgrades were built.
+    bool mGameLost = false; ///< Defeat: the firewood dropped below 0 (checked by `gameUI`).
+    bool mGameWon = false;  ///< Victory: all supply route upgrades were built (checked by `gameUI`).
 
     // Editor
     std::string mSelectedObject = "";                           ///< Preset to spawn with the right mouse button.
-    gamedev::Factory* mSelectedFac;                             ///< Factory of `mSelectedObject`.
+    gamedev::Factory* mSelectedFac;                             ///< Factory of `mSelectedObject` (TODO: not initialized, see `spawn`).
     std::vector<std::string> mNatureObjects;                    ///< Nature presets for the spawn menu.
     std::vector<std::string> mStructureObjects;                 ///< Structure presets for the spawn menu.
     std::vector<std::string> mItemObjects;                      ///< Item presets for the spawn menu.
     std::vector<std::string> mUnitObjects;                      ///< Unit presets for the spawn menu.
     gamedev::InstanceHandle mCreatedLast = {std::uint32_t(-1)}; ///< Last spawned instance; new spawns copy its rotation.
 
+    // TODO: The file name buffers are not initialized, so the editor's text fields start with indeterminate content.
     char mFnUnits[256];   ///< File name (without extension) for saving spawned units.
     char mFnStructs[256]; ///< File name (without extension) for saving spawned structures.
     char mFnNature[256];  ///< File name (without extension) for saving spawned nature.
@@ -214,7 +213,7 @@ private:
     std::string shaderPath = "../data/shaders/"; ///< Shader folder.
     std::string audioPath = "../data/audio/";    ///< Audio folder.
 
-    int frameControl = 0;                                                                             ///< Counts simulation ticks (unused).
+    int frameControl = 0;                                                                             ///< Counts simulation ticks. Unused.
     unsigned int attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2}; ///< Unused.
 
 
@@ -229,8 +228,11 @@ public:
     // virtual methods
     //
     /**
-     * Called once after OpenGL is set up: creates and connects all systems, factories and assets and loads the start
-     * layout (`nature.fac`, `startStructs.fac`, `items.fac`).
+     * Called once after OpenGL is set up:
+     *  - creates and connects all systems, factories and assets,
+     *  - creates the camp (`GamelogicSystem::SpawnPlayer`),
+     *  - loads the start layout (`nature.fac`, `startStructs.fac`, `items.fac`),
+     *  - sets a day length of 0.5 real minutes.
      */
     void init() override;
 
@@ -238,8 +240,13 @@ public:
     void onFrameStart() override;
 
     /**
-     * Called at a fixed 60 Hz: updates audio, particles and lights, and while playing all simulation systems, the daily
-     * enemy waves and reinforcements, and the deferred destruction (`CleanupSystem`, last).
+     * Called at a fixed 60 Hz. Updates:
+     *  - audio (always),
+     *  - particles and lights (except while paused),
+     *  - while playing: all other simulation systems, the daily enemy waves (day + 3 monsters) and reinforcements (day / 2 + 2 pioneers),
+     *    and the deferred destruction (`CleanupSystem`, last).
+     *
+     * @param elapsedSeconds Fixed time step in seconds (1/60).
      */
     void update(float elapsedSeconds) override;
 
@@ -259,34 +266,67 @@ public:
     /// Releases the statistics and all instances before the window closes.
     void onClose() override;
 
-    /// Called when the window is resized: resizes the render targets.
+    /**
+     * Called when the framebuffer is resized: resizes the render targets.
+     *
+     * @param w New framebuffer width in pixels.
+     * @param h New framebuffer height in pixels.
+     */
     void onResize(int w, int h) override;
 
-    /// Zooms the strategy camera (height kept between 1 and 25). Always consumes the event.
+    /**
+     * Zooms the strategy camera along the view direction, unless in the menu or free-fly mode.
+     *
+     * Only zooms while the camera height minus `sy` stays between 1 and 25.
+     *
+     * TODO: Does not call `GlfwApp::onMouseScroll`, so ImGui never sees the scroll wheel
+     * (UI windows cannot be scrolled with it) and scrolling over the UI zooms the camera.
+     *
+     * @param sx Horizontal scroll offset (ignored).
+     * @param sy Vertical scroll offset; positive zooms in.
+     * @return Always true (event consumed).
+     */
     bool onMouseScroll(double sx, double sy) override;
 
     //
     // your own methods
     //
-    /// Moves the camera from keyboard/mouse input (free-fly or strategy camera) and interpolates it.
+    /**
+     * Moves the camera target from keyboard/mouse input and interpolates the camera towards it.
+     *
+     * Left Shift speeds up (x4), left Ctrl slows down (x0.25); the base speed is 15 units per second.
+     * In the menu, the camera is only interpolated.
+     *
+     *  - Free-fly camera: WASD moves, Q/E down/up, right mouse button looks around (capturing the cursor if `mCaptureMouseOnMouselook`).
+     *  - Strategy camera: WASD or the cursor at the window border (2 px) moves parallel to the ground, Q/E zooms along the view direction,
+     *    and the middle mouse button rotates the camera about the point it looks at on the ground (applied directly, without interpolation).
+     *
+     * TODO: E also toggles the editor mode (in `render`), so moving up or zooming in with E switches the editor on/off.
+     *
+     * @param elapsedSeconds Frame time in seconds.
+     */
     void updateCamera(float elapsedSeconds);
 
     /// Stores the preset names shown in the editor's spawn menu.
     void fillSpawnMenu(std::vector<std::string> nature, std::vector<std::string> items, std::vector<std::string> units, std::vector<std::string> structures);
 
-    /// Spawn menu section for nature presets (select, save, load).
+    /// Spawn menu section for nature presets: select one, save all (`nature.fac`) or the spawned ones, load `nature.fac`.
     void natureSpawnMenu();
 
-    /// Spawn menu section for item presets (select, save, load).
+    /// Spawn menu section for item presets: select one, save all (`items.fac`) or the spawned ones, load `items.fac`.
     void itemSpawnMenu();
 
-    /// Spawn menu section for structure presets (select, save, load).
+    /// Spawn menu section for structures: select one, save all (`structures.fac`) or the spawned ones, load `structures.fac`.
     void structureSpawnMenu();
 
-    /// Spawn menu section for unit presets (select, save, load).
+    /// Spawn menu section for unit presets: select one, save all (`units.fac`) or the spawned ones, load `units.fac`.
     void unitSpawnMenu();
 
-    /// In-game HUD: resources, prices and action buttons; intro, defeat and victory dialogs.
+    /**
+     * In-game HUD: resources, prices and action buttons; intro, defeat and victory dialogs.
+     *
+     * Also sets `mGameLost` and `mGameWon` from the game state, so defeat and victory are only detected while the HUD is shown (not in editor mode).
+     */
     void gameUI();
 
     /// Main menu: new game/continue, options, controls, quit.
@@ -295,25 +335,66 @@ public:
     /// Loads the UI fonts and sets the ImGui style and colors. Must run before the font atlas is built.
     void applyCustomImguiTheme();
 
-    /// Creates nature preset `id` 10 units in front of the camera, on the ground. Unused.
+    /**
+     * Creates a nature preset 10 units in front of the camera, on the ground. Unused.
+     *
+     * @param id Preset name or path.
+     * @return Always true.
+     */
     bool spawnNature(std::string id);
 
-    /// Creates item preset `id` 10 units in front of the camera, on the ground. Unused.
+    /**
+     * Creates an item preset 10 units in front of the camera, on the ground. Unused.
+     *
+     * @param id Preset name or path.
+     * @return Always true.
+     */
     bool spawnItem(std::string id);
 
-    /// Creates structure preset `id` 10 units in front of the camera, on the ground. Unused.
+    /**
+     * Creates a structure preset 10 units in front of the camera, on the ground. Unused.
+     *
+     * @param id Preset name or path.
+     * @return Always true.
+     */
     bool spawnStructure(std::string id);
 
-    /// Creates unit preset `id` 10 units in front of the camera, on the ground. Unused.
+    /**
+     * Creates a unit preset 10 units in front of the camera, on the ground. Unused.
+     *
+     * @param id Preset name or path.
+     * @return Always true.
+     */
     bool spawnUnit(std::string id);
 
-    /// Editor: creates the selected preset at `position` (with the rotation of the previous spawn) and marks it for saving.
+    /**
+     * Editor: creates the selected preset (`mSelectedObject`) and marks it for "Save created ...".
+     *
+     * Copies the rotation of the previous spawn (`mCreatedLast`), so a rotation set with the gizmo carries over.
+     *
+     * TODO: `MarkLastCreated` is called even if nothing was created:
+     * it marks the previous instance again, or, if no preset was selected yet, is called through the uninitialized `mSelectedFac` (crash).
+     *
+     * @param position World position; the height is taken from the terrain.
+     */
     void spawn(tg::pos3 position);
 
-    /// Editor: like `spawn`, with random rotation about y and random scale (0.8-1.2); used for nature.
+    /**
+     * Editor: like `spawn`, but with a random rotation about y and a random uniform scale (0.8 to 1.2); used for nature.
+     *
+     * Does not update `mCreatedLast`.
+     *
+     * TODO: Same unconditional `MarkLastCreated` as in `spawn`.
+     *
+     * @param position World position; the height is taken from the terrain.
+     */
     void spawnRandomly(tg::pos3 position);
 
-    /// Focuses the camera on the selected instance (key F).
+    /**
+     * Focuses the camera on the selected instance (while F is held).
+     *
+     * Keeps the view direction and moves the camera target to 1.5 times the sum of the instance's scale components away from it.
+     */
     void flyToSelectedinstance();
 
     /// Toggles the editor mode.

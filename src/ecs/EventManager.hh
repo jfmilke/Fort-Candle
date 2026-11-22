@@ -8,6 +8,7 @@
 
 /**
  * Expands to the `(type, listener)` arguments of `AddFunctionalListener` for a member function of the calling object.
+ *
  * Use inside a member function: `AddFunctionalListener(FUNCTIONAL_LISTENER(EventType::X, MyClass::OnX))`.
  */
 #define FUNCTIONAL_LISTENER(EventType, Listener) EventType, std::bind(&Listener, this, std::placeholders::_1)
@@ -22,8 +23,9 @@ namespace gamedev
  *
  * There are two ways to send events:
  *
- *  1. **Functional events** (`SendFunctionalEvent`) are handled immediately by every listener registered for their
- *     type with `AddFunctionalListener`. All game events are sent this way:
+ *  1. **Functional events** (`SendFunctionalEvent`) are handled immediately
+ *     by every listener registered for their type with `AddFunctionalListener`.
+ *     All game events are sent this way:
  *     @code
  *     void SomeClass::OnHit(Event& event)
  *     {
@@ -33,19 +35,29 @@ namespace gamedev
  *     mECS->AddFunctionalListener(FUNCTIONAL_LISTENER(EventType::ArrowHit, SomeClass::OnHit));
  *     @endcode
  *
- *  2. **Plain events** (`SendEvent`) are only queued. The receiver has to fetch them with `GetPendingEvents()` and
- *     clear the queue itself. Currently unused.
+ *  2. **Plain events** (`SendEvent`) are only queued.
+ *     The receiver has to fetch them with `GetPendingEvents()` and clear the queue itself.
+ *     Unused: nothing sends plain events.
  */
 class EventManager
 {
 public:
-    /// Registers `listener` to be called for every functional event of `type`. Listeners cannot be removed.
+    /**
+     * Registers a listener for every functional event of one type. Listeners cannot be removed.
+     *
+     * @param type Event type to listen to.
+     * @param listener Function to call with the event.
+     */
     void AddFunctionalListener(EventType type, std::function<void(Event&)> const& listener)
     {
         mFunctionalListeners[type].push_back(listener);
     }
 
-    /// Calls all listeners registered for `event.mType` synchronously, in registration order.
+    /**
+     * Calls all listeners registered for the event's type synchronously, in registration order.
+     *
+     * @param event Event to send; listeners may modify it.
+     */
     void SendFunctionalEvent(Event& event)
     {
         for (auto const& listener : mFunctionalListeners[event.mType])
@@ -54,7 +66,11 @@ public:
         }
     }
 
-    /// Appends `event` to the pending queue without handling it.
+    /**
+     * Appends an event to the pending queue without handling it.
+     *
+     * @param event Event to copy into the queue.
+     */
     void SendEvent(Event& event) { mPendingEvents.push_back(event); }
 
     /// Queue of events sent with `SendEvent`; the caller handles and clears them.
