@@ -16,6 +16,8 @@ GLOW_SHARED(struct, CircleShape);
  * Credits go to RTG Assignment 2.
  *
  *  - Components are stored by value in a `ComponentArray` (copied on insert, moved around on removal), so they must stay copyable.
+ *  - The base is not polymorphic (no virtual destructor): components are never used or deleted through a `Component*`.
+ *    Type-erased operations on all components of an entity belong on `IComponentArray`, which knows the concrete type.
  *  - A new component type must be registered with `EngineECS::RegisterComponent` in `Game::init()` before use.
  *  - Derived types inherit the constructors (`using Component::Component;`).
  */
@@ -25,15 +27,6 @@ struct Component
 
     /// Creates a component that is not attached to an instance yet.
     Component() = default;
-
-    /// Virtual for deletion through a `SharedComponent`. Unused: components are never deleted through a base pointer.
-    virtual ~Component() = default;
-
-    // The user-declared destructor would suppress the implicit move operations; keep components cheap to move.
-    Component(Component const&) = default;
-    Component(Component&&) = default;
-    Component& operator=(Component const&) = default;
-    Component& operator=(Component&&) = default;
 };
 
 /// What the ECS requires of a component type: derived from `Component`, default-constructible and copyable.

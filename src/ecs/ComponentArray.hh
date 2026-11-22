@@ -16,12 +16,6 @@ class IComponentArray
 public:
     virtual ~IComponentArray() = default;
 
-    /// `ComponentArray::GetData` as a pointer to the `Component` base. Unused.
-    virtual gamedev::Component* GetBaseComponent(InstanceHandle handle) = 0;
-
-    /// `ComponentArray::TryGetData` as a pointer to the `Component` base. Unused.
-    virtual gamedev::Component* TryGetBaseComponent(InstanceHandle handle) = 0;
-
     /// See `ComponentArray::TryRemoveData`.
     virtual void TryRemoveData(InstanceHandle handle) = 0;
 
@@ -162,12 +156,6 @@ public:
         auto const index = IndexOf(handle);
         return index != kNoIndex ? &mComponents[index] : nullptr;
     }
-
-    /// `GetData` as a pointer to the `Component` base. Unused.
-    Component* GetBaseComponent(InstanceHandle handle) override { return GetData(handle); }
-
-    /// `TryGetData` as a pointer to the `Component` base. Unused.
-    Component* TryGetBaseComponent(InstanceHandle handle) override { return TryGetData(handle); }
 
     /**
      * Copies a component from one instance to another, overwriting an existing one. Sets the copy's `handle_value`.
