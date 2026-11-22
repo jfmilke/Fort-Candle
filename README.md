@@ -126,6 +126,18 @@ Notes:
 - GLFW is built for X11 only; Wayland sessions run the game through XWayland.
 - The OpenAL JACK backend is disabled because it fails to link (`undefined symbol: jack_error_callback`).
 
+### Documentation
+
+The sources are documented with Doxygen comments.
+With [Doxygen](https://www.doxygen.nl) installed (`winget install DimitriVanHeesch.Doxygen`, `sudo apt install doxygen`), CMake adds a `docs` target:
+
+```bash
+cmake --build build --target docs
+```
+
+It writes HTML to `build/docs/html/index.html`.
+Running `doxygen Doxyfile` in the repository root does the same without CMake.
+
 ## Images
 
 [ ![](images/thumbnails/FC02_Intro_thumb.jpg) ](images/FC02_Intro.jpg)
