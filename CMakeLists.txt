@@ -136,6 +136,20 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 # Add src/ include dir
 target_include_directories(${PROJECT_NAME} PRIVATE src)
 
+# Build info for benchmark results (git commit, dirty state, config), regenerated on every build.
+# One header per config, because multi-config generators build several configs from one build directory.
+set(GAMEDEV_BUILD_INFO_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/$<CONFIG>)
+add_custom_target(${PROJECT_NAME}_BuildInfo
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DOUTPUT=${GAMEDEV_BUILD_INFO_DIR}/BuildInfo.hh -DCONFIG=$<CONFIG>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildInfo.cmake
+    BYPRODUCTS ${GAMEDEV_BUILD_INFO_DIR}/BuildInfo.hh
+    COMMENT "Updating build info"
+    VERBATIM
+)
+set_property(TARGET ${PROJECT_NAME}_BuildInfo PROPERTY FOLDER "Utility")
+add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_BuildInfo)
+target_include_directories(${PROJECT_NAME} PRIVATE ${GAMEDEV_BUILD_INFO_DIR})
+
 # Link libs
 target_link_libraries(${PROJECT_NAME} PRIVATE
     glow

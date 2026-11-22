@@ -1,5 +1,6 @@
 #include "Game.hh"
 
+#include <format>
 #include <limits>
 
 // glow OpenGL wrapper
@@ -39,10 +40,21 @@
 
 Game::Game() : GlfwApp(Gui::ImGui) {}
 
+void Game::setBenchmark(gamedev::benchmark::Options options) { mBenchmark = std::make_unique<gamedev::benchmark::Runner>(std::move(options)); }
+
 void Game::init()
 {
+    using gamedev::benchmark::Phase;
+
+    if (mBenchmark)
+    {
+        mBenchmark->BeginStartup();
+        gamedev::SeedRandom(mBenchmark->GetOptions().seed);
+    }
+
     // enable vertical synchronization to synchronize rendering to monitor refresh rate
-    setVSync(true);
+    // (not in benchmarks: they measure the frame rate the game reaches)
+    setVSync(!mBenchmark);
 
     // disable built-in camera
     setUseDefaultCamera(false);
@@ -60,7 +72,14 @@ void Game::init()
     applyCustomImguiTheme();
 
     // set window title
-    setTitle("Fort Candle");
+    setTitle(mBenchmark ? std::format("Fort Candle - benchmark {}", mBenchmark->GetOptions().scenario) : std::string("Fort Candle"));
+
+    if (mBenchmark)
+    {
+        // benchmarks run without input: ignore the mouse over the UI as well
+        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
+        mBenchmark->EndPhase(Phase::Window);
+    }
 
     // set initial camera state
     mEnableTopDownCamera = false;
@@ -206,6 +225,9 @@ void Game::init()
     mRenderSys->InitResources();
     mRenderSys->InitParticles(mParticleSys->GetParticleVAO());
 
+    if (mBenchmark)
+        mBenchmark->EndPhase(Phase::Engine);
+
     mGameAssets->scanMeshes();
     mUnitFac->RegisterAutomatically(mGameAssets->getObjectsByFolder("units"), 0.25f, true);
     mNatureFac->RegisterAutomatically(mGameAssets->getObjectsByFolder("nature"), 0.8f);
@@ -217,6 +239,16 @@ void Game::init()
     mItemFac->InitResources();
 
     fillSpawnMenu(mNatureFac->GetNameIdentifiers(), mItemFac->GetNameIdentifiers(), mUnitFac->GetNameIdentifiers(), mStructFac->GetNameIdentifiers());
+
+    if (mBenchmark)
+    {
+        mBenchmark->EndPhase(Phase::Assets);
+
+        // straight into play, without the intro dialog (which pauses)
+        state = PLAY;
+        mNewGame = false;
+        mHoldSpawns = mBenchmark->GetScenario().holdSpawns;
+    }
 
     // Initialize Game State
     mGamelogicSys->SpawnPlayer();
@@ -239,16 +271,24 @@ void Game::init()
     mItemFac->LoadObjects();
 
     mEnvironmentSys->SetMinutesPerDay(0.5);
+
+    if (mBenchmark)
+        mBenchmark->EndPhase(Phase::World);
 }
 
 void Game::onFrameStart()
 {
     gamedev::newStatFrame(mAdvancedFeatures.mStats);
+
+    if (mBenchmark)
+        mBenchmark->FrameStarted();
 }
 
 // update game in 60 Hz fixed timestep
 void Game::update(float elapsedSeconds)
 {
+    using gamedev::benchmark::Channel;
+    auto const tickStart = gamedev::benchmark::Runner::Clock::now();
 
     *mAdvancedFeatures.mStatNumUpdates += 1.f;
 
@@ -259,22 +299,22 @@ void Game::update(float elapsedSeconds)
     mAudioSys->SetVolume(3, mUIVolume / 100.f);
     mAudioSys->UpdateListener(mCamera.physical.position, mCamera.physical.forward);
 
-    mAudioSys->Update(elapsedSeconds);
+    timeSystem(Channel::Audio, [&] { mAudioSys->Update(elapsedSeconds); });
 
     if (state == PLAY || state == MENU)
     {
-        mTime_ParticleSys = (mEnableParticleSpawn) ? mParticleSys->Update(elapsedSeconds) / 1000.f : 0.f;
-        mTime_LightSys = mLightSys->Update(elapsedSeconds) / 1000.f;
+        mTime_ParticleSys = (mEnableParticleSpawn) ? timeSystem(Channel::Particles, [&] { mParticleSys->Update(elapsedSeconds); }) : 0.f;
+        mTime_LightSys = timeSystem(Channel::Lights, [&] { mLightSys->Update(elapsedSeconds); });
     }
 
     if (state == PLAY)
     {
         auto t_0 = std::chrono::steady_clock::now();
-        mTime_PhysicsSys = mPhysicsSys->Update(elapsedSeconds) / 1000.f;
-        mTime_CollisionSys = mCollisionSys->Update(elapsedSeconds) / 1000.f;
-        mTime_EnvironmentSys = mEnvironmentSys->Update(elapsedSeconds) / 1000.f;
-        mTime_GamelogicSys = mGamelogicSys->Update(elapsedSeconds) / 1000.f;
-        mTime_AnimationSys = mAnimationSys->Update(elapsedSeconds) / 1000.f;
+        mTime_PhysicsSys = timeSystem(Channel::Physics, [&] { mPhysicsSys->Update(elapsedSeconds); });
+        mTime_CollisionSys = timeSystem(Channel::Collision, [&] { mCollisionSys->Update(elapsedSeconds); });
+        mTime_EnvironmentSys = timeSystem(Channel::Environment, [&] { mEnvironmentSys->Update(elapsedSeconds); });
+        mTime_GamelogicSys = timeSystem(Channel::Gamelogic, [&] { mGamelogicSys->Update(elapsedSeconds); });
+        mTime_AnimationSys = timeSystem(Channel::Animation, [&] { mAnimationSys->Update(elapsedSeconds); });
 
         if (mEnvironmentSys->mNewDay)
         {
@@ -290,28 +330,105 @@ void Game::update(float elapsedSeconds)
             }
         }
 
-        mTime_CleanSys = mCleanSys->Update() / 1000.f;
+        mTime_CleanSys = timeSystem(Channel::Cleanup, [&] { mCleanSys->Update(); });
 
         auto t_n = std::chrono::steady_clock::now();
-        mTime_AllSys = std::chrono::duration_cast<std::chrono::microseconds>(t_n - t_0).count() / 1000.f;
+        mTime_AllSys = std::chrono::duration<float, std::milli>(t_n - t_0).count();
 
         frameControl++;
+
+        if (mBenchmark)
+            endBenchmarkTick(tickStart);
     }
+}
+
+void Game::endBenchmarkTick(gamedev::benchmark::Runner::Clock::time_point tickStart)
+{
+    mBenchmark->Record(gamedev::benchmark::Channel::Update, gamedev::benchmark::Runner::Clock::now() - tickStart);
+
+    gamedev::benchmark::ScenarioContext context{*mGamelogicSys, mHoldSpawns};
+    if (!mBenchmark->EndTick(context, mECS->getNumLiveInstances()))
+        return;
+
+    gamedev::benchmark::RunInfo info;
+    info.renderer = reinterpret_cast<char const*>(glGetString(GL_RENDERER));
+    info.windowWidth = getWindowWidth();
+    info.windowHeight = getWindowHeight();
+    info.outcome = mGameWon ? "won" : (mGameLost ? "lost" : "running");
+
+    mBenchmark->Finish(info);
+    requestClose();
 }
 
 // render game variable timestep
 void Game::render(float elapsedSeconds)
 {
+    auto const renderStart = gamedev::benchmark::Runner::Clock::now();
+
     if (mFullscreen != GlfwApp::isFullscreen())
         toggleFullscreen();
 
     *mAdvancedFeatures.mStatFrametime = (elapsedSeconds * 1000.f); // in milliseconds
 
-    updateCamera(elapsedSeconds);
+    // Benchmarks run without input, so that the mouse over the window cannot change what is measured
+    if (!mBenchmark)
+    {
+        updateCamera(elapsedSeconds);
+        processInput();
+    }
 
+    // ToDo: Put Animation Update here (see "mAdvancedFeatures.updateAnimationsInWorld(..)")
+
+    auto runtime = getCurrentTime();
+
+    mRenderSys->UpdateTime(runtime, mEnvironmentSys->getGameTime());
+    mRenderSys->UpdateWindowResolution(getWindowSize());
+    mRenderSys->UpdateCamera(mCamera.physical.position, mCamera.physical.forward, tg::vec3::unit_y);
+    mRenderSys->UpdateSepia(mSepiaStrength);
+    mRenderSys->UpdateDesaturation(mGamelogicSys->GetDesaturation());
+    mRenderSys->UpdateVignette(mVignetteColor, mGamelogicSys->GetVignetteRadius(), mVignetteSoftness, mVignetteIntensity);
+    mRenderSys->UpdateDistFadeoff(mDistFadeoffColor, mDistFadeoffIntensity);
+    mRenderSys->UpdateSelected(mAdvancedFeatures.mSelectedInstance);
+    mRenderSys->UpdateOutlined(mGamelogicSys->GetOutlinedHandles(), mGamelogicSys->GetOutlinedColors());
+    mRenderSys->UpdateSelected(mAdvancedFeatures.mSelectedInstance);
+
+    mRenderSys->UpdateParticleCount(mParticleSys->GetParticleCount());
+    if (mEnableDirShadows)
+        mRenderSys->UpdateDirShadowResolution(mDirShadowResolution);
+    if (mEnablePointShadows)
+        mRenderSys->UpdatePointShadowResolution(mPointShadowResolution);
+    if (mEnableAmbLight)
+        mRenderSys->UpdateAmbientLight({mEnvironmentSys->GenerateAmbientlight(mAmbientColor, mAmbientIntensity)});
+    if (mEnableDirLight)
+        mRenderSys->UpdateDirectionalLight(mEnvironmentSys->GenerateSunlight(mSunTheta, mSunPhi, mSunColor, mSunIntensity));
+    if (mEnablePointLight)
+    {
+        mRenderSys->UpdateRegularPointLights(mLightSys->GetLights());
+        mRenderSys->UpdateShadowingPointLight(mLightSys->GetShadowingPointlight());
+    }
+
+    mRenderSys->SwitchDebugShading(mShowNormals, mShowWireframe, mCullFaces);
+    mRenderSys->SwitchLightShading(mEnableAmbLight, mEnableDirLight, mEnablePointLight);
+    mRenderSys->SwitchShadowShading(mEnablePointShadows, mEnableDirShadows);
+    mRenderSys->SwitchGameShading(mEnableFogOfWar);
+    mRenderSys->SwitchPostProcessing(mEnableSRGBCurve, mEnableTonemap, mEnableSepia, mEnableVignette, mEnableDesaturate, mEnableBloom, mEnableDistFadeoff);
+    mRenderSys->SwitchParticles(mEnableParticleSpawn);
+
+    if (mEnableParticleSpawn)
+        mParticleSys->UploadParticleData();
+
+    mRenderSys->Update(elapsedSeconds);
+
+    mAdvancedFeatures.updateStatDraws(mRenderSys->GetDrawCalls());
+
+    if (mBenchmark)
+        mBenchmark->Record(gamedev::benchmark::Channel::Render, gamedev::benchmark::Runner::Clock::now() - renderStart);
+}
+
+void Game::processInput()
+{
     if (state != MENU)
     {
-        // ToDo: Put Animation Update here (see "mAdvancedFeatures.updateAnimationsInWorld(..)")
         // Selecting Instances
         if (!ImGui::GetIO().WantCaptureMouse && input().isMouseButtonReleased(GLFW_MOUSE_BUTTON_1))
         {
@@ -372,8 +489,6 @@ void Game::render(float elapsedSeconds)
     if (input().isKeyPressed(GLFW_KEY_ESCAPE))
         toggleMenu();
 
-    auto runtime = getCurrentTime();
-
     // Capture mouse clicks in worldspace
     // TODO: Unlike the selection above, not limited to state != MENU: right clicks next to the main menu still give
     // orders (or spawn in editor mode).
@@ -409,46 +524,6 @@ void Game::render(float elapsedSeconds)
             }
         }
     }
-
-    mRenderSys->UpdateTime(runtime, mEnvironmentSys->getGameTime());
-    mRenderSys->UpdateWindowResolution(getWindowSize());
-    mRenderSys->UpdateCamera(mCamera.physical.position, mCamera.physical.forward, tg::vec3::unit_y);
-    mRenderSys->UpdateSepia(mSepiaStrength);
-    mRenderSys->UpdateDesaturation(mGamelogicSys->GetDesaturation());
-    mRenderSys->UpdateVignette(mVignetteColor, mGamelogicSys->GetVignetteRadius(), mVignetteSoftness, mVignetteIntensity);
-    mRenderSys->UpdateDistFadeoff(mDistFadeoffColor, mDistFadeoffIntensity);
-    mRenderSys->UpdateSelected(mAdvancedFeatures.mSelectedInstance);
-    mRenderSys->UpdateOutlined(mGamelogicSys->GetOutlinedHandles(), mGamelogicSys->GetOutlinedColors());
-    mRenderSys->UpdateSelected(mAdvancedFeatures.mSelectedInstance);
-
-    mRenderSys->UpdateParticleCount(mParticleSys->GetParticleCount());
-    if (mEnableDirShadows)
-        mRenderSys->UpdateDirShadowResolution(mDirShadowResolution);
-    if (mEnablePointShadows)
-        mRenderSys->UpdatePointShadowResolution(mPointShadowResolution);
-    if (mEnableAmbLight)
-        mRenderSys->UpdateAmbientLight({mEnvironmentSys->GenerateAmbientlight(mAmbientColor, mAmbientIntensity)});
-    if (mEnableDirLight)
-        mRenderSys->UpdateDirectionalLight(mEnvironmentSys->GenerateSunlight(mSunTheta, mSunPhi, mSunColor, mSunIntensity));
-    if (mEnablePointLight)
-    {
-        mRenderSys->UpdateRegularPointLights(mLightSys->GetLights());
-        mRenderSys->UpdateShadowingPointLight(mLightSys->GetShadowingPointlight());
-    }
-
-    mRenderSys->SwitchDebugShading(mShowNormals, mShowWireframe, mCullFaces);
-    mRenderSys->SwitchLightShading(mEnableAmbLight, mEnableDirLight, mEnablePointLight);
-    mRenderSys->SwitchShadowShading(mEnablePointShadows, mEnableDirShadows);
-    mRenderSys->SwitchGameShading(mEnableFogOfWar);
-    mRenderSys->SwitchPostProcessing(mEnableSRGBCurve, mEnableTonemap, mEnableSepia, mEnableVignette, mEnableDesaturate, mEnableBloom, mEnableDistFadeoff);
-    mRenderSys->SwitchParticles(mEnableParticleSpawn);
-
-    if (mEnableParticleSpawn)
-        mParticleSys->UploadParticleData();
-
-    mRenderSys->Update(elapsedSeconds);
-
-    mAdvancedFeatures.updateStatDraws(mRenderSys->GetDrawCalls());
 }
 
 // Update the GUI

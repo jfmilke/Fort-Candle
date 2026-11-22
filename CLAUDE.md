@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Fort Candle is a small low-poly strategy game (RWTH Aachen GameDev practical 2021) built on a custom engine that is tightly coupled to the game. C++23, OpenGL 4.5, CMake. The CMake project/executable name is `GameDevSS21`. All dependencies are vendored in `extern/` (glfw, glow, glow-extras, imgui, polymesh, typed-geometry, clean-core, openal, dr-lib); treat them as third-party. Prefer workarounds in the top-level `CMakeLists.txt` or the game; if a library must change, do it in a separate commit per library named `extern/<lib>: ...` (see [Vendored libraries](#vendored-libraries-extern)).
 
-There are no tests, linters, or CI. "Verifying" a change means building and, where relevant, running the game.
+There are no tests, linters, or CI. "Verifying" a change means building and, where relevant, running the game. For performance work, use the built-in benchmark (see [Benchmarks](#benchmarks)).
 
 ## Build & run
 
@@ -31,6 +31,22 @@ cmake --build build --config RelWithDebInfo --parallel
   - The 2021 `extern/` snapshots (replaced in 2026, see below) needed six small fixes for GCC ≥ 14 and binutils ≥ 2.44. The current versions compile unpatched with GCC 15, Clang 21 and MSVC 19.52.
 
 **Working directory matters.** `main.cc` aborts unless `../data` exists, and every asset path in the code is hard-coded relative (`../data/meshes/`, `../data/shaders/`, `../data/config/`, ...). Run the game from a direct subfolder of the repo root, e.g. from `bin/` (`./RelWithDebInfo/GameDevSS21`) or from `build/` (`../bin/RelWithDebInfo/GameDevSS21`).
+
+### Benchmarks
+
+`GameDevSS21 --benchmark <scenario>` plays a scripted scenario without input and exits; `--help` lists the scenarios and options. Run it from `bin/` like the game:
+
+```powershell
+./RelWithDebInfo/GameDevSS21 --benchmark stress
+python ../tools/compare_benchmarks.py benchmarks/baseline benchmarks/candidate
+```
+
+- Scenarios (`src/benchmark/Benchmark.cc`): `idle` (start camp, no waves), `waves` (normal play), `stress` (60 monsters + 30 reinforcements at once), `exercise` (building, recruiting, wall upgrades and repairs, supply routes, an 80-monster wave).
+- A run is reproducible: fixed RNG seed (`--seed`, `SeedRandom`), straight into play without the intro dialog, vsync off, and no input (`Game::processInput` and `updateCamera` are skipped, ImGui ignores the mouse). Each tick has the same fixed time step, so the simulation does not depend on the frame rate. The window opens at 1920x1080.
+- It measures `--ticks` ticks (default 3600) after `--warmup` ticks (default 120): every system update and the whole `Game::update` tick per tick, the time in `Game::render` and the frame interval per frame, and the startup phases of `Game::init`. Scenario actions run after the tick is recorded.
+- Results go to `benchmarks/<scenario>-<UTC time>.json` in the working directory (`--output` overrides; `bin/` is gitignored). They record the git commit and dirty state at build time (`cmake/BuildInfo.cmake` writes `BuildInfo.hh` into the build directory on every build), the compiler, config, renderer and window size.
+- `tools/compare_benchmarks.py` (Python 3, standard library only) compares two result files or folders of repeated runs (median over runs, with the spread between runs as noise estimate) and warns about runs with different settings, builds or renderers.
+- Measure RelWithDebInfo builds, run each side several times, and leave the window alone (minimizing or covering it can throttle rendering). `steady_clock` has 100 ns resolution on Windows, so the smallest systems only show that floor. Exit codes: 0 done, 1 bad command line, 2 window closed early, 3 result file not written.
 
 Code style: `.clang-format` (Google-based, Allman braces, 4-space indent, 150 column limit). Engine code lives in `namespace gamedev`; members use an `m` prefix.
 
@@ -80,7 +96,7 @@ Updating `extern/`:
 
 ### Entry point and main loop
 
-`main.cc` → `Game` (`src/Game.hh/.cc`), which subclasses glow-extras' `glow::glfw::GlfwApp`. `GlfwApp` drives the loop: `update()` runs at a fixed 60 Hz, `render()` once per frame, and `onGui()` builds the ImGui UI (menus, HUD, debug and editor panels). `Game` owns everything: the ECS, every system and factory, the terrain, the camera, and the render settings. Most of the wiring lives in `Game::init()`.
+`main.cc` (parses the command line, see [Benchmarks](#benchmarks)) → `Game` (`src/Game.hh/.cc`), which subclasses glow-extras' `glow::glfw::GlfwApp`. `GlfwApp` drives the loop: `update()` runs at a fixed 60 Hz, `render()` once per frame, and `onGui()` builds the ImGui UI (menus, HUD, debug and editor panels). `Game` owns everything: the ECS, every system and factory, the terrain, the camera, and the render settings. Most of the wiring lives in `Game::init()`.
 
 ### ECS (`src/ecs/`)
 
@@ -119,6 +135,7 @@ Notes:
 ### Other directories
 
 - `src/advanced/` contains the instance `World`, `transform`, the stats/debug helpers, and the editor. It originated from course framework code.
-- `src/utility/` contains the spatial hash map (`Hash2D`), a quadtree (fully commented out), RNG, and WAV loading (`Sound.cc` with dr_wav; only `.wav` files are loaded).
+- `src/utility/` contains the spatial hash map (`Hash2D`), a quadtree (fully commented out), RNG (seedable with `SeedRandom`), and WAV loading (`Sound.cc` with dr_wav; only `.wav` files are loaded).
+- `src/benchmark/` contains the benchmark mode (command line, scenarios, recording, JSON results); `tools/` the result comparison script; `cmake/` build-time helper scripts.
 - `src/types/` contains plain data types shared across components (lights, materials, particles, unit and structure properties).
 - `docs/` contains early design notes and a ToDo list from the start of the project. They are not authoritative about the current code.

@@ -30,6 +30,11 @@
 #include "factories/NatureFactory.hh"
 #include "factories/ItemFactory.hh"
 
+#include "benchmark/Benchmark.hh"
+
+#include <chrono>
+#include <memory>
+
 /// Top-level game state, switched by the main menu, Escape and P.
 enum GameState
 {
@@ -47,6 +52,9 @@ enum GameState
  *  - `update()` runs the systems at a fixed 60 Hz: audio always, particles and lights except while paused, all other systems only while playing.
  *  - `render()` handles mouse/keyboard input, passes the per-frame state to the `RenderSystem` and renders.
  *  - `onGui()` builds the menus, the in-game HUD and, in editor mode (key E), the debug, editor and spawn windows.
+ *
+ * In benchmark mode (`setBenchmark`, from `--benchmark`), the game starts straight into play with a fixed seed, vsync off and no input,
+ * and reports its timings to a `benchmark::Runner`, which ends the game when the scenario is done.
  */
 class Game : public glow::glfw::GlfwApp
 {
@@ -216,11 +224,24 @@ private:
     int frameControl = 0;                                                                             ///< Counts simulation ticks. Unused.
     unsigned int attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2}; ///< Unused.
 
+    // Benchmark
+    std::unique_ptr<gamedev::benchmark::Runner> mBenchmark; ///< Set in benchmark mode only.
+
 
     // ctor
 public:
     /// Creates the app with the ImGui integration of `GlfwApp`.
     Game();
+
+    /**
+     * Switches to benchmark mode; call before `run()`.
+     *
+     * @param options Benchmark settings, with a scenario name checked by `benchmark::ParseCommandLine`.
+     */
+    void setBenchmark(gamedev::benchmark::Options options);
+
+    /// The benchmark of this run, or nullptr if this is a normal game.
+    gamedev::benchmark::Runner const* getBenchmark() const { return mBenchmark.get(); }
 
     // events
 public:
@@ -252,7 +273,7 @@ public:
 
     /**
      * Called once per frame (variable timestep):
-     * camera, mouse/keyboard input (selection, orders, editor spawning, key shortcuts), renderer state, and rendering.
+     * camera, mouse/keyboard input (`processInput`, not in benchmark mode), renderer state, and rendering.
      *
      * Cursor capture for camera rotation (`setCursorMode`) takes effect at the start of the next frame,
      * when glow-extras applies it in `updateInput()`.
@@ -308,6 +329,35 @@ public:
      * @param elapsedSeconds Frame time in seconds.
      */
     void updateCamera(float elapsedSeconds);
+
+    /// Handles the mouse and keyboard input of a frame: selection, orders, editor spawning and key shortcuts (pause, menu, editor, ...).
+    void processInput();
+
+    /**
+     * Runs one system update and measures it, for the debug timings and, in benchmark mode, the benchmark.
+     *
+     * @param channel Benchmark channel of the system.
+     * @param update Calls the system's `Update`.
+     * @return Duration in milliseconds.
+     */
+    template <class Fn>
+    float timeSystem(gamedev::benchmark::Channel channel, Fn&& update)
+    {
+        auto const start = gamedev::benchmark::Runner::Clock::now();
+        update();
+        auto const duration = gamedev::benchmark::Runner::Clock::now() - start;
+
+        if (mBenchmark)
+            mBenchmark->Record(channel, duration);
+        return std::chrono::duration<float, std::milli>(duration).count();
+    }
+
+    /**
+     * Benchmark mode: records the tick, runs the scenario and, after the last tick, writes the results and closes the window.
+     *
+     * @param tickStart When `update` started.
+     */
+    void endBenchmarkTick(gamedev::benchmark::Runner::Clock::time_point tickStart);
 
     /// Stores the preset names shown in the editor's spawn menu.
     void fillSpawnMenu(std::vector<std::string> nature, std::vector<std::string> items, std::vector<std::string> units, std::vector<std::string> structures);
