@@ -1,3 +1,7 @@
+> [!IMPORTANT]
+> This is the `v1` branch. It contains minimal fixes in the code and dependencies to keep the original code running.
+> See [`v2`](https://github.com/jfmilke/Fort-Candle/tree/v2) for a development version.
+
 # Fort Candle
 
 Result of the GameDevelopment Practical 2021 at RWTH Aachen.
