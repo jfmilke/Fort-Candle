@@ -38,7 +38,7 @@ struct AdvancedFeatures
     /**
      * Creates the statistics and the instance pool.
      *
-     * Room for 100 stats with a history of 256 frames each, and for 2048 instances (keep in sync with `MAX_INSTANCES`).
+     * Room for 100 stats with a history of 256 frames each, and for `MAX_INSTANCES` instances.
      */
     void initialize()
     {
@@ -49,7 +49,7 @@ struct AdvancedFeatures
         mStatNumDraws = gamedev::getStat(mStats, "num_drawcalls", gamedev::StatType::counter); // amount of drawcalls per frame
 
         // initialize world
-        mWorld.initialize(2048);
+        mWorld.initialize(MAX_INSTANCES);
     }
 
     /// Sets the ECS that is notified when instances are destroyed through this object.

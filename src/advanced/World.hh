@@ -191,7 +191,7 @@ public:
     /**
      * Allocates the pool. Must be called once before creating instances.
      *
-     * @param maxNumInstances Capacity; `AdvancedFeatures::initialize` passes 2048, the size of the component arrays.
+     * @param maxNumInstances Capacity; at most `MAX_INSTANCES`, the size of the component arrays (`AdvancedFeatures::initialize` passes exactly that).
      */
     void initialize(uint32_t maxNumInstances);
 

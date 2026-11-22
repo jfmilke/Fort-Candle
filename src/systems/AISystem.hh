@@ -28,9 +28,7 @@ public:
     /// Called when an entity's signature starts matching the system signature.
     void AddEntity(InstanceHandle handle, Signature entitySignature) override;
 
-    /// Called when an entity's signature no longer matches.
-
-    /// Called when an entity is destroyed.
+    /// Called when an entity's signature no longer matches, and when it is destroyed or becomes a prototype.
     void RemoveEntity(InstanceHandle handle) override;
 
     /// Called when all entities are destroyed.

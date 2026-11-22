@@ -61,7 +61,11 @@ public:
      *
      * @param world Instance storage used to map handles to slots; must outlive this array.
      */
-    explicit ComponentArray(World const& world) : mWorld(world) { mSlotToIndex.fill(kNoIndex); }
+    explicit ComponentArray(World const& world) : mWorld(world)
+    {
+        CC_ASSERT_MSG(world.getMaxNumInstances() <= MAX_INSTANCES, "World slots would overflow the component arrays.");
+        mSlotToIndex.fill(kNoIndex);
+    }
 
     /**
      * Stores a component in the next free slot. Asserts if the instance already has a component of this type.
