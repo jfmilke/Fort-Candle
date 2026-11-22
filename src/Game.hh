@@ -251,12 +251,14 @@ public:
     void update(float elapsedSeconds) override;
 
     /**
-     * Called once per frame (variable timestep): camera, mouse/keyboard input (selection, orders, editor spawning, key
-     * shortcuts), renderer state, and rendering.
+     * Called once per frame (variable timestep):
+     * camera, mouse/keyboard input (selection, orders, editor spawning, key shortcuts), renderer state, and rendering.
      *
-     * Cursor capture for camera rotation (`setCursorMode`) takes effect at the start of the next frame, when glow-extras
-     * applies it in `updateInput()`. While the cursor is disabled, glow-extras switches GLFW to raw (unaccelerated) mouse
-     * motion if the platform supports it.
+     * Cursor capture for camera rotation (`setCursorMode`) takes effect at the start of the next frame,
+     * when glow-extras applies it in `updateInput()`.
+     * While the cursor is disabled, glow-extras switches GLFW to raw (unaccelerated) mouse motion if the platform supports it.
+     *
+     * @param elapsedSeconds Frame time in seconds.
      */
     void render(float elapsedSeconds) override;
 
