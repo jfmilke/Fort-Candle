@@ -1,0 +1,40 @@
+# Doxygen configuration for the game sources (src/). Only settings that differ from Doxygen's defaults are listed.
+#
+# Build the docs with one of:
+#   cmake --build build --target docs   (writes to <build dir>/docs/html)
+#   doxygen Doxyfile                    (run from the repository root; writes to build/docs/html)
+
+PROJECT_NAME           = "Fort Candle"
+PROJECT_BRIEF          = "Low-poly strategy game on a small custom ECS engine"
+OUTPUT_DIRECTORY       = build/docs
+
+# Input: the game and engine sources only (extern/ is third-party)
+INPUT                  = src README.md
+FILE_PATTERNS          = *.hh *.cc
+EXTENSION_MAPPING      = hh=C++
+RECURSIVE              = YES
+# dr_wav is a vendored single-header library
+EXCLUDE                = src/utility/dr_wav.hh src/utility/DrWavIncl.cc
+USE_MDFILE_AS_MAINPAGE = README.md
+IMAGE_PATH             = .
+
+# Extraction: document everything, including private members and .cc-local code
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_STATIC         = YES
+EXTRACT_ANON_NSPACES   = YES
+JAVADOC_AUTOBRIEF      = YES
+SOURCE_BROWSER         = YES
+STRIP_FROM_PATH        = .
+STRIP_FROM_INC_PATH    = src
+
+# Output: HTML only
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
+
+# Warnings: report broken docs (e.g. wrong @param names), not undocumented code
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES

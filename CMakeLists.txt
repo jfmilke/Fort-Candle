@@ -174,3 +174,24 @@ if(UNIX AND NOT APPLE)
     target_link_options(${PROJECT_NAME} PRIVATE "LINKER:--no-as-needed")
     target_link_libraries(${PROJECT_NAME} PRIVATE OpenGL::GL)
 endif()
+
+
+# ===========================================================================================
+# Documentation (optional): `cmake --build build --target docs` writes HTML to <build dir>/docs/html.
+# The settings live in the top-level Doxyfile; this only redirects the output into the build directory.
+find_package(Doxygen QUIET)
+if(DOXYGEN_FOUND)
+    set(GAMEDEV_DOXYFILE ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile.docs)
+    file(WRITE ${GAMEDEV_DOXYFILE}
+        "@INCLUDE = ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile\n"
+        "OUTPUT_DIRECTORY = ${CMAKE_CURRENT_BINARY_DIR}/docs\n"
+    )
+    add_custom_target(docs
+        COMMAND Doxygen::doxygen ${GAMEDEV_DOXYFILE}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Generating Doxygen documentation in ${CMAKE_CURRENT_BINARY_DIR}/docs/html"
+        VERBATIM
+    )
+else()
+    message(STATUS "Doxygen not found: the docs target is not available")
+endif()
