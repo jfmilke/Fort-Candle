@@ -1,6 +1,6 @@
 > [!IMPORTANT]
-> This is the `v1` branch. It contains minimal fixes in the code and dependencies to keep the original code running.
-> See [`v2`](https://github.com/jfmilke/Fort-Candle/tree/v2) for a development version.
+> This is the `v2` branch. It deviates more broadly from the original university code and receives active development.
+> See [`v1`](https://github.com/jfmilke/Fort-Candle/tree/v1) for the original code with only minimal fixes to keep it running.
 
 # Fort Candle
 
