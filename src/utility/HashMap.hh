@@ -2,10 +2,10 @@
 #include "advanced/World.hh"
 #include "utility/HashData.hh"
 #include "typed-geometry/tg.hh"
-#include <unordered_set>
 #include <unordered_map>
 #include <set>
 #include <map>
+#include <vector>
 
 namespace std
 {
@@ -49,7 +49,7 @@ public:
     /**
      * Inserts an instance into all cells its bounding rectangle overlaps.
      *
-     * Does nothing if the handle is already known, even after `RemoveInstance` (see there).
+     * Does nothing if the instance is already stored (use `UpdateInstance` to move it).
      *
      * @param identifier Instance to insert.
      * @param translation Its world position (only x/z are used).
@@ -75,9 +75,7 @@ public:
     void UpdateInstance(const InstanceHandle identifier, const tg::vec3& translation, const tg::aabb3& dimensions);
 
     /**
-     * Removes an instance from all cells.
-     *
-     * TODO: Its entry in `mClientMap` is kept, so `AddInstance` ignores a recycled handle; it is only re-inserted by the next `UpdateInstance`.
+     * Removes an instance from all cells; a later `AddInstance` stores it again.
      *
      * @param identifier Instance to remove; nothing happens for unknown instances.
      */
@@ -91,35 +89,35 @@ public:
      * @param translation World position the rectangle is relative to.
      * @param min Minimum corner relative to `translation` (only x/z are used).
      * @param max Maximum corner relative to `translation` (only x/z are used).
-     * @return Handles of the instances in these cells, each once.
+     * @return Handles of the instances in these cells, each once, sorted by handle value.
      */
-    std::unordered_set<gamedev::InstanceHandle, InstanceHandleHash> FindNear(const tg::vec3& translation, const tg::pos3& min, const tg::pos3& max);
+    std::vector<InstanceHandle> FindNear(const tg::vec3& translation, const tg::pos3& min, const tg::pos3& max);
 
     /**
      * `FindNear` with the rectangle given as bounds.
      *
      * @param translation World position the rectangle is relative to.
      * @param bounds Rectangle relative to `translation` (only x/z are used).
-     * @return Handles of the instances in these cells, each once.
+     * @return Handles of the instances in these cells, each once, sorted by handle value.
      */
-    std::unordered_set<gamedev::InstanceHandle, InstanceHandleHash> FindNear(const tg::vec3& translation, const tg::aabb3& bounds);
+    std::vector<InstanceHandle> FindNear(const tg::vec3& translation, const tg::aabb3& bounds);
 
     /**
      * `FindNear` for a rectangle centered on a position.
      *
      * @param translation Center of the rectangle in world space.
      * @param bounds Half extents: `width` along x, `depth` along z.
-     * @return Handles of the instances in these cells, each once.
+     * @return Handles of the instances in these cells, each once, sorted by handle value.
      */
-    std::unordered_set<gamedev::InstanceHandle, InstanceHandleHash> FindNear(const tg::vec3& translation, const tg::size3& bounds);
+    std::vector<InstanceHandle> FindNear(const tg::vec3& translation, const tg::size3& bounds);
 
     /**
      * Returns all instances in the cell that contains a position.
      *
      * @param position World position (only x/z are used).
-     * @return Handles of the instances in these cells, each once.
+     * @return Handles of the instances in these cells, each once, sorted by handle value.
      */
-    std::unordered_set<gamedev::InstanceHandle, InstanceHandleHash> FindNear(const tg::pos3& position);
+    std::vector<InstanceHandle> FindNear(const tg::pos3& position);
 
     /// Removes all instances.
     void Clear();
@@ -164,21 +162,17 @@ private:
     void Remove_(Hash2Client& c);
 
     /**
-     * Computes the integer key of a cell.
-     *
-     * TODO: Rows are `mMaxCells.width` (cells - 1) apart, so the last cell of a row shares its key with the first cell of the next row.
+     * Computes the integer key of a cell (row-major, unique per cell).
      *
      * @param pos Cell index.
      * @return Key into `mBinMap`.
      */
     int GetIndexID_(tg::ipos2 pos);
 
-
 private:
-    tg::size2 mMaxCells;                                                            ///< Highest cell index per axis (cell count - 1).
-    tg::aabb2 mBounds;                                                              ///< Covered area (world x/z).
-    int mQueryIDs = 1;                                                              ///< Counter to tag clients during a query.
-    std::unordered_map<int, std::vector<Hash2Client>> mBinMap;                      ///< Cell key -> clients in that cell.
-    std::unordered_map<InstanceHandle, Hash2Client, InstanceHandleHash> mClientMap; ///< Instance -> client (kept after removal).
+    tg::size2 mMaxCells;                                        ///< Highest cell index per axis (cell count - 1).
+    tg::aabb2 mBounds;                                          ///< Covered area (world x/z).
+    std::unordered_map<int, std::vector<Hash2Client>> mBinMap;  ///< Cell key -> clients in that cell.
+    std::unordered_map<InstanceHandle, Hash2Client> mClientMap; ///< Stored instance -> client.
 };
 }

@@ -1,8 +1,9 @@
 #pragma once
 #include "advanced/World.hh"
 #include "Constants.hh"
-#include <set>
 #include <chrono>
+#include <concepts>
+#include <set>
 
 namespace gamedev
 {
@@ -22,17 +23,15 @@ namespace gamedev
  *  - A system without a signature receives every entity.
  *  - `Prototype` entities are never added (see `EngineECS::UpdateSystems`).
  *  - By default the qualifying handles are kept in `mEntities`.
- *    Override `AddEntity`/`RemoveEntity` (same signatures) to store them in custom containers instead.
+ *    Override `AddEntity`/`RemoveEntity`/`RemoveAllEntities` to store them in custom containers instead.
+ *  - Systems may create, change and mark entities for destruction while iterating `mEntities`:
+ *    `std::set` iterators survive insertions and the erasure of other elements.
+ *    Do not destroy the entity at the current iterator (use `EngineECS::MarkDestruction`).
  *
- * Registering a new system in `Game::init()`:
+ * Registering a new system in `Game::init()` (the components must be registered first):
  * @code
- * mCoolSys = mECS->RegisterSystem<gamedev::CoolSystem>();
- *
- * Signature signature;
- * signature.set(mECS->GetComponentType<gamedev::SpecialComponent>()); // component must be registered first
- * mECS->SetSystemSignature<gamedev::CoolSystem>(signature);
- *
- * mCoolSys->Init(mECS);
+ * mCoolSys = mECS->RegisterSystem<gamedev::CoolSystem, gamedev::SpecialComponent>(); // signature: SpecialComponent
+ * mCoolSys->Init(*mECS);
  * @endcode
  */
 class System
@@ -44,28 +43,24 @@ public:
      * @param handle Entity to add.
      * @param entitySignature The entity's new signature.
      */
-    virtual void AddEntity(InstanceHandle& handle, Signature entitySignature) { mEntities.insert(handle); };
+    virtual void AddEntity(InstanceHandle handle, Signature entitySignature) { mEntities.insert(handle); }
 
     /**
-     * Called when an entity's new signature does not match the system signature.
-     *
-     * @param handle Entity to remove; it may not be in the system.
-     * @param entitySignature The entity's new signature.
-     */
-    virtual void RemoveEntity(InstanceHandle& handle, Signature entitySignature) { mEntities.erase(handle); };
-
-    /**
-     * Called when an entity is destroyed or becomes a prototype.
+     * Called when an entity's new signature does not match the system signature, and when it is destroyed or becomes a prototype.
      *
      * @param handle Entity to remove; it may not be in the system.
      */
-    virtual void RemoveEntity(InstanceHandle& handle) { mEntities.erase(handle); };
+    virtual void RemoveEntity(InstanceHandle handle) { mEntities.erase(handle); }
 
     /// Called when all instances are destroyed at once.
     virtual void RemoveAllEntities() { mEntities.clear(); }
 
-    virtual ~System() {}
+    virtual ~System() = default;
 
     std::set<InstanceHandle> mEntities; ///< Handles of all qualifying entities, ordered by handle value.
 };
+
+/// What `EngineECS::RegisterSystem` requires of a system type.
+template <class T>
+concept EcsSystem = std::derived_from<T, System> && std::default_initializable<T>;
 }

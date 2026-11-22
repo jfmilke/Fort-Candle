@@ -51,7 +51,7 @@ private:
     bool mTreeBuilt;
 
     public:
-    void init(SharedEngineECS& engineECS);
+    void init(EngineECS& engineECS);
 
     void add(InstanceHandle handle);
     void remove(InstanceHandle handle);
@@ -79,7 +79,7 @@ private:
     const tg::vec2 minDimension = tg::vec2::one; // Minimum dimension of each node
 
 private:
-    SharedEngineECS ecs;
+    EngineECS* ecs = nullptr;
 };
 }
 */

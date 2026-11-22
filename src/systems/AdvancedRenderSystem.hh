@@ -31,14 +31,9 @@ public:
     /**
      * Stores the ECS and loads the quad and skybox.
      *
-     * @param ecs Shared ECS.
+     * @param ecs The ECS; must outlive this object.
      */
-    void Init(std::shared_ptr<EngineECS>& ecs);
-
-    void AddEntity(InstanceHandle& handle, Signature entitySignature);
-    void RemoveEntity(InstanceHandle& handle, Signature entitySignature);
-    void RemoveEntity(InstanceHandle& handle);
-    void RemoveAllEntities();
+    void Init(EngineECS& ecs);
 
     /**
      * Renders one frame (see class description).
@@ -257,7 +252,7 @@ private:
 
 // ECS Specifics
 private:
-    std::shared_ptr<EngineECS> mECS; ///< Shared ECS.
+    EngineECS* mECS = nullptr;       ///< ECS (not owned).
     long int mDrawCalls = 0;         ///< Draw calls of the current frame.
 
 private:

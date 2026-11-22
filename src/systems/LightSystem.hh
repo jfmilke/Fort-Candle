@@ -24,7 +24,7 @@ class LightSystem : public System
 {
 public:
     /// Stores the ECS.
-    void Init(std::shared_ptr<EngineECS>& ecs);
+    void Init(EngineECS& ecs);
 
     /**
      * Adds a light that is not bound to an instance. Unused.
@@ -69,7 +69,7 @@ private:
     void BuildLights(float dt);
 
 private:
-    std::shared_ptr<EngineECS> mECS;     ///< Shared ECS.
+    EngineECS* mECS = nullptr;           ///< ECS (not owned).
     std::vector<PointLight> mFreeLights; ///< Lights not bound to an instance.
     std::vector<PointLight> mLights;     ///< Regular lights of the current update.
     PointLight mShadowPL;                ///< Shadow-casting light of the current update.

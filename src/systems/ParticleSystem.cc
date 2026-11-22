@@ -6,7 +6,7 @@
 #include "utility/Random.hh"
 #include "Mesh3D.hh"
 
-void gamedev::ParticleSystem::AddEntity(InstanceHandle& handle, Signature entitySignature)
+void gamedev::ParticleSystem::AddEntity(InstanceHandle handle, Signature entitySignature)
 {
     // Meant to only include rendered entities, but the handle is inserted in any case
     if (!mECS->TestSignature<Render>(handle))
@@ -17,12 +17,12 @@ void gamedev::ParticleSystem::AddEntity(InstanceHandle& handle, Signature entity
     mEntities.insert(handle);
 }
 
-void gamedev::ParticleSystem::Init(SharedEngineECS& ecs)
+void gamedev::ParticleSystem::Init(EngineECS& ecs)
 {
     Mesh3D cube;
     cube.loadFromFile("../data/meshes/cube.obj", true);
 
-    mECS = ecs;
+    mECS = &ecs;
     mVaoCube = cube.createBasicVertexArray();
     mVboParticles = glow::ArrayBuffer::create();
 
@@ -270,7 +270,7 @@ void gamedev::ParticleSystem::Init_BuildingDestroyedParticles()
 // Unfinished GPU particle system (does not compile), kept for reference; see ParticleSystem.hh.
 // =========================================================================================
 /*
-void gamedev::GPUParticleSystem::AddEntity(InstanceHandle& handle, Signature entitySignature)
+void gamedev::GPUParticleSystem::AddEntity(InstanceHandle handle, Signature entitySignature)
 {
     // Only include rendered systems
     if (!mECS->TestSignature<Render>(handle))
@@ -281,12 +281,12 @@ void gamedev::GPUParticleSystem::AddEntity(InstanceHandle& handle, Signature ent
     mEntities.insert(handle);
 }
 
-void gamedev::GPUParticleSystem::Init(SharedEngineECS& ecs)
+void gamedev::GPUParticleSystem::Init(EngineECS& ecs)
 {
     Mesh3D cube;
     cube.loadFromFile("../data/meshes/cube.obj", true);
 
-    mECS = ecs;
+    mECS = &ecs;
     mVaoParticle = cube.createBasicVertexArray();
     mVboParticleData = glow::ArrayBuffer::create();
     mSsboParticleData = glow::ShaderStorageBuffer::createAliased(mVboParticleData);

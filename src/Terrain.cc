@@ -1,7 +1,7 @@
 #include "Terrain.hh"
 #include <glow/objects/Texture2D.hh>
 
-void gamedev::Terrain::Init(SharedEngineECS& ecs) { mECS = ecs; }
+void gamedev::Terrain::Init(EngineECS& ecs) { mECS = &ecs; }
 
 void gamedev::Terrain::setGroundMesh(std::filesystem::path mesh_path)
 {

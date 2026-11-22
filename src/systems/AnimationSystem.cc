@@ -2,7 +2,7 @@
 #include "advanced/transform.hh"
 #include "glow/common/log.hh"
 
-void gamedev::AnimationSystem::AddEntity(InstanceHandle& handle, Signature entitySignature)
+void gamedev::AnimationSystem::AddEntity(InstanceHandle handle, Signature entitySignature)
 {
     if (entitySignature.test(mECS->GetComponentType<Arrow>()))
     {
@@ -16,12 +16,7 @@ void gamedev::AnimationSystem::AddEntity(InstanceHandle& handle, Signature entit
     }
 }
 
-void gamedev::AnimationSystem::RemoveEntity(InstanceHandle& handle, Signature entitySignature) {
-    mArrows.erase(handle);
-    mEntities.erase(handle);
-}
-
-void gamedev::AnimationSystem::RemoveEntity(InstanceHandle& handle) {
+void gamedev::AnimationSystem::RemoveEntity(InstanceHandle handle) {
     mArrows.erase(handle);
     mEntities.erase(handle);
 }
@@ -32,8 +27,8 @@ void gamedev::AnimationSystem::RemoveAllEntities()
     mEntities.clear();
 }
 
-void gamedev::AnimationSystem::Init(std::shared_ptr<EngineECS>& ecs) {
-    mECS = ecs;
+void gamedev::AnimationSystem::Init(EngineECS& ecs) {
+    mECS = &ecs;
 }
 
 int gamedev::AnimationSystem::Update(float dt)

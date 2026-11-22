@@ -27,9 +27,9 @@ public:
      *
      * Needs an OpenGL context.
      *
-     * @param ecs Shared ECS.
+     * @param ecs The ECS; must outlive this object.
      */
-    void Init(SharedEngineECS& ecs);
+    void Init(EngineECS& ecs);
 
     /**
      * Adds the entity to the system.
@@ -39,7 +39,7 @@ public:
      * @param handle Entity with a `ParticleEmitter`.
      * @param entitySignature Its signature.
      */
-    void AddEntity(InstanceHandle& handle, Signature entitySignature);
+    void AddEntity(InstanceHandle handle, Signature entitySignature) override;
 
     /**
      * Resizes the pool and (re)defines the per-instance attributes on the cube VAO.
@@ -111,7 +111,7 @@ private:
     void ParticleListener(Event& e);
 
 private:
-    std::shared_ptr<EngineECS> mECS; ///< Shared ECS.
+    EngineECS* mECS = nullptr; ///< ECS (not owned).
 
     std::vector<Particle> mParticlePool;                 ///< All particles; [0, mAlive) are alive.
     std::vector<ParticleAttributes> mParticleAttributes; ///< Instance data of the living particles.
@@ -137,9 +137,9 @@ private:
 class GPUParticleSystem : public System
 {
 public:
-    void Init(SharedEngineECS& ecs);
+    void Init(EngineECS& ecs);
 
-    void AddEntity(InstanceHandle& handle, Signature entitySignature);
+    void AddEntity(InstanceHandle handle, Signature entitySignature) override;
 
     void EmitParticle(const ParticleProperties& particleProperties, transform& xform);
     void KillParticle(int id);
@@ -152,7 +152,7 @@ public:
     void Update(float elapsed_time);    
 
 private:
-    std::shared_ptr<EngineECS> mECS;
+    EngineECS* mECS = nullptr;
 
     std::vector<Particle> mParticlePool;
     std::vector<ParticleAttributes> mParticleAttributes;

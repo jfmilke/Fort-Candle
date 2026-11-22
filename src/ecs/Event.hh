@@ -1,7 +1,5 @@
 #pragma once
-#include <unordered_map>
-#include <array>
-#include <assert.h>
+#include "advanced/World.hh"
 
 namespace gamedev
 {
@@ -26,7 +24,9 @@ enum class EventType
   BuildingDestroyed, ///< A building (subject) was destroyed by the sender.
   Supply1,           ///< First supply route upgrade bought (both handles invalid). No listeners.
   Supply2,           ///< Second supply route upgrade bought (both handles invalid). No listeners.
-  MoreWood           ///< Wood was added to the bonfire (sender = subject = bonfire). No listeners.
+  MoreWood,          ///< Wood was added to the bonfire (sender = subject = bonfire). No listeners.
+
+  Count ///< Number of event types; not an event.
 };
 
 /// A typed message between two instances; see `EventType` for what sender and subject mean.
@@ -41,6 +41,4 @@ struct Event
     InstanceHandle mSender;  ///< Instance that caused the event (may be invalid).
     InstanceHandle mSubject; ///< Instance the event is about (may be invalid).
 };
-
-
 }

@@ -2,9 +2,11 @@
 #include "advanced/World.hh"
 #include "components/Component.hh"
 #include "glow/common/log.hh"
-#include <unordered_map>
+#include <clean-core/assert.hh>
 #include <array>
-#include <assert.h>
+#include <cstdint>
+#include <typeinfo>
+#include <utility>
 
 namespace gamedev
 {
@@ -14,17 +16,17 @@ class IComponentArray
 public:
     virtual ~IComponentArray() = default;
 
-    /// `ComponentArray::GetData` as a pointer to the `Component` base.
+    /// `ComponentArray::GetData` as a pointer to the `Component` base. Unused.
     virtual gamedev::Component* GetBaseComponent(InstanceHandle handle) = 0;
 
-    /// `ComponentArray::TryGetData` as a pointer to the `Component` base.
+    /// `ComponentArray::TryGetData` as a pointer to the `Component` base. Unused.
     virtual gamedev::Component* TryGetBaseComponent(InstanceHandle handle) = 0;
 
     /// See `ComponentArray::TryRemoveData`.
     virtual void TryRemoveData(InstanceHandle handle) = 0;
 
     /// See `ComponentArray::CloneEntityComponent`.
-    virtual void CloneEntityComponent(InstanceHandle& handle_source, InstanceHandle& handle_copy) = 0;
+    virtual void CloneEntityComponent(InstanceHandle handle_source, InstanceHandle handle_copy) = 0;
 
     /// See `ComponentArray::EntityDestroyed`.
     virtual void EntityDestroyed(InstanceHandle handle) = 0;
@@ -34,61 +36,66 @@ public:
 };
 
 /**
- * Stores all components of type `CompT`, densely packed in a fixed-size array, and maps instance handles to slots.
+ * Stores all components of type `CompT` densely packed and maps instance handles to them (a sparse set).
  *
  * Based on https://austinmorlan.com/posts/entity_component_system/.
  * Created and owned by the `ComponentManager` when `CompT` is registered; accessed through `EngineECS`.
  *
+ * Layout:
+ *  - `mComponents[0, mSize)` holds the components, `mOwners[i]` the instance that owns `mComponents[i]`.
+ *  - `mSlotToIndex[slot]` maps an instance's stable `World` slot to its index in `mComponents` (`kNoIndex` if it has none).
+ *  - All lookups are two array reads and a handle compare; nothing allocates after construction.
+ *
  * Removing a component moves the last element into the gap.
  * A pointer returned by `GetData` may therefore refer to another entity's component after any removal of this type.
  *
- * The asserts only fire in Debug builds; RelWithDebInfo and Release define `NDEBUG`.
+ * Lookups need the owner to be alive in the `World`: remove an instance's components before the `World` frees it (see `EngineECS::DestroyInstance`).
+ * The asserts fire in Debug and RelWithDebInfo (`CC_ASSERT_MSG`).
  */
-template <typename CompT>
-class ComponentArray : public IComponentArray
+template <EcsComponent CompT>
+class ComponentArray final : public IComponentArray
 {
 public:
     /**
-     * Stores a copy of a component in the next free slot. Asserts if the instance already has a component of this type.
+     * Creates an empty array.
      *
-     * @param handle Instance the component belongs to.
-     * @param component Component to copy.
+     * @param world Instance storage used to map handles to slots; must outlive this array.
      */
-    void InsertData(InstanceHandle handle, CompT& component)
+    explicit ComponentArray(World const& world) : mWorld(world) { mSlotToIndex.fill(kNoIndex); }
+
+    /**
+     * Stores a component in the next free slot. Asserts if the instance already has a component of this type.
+     *
+     * @param handle Live instance the component belongs to.
+     * @param component Component to store.
+     */
+    void InsertData(InstanceHandle handle, CompT component)
     {
-        assert(mEntityToIndexMap.find(handle) == mEntityToIndexMap.end() && "Component added to same entity more than once.");
+        auto const slot = mWorld.SlotIndex(handle);
+        CC_ASSERT_MSG(slot != World::kNoSlot, "Adding a component to a dead instance.");
+        CC_ASSERT_MSG(mSlotToIndex[slot] == kNoIndex, "Component added to same entity more than once.");
 
-        size_t newIndex = mSize;
-        mEntityToIndexMap.insert_or_assign(handle, newIndex);
-        mIndexToEntityMap.insert_or_assign(newIndex, handle);
-        mComponentArray[newIndex] = component;
-
-        ++mSize;
-
-        IntegrityCheck();
+        Append(handle, slot, std::move(component));
     }
 
     /**
      * Like `InsertData`, but if the instance already has a component of this type it only logs and keeps that one.
      *
-     * @param handle Instance the component belongs to.
-     * @param component Component to copy.
+     * @param handle Live instance the component belongs to.
+     * @param component Component to store.
      */
-    void TryInsertData(InstanceHandle handle, CompT& component)
+    void TryInsertData(InstanceHandle handle, CompT component)
     {
-        if(mEntityToIndexMap.find(handle) != mEntityToIndexMap.end())
+        auto const slot = mWorld.SlotIndex(handle);
+        CC_ASSERT_MSG(slot != World::kNoSlot, "Adding a component to a dead instance.");
+
+        if (mSlotToIndex[slot] != kNoIndex)
         {
             glow::log() << "Tried to add component to same entity more than once.";
             return;
         }
 
-        size_t newIndex = mSize;
-        mEntityToIndexMap.insert_or_assign(handle, newIndex);
-        mIndexToEntityMap.insert_or_assign(newIndex, handle);
-        mComponentArray[newIndex] = component;
-        ++mSize;
-
-        IntegrityCheck();
+        Append(handle, slot, std::move(component));
     }
 
     /**
@@ -98,26 +105,11 @@ public:
      */
     void RemoveData(InstanceHandle handle)
     {
-        assert(mEntityToIndexMap.find(handle) != mEntityToIndexMap.end() && "Removing non-existent component.");
+        auto const index = IndexOf(handle);
+        CC_ASSERT_MSG(index != kNoIndex, "Removing non-existent component.");
 
-        // Copy element at end into deleted element's place to maintain density
-        size_t indexOfRemovedEntity = mEntityToIndexMap[handle];
-        size_t indexOfLastElement = mSize - 1;
-        mComponentArray[indexOfRemovedEntity] = mComponentArray[indexOfLastElement];
-
-        // Update map to the moved position
-        InstanceHandle entityOfLastElement = mIndexToEntityMap[indexOfLastElement];
-        mEntityToIndexMap.insert_or_assign(entityOfLastElement, indexOfRemovedEntity);
-        mIndexToEntityMap.insert_or_assign(indexOfRemovedEntity, entityOfLastElement);
-
-        // Remove empty
-        mEntityToIndexMap.erase(handle);
-        mIndexToEntityMap.erase(indexOfLastElement);
-
-        if (mSize > 0)
-            --mSize;
-
-        IntegrityCheck();
+        if (index != kNoIndex)
+            Erase(index);
     }
 
     /**
@@ -125,159 +117,144 @@ public:
      *
      * @param handle Instance whose component is removed.
      */
-    void TryRemoveData(InstanceHandle handle)
+    void TryRemoveData(InstanceHandle handle) override
     {
-        if(mEntityToIndexMap.find(handle) == mEntityToIndexMap.end())
-        {
-            return;
-        }
-
-        // Copy element at end into deleted element's place to maintain density
-        size_t indexOfRemovedEntity = mEntityToIndexMap[handle];
-        size_t indexOfLastElement = mSize - 1;
-        mComponentArray[indexOfRemovedEntity] = mComponentArray[indexOfLastElement];
-
-        // Update map to the moved position
-        InstanceHandle entityOfLastElement = mIndexToEntityMap[indexOfLastElement];
-        mEntityToIndexMap.insert_or_assign(entityOfLastElement, indexOfRemovedEntity);
-        mIndexToEntityMap.insert_or_assign(indexOfRemovedEntity, entityOfLastElement);
-
-        // Remove empty
-        mEntityToIndexMap.erase(handle);
-        mIndexToEntityMap.erase(indexOfLastElement);
-
-        if (mSize > 0)
-            --mSize;
-
-        IntegrityCheck();
+        if (auto const index = IndexOf(handle); index != kNoIndex)
+            Erase(index);
     }
 
-    /// Forgets the components of all instances. The stored objects are not destroyed until overwritten.
+    /// Removes the components of all instances; works after the `World` was emptied.
     void RemoveAll()
     {
-        mEntityToIndexMap.clear();
-        mIndexToEntityMap.clear();
+        for (std::size_t i = 0; i < mSize; ++i)
+        {
+            mSlotToIndex[mOwners[i].slot] = kNoIndex;
+            mComponents[i] = CompT{};
+        }
         mSize = 0;
     }
 
     /**
      * Returns `handle`'s component. Logs an error and asserts if `handle` has none.
      *
-     * TODO: Without asserts (RelWithDebInfo, Release), a missing component returns slot 0, i.e. another instance's component,
-     * and `operator[]` adds a wrong map entry for `handle`.
+     * @return The component, or nullptr if there is none (only reached in Release, where asserts are off).
      */
     CompT* GetData(InstanceHandle handle)
     {
-        if (mEntityToIndexMap.find(handle) == mEntityToIndexMap.end())
+        auto const index = IndexOf(handle);
+        if (index == kNoIndex)
         {
             glow::error() << "Retrieving non-existent component: " << typeid(CompT).name();
-            assert(mEntityToIndexMap.find(handle) != mEntityToIndexMap.end());
+            CC_ASSERT_MSG(false, "Retrieving non-existent component.");
+            return nullptr;
         }
 
-        return &mComponentArray[mEntityToIndexMap[handle]];
+        return &mComponents[index];
     }
 
-    /// Returns `handle`'s component, or nullptr if it has none.
+    /// Returns `handle`'s component, or nullptr if it has none (or `handle` is dead).
     CompT* TryGetData(InstanceHandle handle)
     {
-        if (mEntityToIndexMap.find(handle) == mEntityToIndexMap.end())
-            return nullptr;
-
-        return &mComponentArray[mEntityToIndexMap[handle]];
+        auto const index = IndexOf(handle);
+        return index != kNoIndex ? &mComponents[index] : nullptr;
     }
 
-    /// `GetData` as a pointer to the `Component` base.
-    Component* GetBaseComponent(InstanceHandle handle)
-    {
-        return reinterpret_cast<Component*>(GetData(handle));
-    }
+    /// `GetData` as a pointer to the `Component` base. Unused.
+    Component* GetBaseComponent(InstanceHandle handle) override { return GetData(handle); }
 
-    /// `TryGetData` as a pointer to the `Component` base.
-    Component* TryGetBaseComponent(InstanceHandle handle)
-    {
-        return reinterpret_cast<Component*>(TryGetData(handle));
-    }
+    /// `TryGetData` as a pointer to the `Component` base. Unused.
+    Component* TryGetBaseComponent(InstanceHandle handle) override { return TryGetData(handle); }
 
     /**
-     * Copies a component from one instance to another, overwriting an existing one.
-     *
-     * Sets the copy's `handle_value`.
-     * The copy's `instance` pointer is set to nullptr; the caller must set it before use.
+     * Copies a component from one instance to another, overwriting an existing one. Sets the copy's `handle_value`.
      *
      * @param handle_source Instance to copy from; nothing happens if it has no component of this type.
-     * @param handle_copy Instance to copy to.
+     * @param handle_copy Live instance to copy to.
      */
-    void CloneEntityComponent(InstanceHandle& handle_source, InstanceHandle& handle_copy)
+    void CloneEntityComponent(InstanceHandle handle_source, InstanceHandle handle_copy) override
     {
-        if (mEntityToIndexMap.find(handle_source) == mEntityToIndexMap.end())
+        auto const source = IndexOf(handle_source);
+        if (source == kNoIndex)
             return;
 
-        if (mEntityToIndexMap.find(handle_copy) != mEntityToIndexMap.end())
-        {
-            mComponentArray[mEntityToIndexMap[handle_copy]] = mComponentArray[mEntityToIndexMap[handle_source]];
-            mComponentArray[mEntityToIndexMap[handle_copy]].instance = nullptr;
-            mComponentArray[mEntityToIndexMap[handle_copy]].handle_value = handle_copy._value;
-        }
-        else
-        {
-            InsertData(handle_copy, mComponentArray[mEntityToIndexMap[handle_source]]);
-            mComponentArray[mEntityToIndexMap[handle_copy]].instance = nullptr;
-            mComponentArray[mEntityToIndexMap[handle_copy]].handle_value = handle_copy._value;
-        }
+        CompT copy = mComponents[source];
+        copy.handle_value = handle_copy._value;
 
-        GetBaseComponent(handle_copy)->instance = nullptr;
+        if (auto const target = IndexOf(handle_copy); target != kNoIndex)
+            mComponents[target] = std::move(copy);
+        else
+            InsertData(handle_copy, std::move(copy));
     }
 
     /**
-     * Removes the component of a destroyed instance, if it has one.
+     * Removes the component of an instance that is being destroyed, if it has one.
      *
-     * @param handle Destroyed instance.
+     * @param handle Instance that is still alive in the `World`.
      */
-    void EntityDestroyed(InstanceHandle handle)
-    {
-        if (mEntityToIndexMap.find(handle) != mEntityToIndexMap.end())
-            RemoveData(handle);
-    }
+    void EntityDestroyed(InstanceHandle handle) override { TryRemoveData(handle); }
 
     /// Removes the components of all instances (`RemoveAll`).
-    void AllEntitiesDestroyed()
-    {
-        RemoveAll();
-    }
-
-    /**
-     * Debugging aid, called after every insertion and removal.
-     *
-     * Set breakpoints on the `int i = 0;` lines to catch duplicate slots or handles.
-     *
-     * TODO: Walks all slot pairs (O(n^2) per insertion/removal) but checks nothing, because the assert is commented out.
-     * Remove it or enable the check in debug builds only.
-     */
-    void IntegrityCheck()
-    {
-        for (const auto& i1 : mIndexToEntityMap)
-        {
-            for (const auto& i2 : mIndexToEntityMap)
-            {
-                if ((i1.first == i2.first) && (i1.second._value == i2.second._value))
-                    continue;
-
-                if (i1.first == i2.first)
-                    int i = 0;
-
-                if (i1.second._value == i2.second._value)
-                    int i = 0;
-        
-                //assert((i1.second._value != i2.second._value)) && "Double id");
-            }
-        }
-    }
+    void AllEntitiesDestroyed() override { RemoveAll(); }
 
 private:
-    std::array<CompT, MAX_INSTANCES> mComponentArray;                                 ///< Slots [0, mSize) are in use.
-    std::unordered_map<InstanceHandle, size_t, InstanceHandleHash> mEntityToIndexMap; ///< Instance handle -> slot.
-    std::unordered_map<size_t, InstanceHandle> mIndexToEntityMap;                     ///< Slot -> instance handle.
-    size_t mSize;                                                                     ///< Number of used slots.
-    CompT mDummy;                                                                     ///< Unused.
+    using Index = std::uint16_t;
+    static constexpr Index kNoIndex = Index(-1);
+    static_assert(MAX_INSTANCES < kNoIndex, "Index type too small for MAX_INSTANCES.");
+
+    /// Owner of a stored component; the slot is kept so that `Erase` and `RemoveAll` need no `World` lookup.
+    struct Owner
+    {
+        InstanceHandle handle;
+        std::uint32_t slot = World::kNoSlot;
+    };
+
+    /// Index of `handle`'s component in `mComponents`, or `kNoIndex`.
+    Index IndexOf(InstanceHandle handle) const
+    {
+        auto const slot = mWorld.SlotIndex(handle);
+        if (slot == World::kNoSlot)
+            return kNoIndex;
+
+        // The owner check guards against a stale entry if a slot was reused without removing the old components.
+        auto const index = mSlotToIndex[slot];
+        return (index != kNoIndex && mOwners[index].handle == handle) ? index : kNoIndex;
+    }
+
+    /// Stores `component` at the end of the dense range.
+    void Append(InstanceHandle handle, std::uint32_t slot, CompT&& component)
+    {
+        CC_ASSERT_MSG(mSize < MAX_INSTANCES, "Component array full.");
+
+        auto const index = Index(mSize++);
+        mComponents[index] = std::move(component);
+        mOwners[index] = {handle, slot};
+        mSlotToIndex[slot] = index;
+    }
+
+    /// Removes the component at `index`: the last component moves into the gap, the vacated slot is reset.
+    void Erase(Index index)
+    {
+        auto const last = Index(mSize - 1);
+        mSlotToIndex[mOwners[index].slot] = kNoIndex;
+
+        if (index != last)
+        {
+            mComponents[index] = std::move(mComponents[last]);
+            mOwners[index] = mOwners[last];
+            mSlotToIndex[mOwners[index].slot] = index;
+        }
+
+        // Release what the moved-from component still holds (vectors, sounds, ...)
+        mComponents[last] = CompT{};
+        mOwners[last] = {};
+        --mSize;
+    }
+
+    World const& mWorld;                           ///< Maps handles to slots.
+    std::array<CompT, MAX_INSTANCES> mComponents;  ///< Dense storage; [0, mSize) are in use.
+    std::array<Owner, MAX_INSTANCES> mOwners;      ///< Dense index -> owning instance.
+    std::array<Index, MAX_INSTANCES> mSlotToIndex; ///< `World` slot -> dense index, or `kNoIndex`.
+    std::size_t mSize = 0;                         ///< Number of stored components.
+    CompT mDummy;                                  ///< Unused.
 };
 }

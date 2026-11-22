@@ -1,5 +1,6 @@
 #pragma once
 #include <glow/fwd.hh>
+#include <concepts>
 #include <cstdint>
 
 namespace gamedev
@@ -8,8 +9,6 @@ GLOW_SHARED(struct, Component);
 GLOW_SHARED(struct, Collider);
 GLOW_SHARED(struct, BoxShape);
 GLOW_SHARED(struct, CircleShape);
-
-typedef struct Instance Instance;
 
 /**
  * Base of all components: plain data structs attached to an instance through the ECS.
@@ -22,26 +21,22 @@ typedef struct Instance Instance;
  */
 struct Component
 {
-    /**
-     * Back-pointer to the owning instance. Prefer `EngineECS::GetInstance({handle_value})`.
-     *
-     * TODO: Never read, and can be stale: the `World` moves instances when another one is destroyed.
-     * Remove it or keep it updated.
-     */
-    Instance* instance = nullptr;
-    uint32_t handle_value = uint32_t(-1); ///< Handle value of the owning instance.
+    uint32_t handle_value = uint32_t(-1); ///< Handle value of the owning instance (set by the ECS on insert and clone).
 
     /// Creates a component that is not attached to an instance yet.
     Component() = default;
 
-    /**
-     * Creates a component for an instance.
-     *
-     * @param i Owning instance. `handle_value` is set separately (by `ComponentManager::CreateComponent`).
-     */
-    Component(Instance* i) : instance(i) {}
+    /// Virtual for deletion through a `SharedComponent`. Unused: components are never deleted through a base pointer.
+    virtual ~Component() = default;
 
-    // Destructor must be virtual in order to safely delete subclasses
-    virtual ~Component() {}
+    // The user-declared destructor would suppress the implicit move operations; keep components cheap to move.
+    Component(Component const&) = default;
+    Component(Component&&) = default;
+    Component& operator=(Component const&) = default;
+    Component& operator=(Component&&) = default;
 };
+
+/// What the ECS requires of a component type: derived from `Component`, default-constructible and copyable.
+template <class T>
+concept EcsComponent = std::derived_from<T, Component> && std::default_initializable<T> && std::copyable<T>;
 }

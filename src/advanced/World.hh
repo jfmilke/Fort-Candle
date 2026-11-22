@@ -1,6 +1,8 @@
 #pragma once
 
 #include <glow/fwd.hh>
+#include <compare>
+#include <functional>
 #include "container/compact_pool.hh"
 #include "transform.hh"
 #include "types/AuxiliaryModel.hh"
@@ -10,29 +12,31 @@ namespace gamedev
 {
 GLOW_SHARED(struct, Instance);
 
-/// Stable handle of an `Instance` in the `World`; this is the entity ID of the ECS.
+/**
+ * Stable handle of an `Instance` in the `World`; this is the entity ID of the ECS.
+ *
+ * The value encodes the pool slot and a generation, so a handle to a destroyed instance never matches a newer instance in the same slot.
+ * A default-constructed handle is invalid.
+ */
 struct InstanceHandle
 {
     uint32_t _value = uint32_t(-1); ///< Pool handle; `uint32_t(-1)` means invalid.
 
+    /// The invalid handle (same as `InstanceHandle{}`).
+    static constexpr InstanceHandle Invalid() { return {}; }
+
     /// True unless this is the invalid handle. Does not check whether the instance is still alive.
     bool is_valid() const { return _value != uint32_t(-1); }
 
-    /// Equal if both refer to the same pool slot handle.
-    bool operator==(const InstanceHandle& handle) const { return _value == handle._value; }
-
-    /// Orders by handle value (for `std::set`/`std::map`).
-    bool operator<(const InstanceHandle& handle) const { return _value < handle._value; }
-
-    /// Orders by handle value.
-    bool operator<=(const InstanceHandle& handle) const { return _value <= handle._value; }
+    /// Compares and orders by handle value (for `std::set`/`std::map`).
+    auto operator<=>(const InstanceHandle&) const = default;
 };
 
 /**
  * An entity of the game world: render data, transform and ECS bookkeeping in one struct.
  *
  * Instances live in the `World`'s compact pool, which moves the last instance into a freed slot whenever an instance is destroyed.
- * References and pointers to an `Instance` (including `Component::instance`) are therefore only safe until the next destruction.
+ * References and pointers to an `Instance` are therefore only safe until the next destruction.
  * Keep the `InstanceHandle` instead.
  */
 struct Instance
@@ -136,6 +140,23 @@ public:
     /// True if `handle` is valid and refers to a live instance.
     bool isLiveHandle(InstanceHandle handle) const { return mCPoolInstances.is_alive(handle._value); }
 
+    /// Returned by `SlotIndex` for invalid or dead handles.
+    static constexpr uint32_t kNoSlot = uint32_t(-1);
+
+    /**
+     * Stable storage slot of a live instance, in [0, `getMaxNumInstances()`).
+     *
+     * Unlike the packed index, the slot does not change when other instances are destroyed,
+     * so the ECS uses it to index its per-instance arrays (see `ComponentArray`).
+     *
+     * @param handle Any handle; dead and invalid handles are allowed.
+     * @return The slot, or `kNoSlot` if `handle` does not refer to a live instance.
+     */
+    uint32_t SlotIndex(InstanceHandle handle) const
+    {
+        return isLiveHandle(handle) ? uint32_t(mCPoolInstances.get_slot_index(handle._value)) : kNoSlot;
+    }
+
     /// Number of live instances; they are stored as one contiguous array.
     uint32_t getNumLiveInstances() const { return mCPoolInstances.get_span().size(); }
 
@@ -181,11 +202,11 @@ private:
     compact_pool<Instance> mCPoolInstances; ///< Instance storage.
 };
 
-/// Hash functor for `InstanceHandle` keys in unordered containers.
-class InstanceHandleHash
-{
-public:
-    /// Hashes the handle value.
-    size_t operator()(const InstanceHandle& handle) const { return std::hash<uint32_t>()(handle._value); }
-};
 }
+
+/// Lets `InstanceHandle` be a key of `std::unordered_map`/`std::unordered_set` without a custom hasher.
+template <>
+struct std::hash<gamedev::InstanceHandle>
+{
+    size_t operator()(gamedev::InstanceHandle handle) const noexcept { return std::hash<uint32_t>()(handle._value); }
+};

@@ -41,7 +41,7 @@ public:
     /**
      * Stores the ECS, the audio system and the factories, registers the event listeners and starts the ambient sounds and the music.
      *
-     * @param ecs Shared ECS.
+     * @param ecs The ECS; must outlive this object.
      * @param as Audio system for all game sounds.
      * @param uf Factory for units.
      * @param sf Factory for structures.
@@ -49,7 +49,7 @@ public:
      * @param go Asset manager (mesh bounds).
      * @param globalScale Scale of the baked positions (camp center, reinforcement path).
      */
-    void Init(std::shared_ptr<EngineECS>& ecs,
+    void Init(EngineECS& ecs,
               std::shared_ptr<AudioSystem>& as,
               std::shared_ptr<UnitFactory>& uf,
               std::shared_ptr<StructureFactory>& sf,
@@ -58,10 +58,9 @@ public:
               float globalScale);
 
     /// Sorts a new `Living` entity into people, artisans (`Producer`), soldiers (friendly `Attacker`) or monsters.
-    void AddEntity(InstanceHandle& handle, Signature entitySignature);
-    void RemoveEntity(InstanceHandle& handle, Signature entitySignature);
-    void RemoveEntity(InstanceHandle& handle);
-    void RemoveAllEntities();
+    void AddEntity(InstanceHandle handle, Signature entitySignature) override;
+    void RemoveEntity(InstanceHandle handle) override;
+    void RemoveAllEntities() override;
 
     /**
      * Advances the game (see class description).
@@ -652,7 +651,7 @@ private:
 
 private:
 
-    std::shared_ptr<EngineECS> mECS;       ///< Shared ECS.
+    EngineECS* mECS = nullptr;             ///< ECS (not owned).
     std::shared_ptr<AudioSystem> mAS;      ///< Audio.
     std::shared_ptr<UnitFactory> mUF;      ///< Unit factory.
     std::shared_ptr<StructureFactory> mSF; ///< Structure factory.

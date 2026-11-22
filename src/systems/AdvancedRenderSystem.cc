@@ -29,29 +29,9 @@
 
 // System Stuff
 // ============
-void gamedev::RenderSystem::AddEntity(InstanceHandle& handle, Signature entitySignature)
+void gamedev::RenderSystem::Init(EngineECS& ecs)
 {
-    mEntities.insert(handle);
-}
-
-void gamedev::RenderSystem::RemoveEntity(InstanceHandle& handle, Signature entitySignature)
-{
-    mEntities.erase(handle);
-}
-
-void gamedev::RenderSystem::RemoveEntity(InstanceHandle& handle)
-{
-    mEntities.erase(handle);
-}
-
-void gamedev::RenderSystem::RemoveAllEntities()
-{
-    mEntities.clear();
-}
-
-void gamedev::RenderSystem::Init(std::shared_ptr<EngineECS>& ecs)
-{
-    mECS = ecs;
+    mECS = &ecs;
     
     mMeshQuad = glow::geometry::Quad<>().generate();
 

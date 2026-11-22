@@ -23,19 +23,18 @@ class AISystem : public System
 {
 public:
     /// Stores the ECS (and other systems it needs).
-    void Init(std::shared_ptr<EngineECS>& ecs);
+    void Init(EngineECS& ecs);
 
     /// Called when an entity's signature starts matching the system signature.
-    void AddEntity(InstanceHandle& handle, Signature entitySignature);
+    void AddEntity(InstanceHandle handle, Signature entitySignature) override;
 
     /// Called when an entity's signature no longer matches.
-    void RemoveEntity(InstanceHandle& handle, Signature entitySignature);
 
     /// Called when an entity is destroyed.
-    void RemoveEntity(InstanceHandle& handle);
+    void RemoveEntity(InstanceHandle handle) override;
 
     /// Called when all entities are destroyed.
-    void RemoveAllEntities();
+    void RemoveAllEntities() override;
 
     /**
      * Main update; does nothing.
@@ -45,6 +44,6 @@ public:
     void Update(float dt);
 
 private:
-    std::shared_ptr<EngineECS> mECS; ///< Shared ECS.
+    EngineECS* mECS = nullptr; ///< ECS (not owned).
 };
 }

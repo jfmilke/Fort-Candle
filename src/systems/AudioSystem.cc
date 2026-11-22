@@ -2,18 +2,9 @@
 #include "glow/common/log.hh"
 #include "systems/AudioSystem.hh"
 
-void gamedev::AudioSystem::AddEntity(InstanceHandle& handle, Signature entitySignature)
-{ mEntities.insert(handle); }
-
-void gamedev::AudioSystem::RemoveEntity(InstanceHandle& handle, Signature entitySignature) { mEntities.erase(handle); }
-
-void gamedev::AudioSystem::RemoveEntity(InstanceHandle& handle) { mEntities.erase(handle); }
-
-void gamedev::AudioSystem::RemoveAllEntities() { mEntities.clear(); }
-
-void gamedev::AudioSystem::Init(std::shared_ptr<EngineECS>& ecs) 
+void gamedev::AudioSystem::Init(EngineECS& ecs) 
 { 
-    mECS = ecs; 
+    mECS = &ecs; 
 
     channels = 32;
     masterVolume = 1.0f;
@@ -63,15 +54,10 @@ void gamedev::AudioSystem::Update(float dt)
 
     for (const auto& handle : mEntities)
     {
-        auto emitter = mECS->GetComponent<SoundEmitter>(handle);
+        // Update values for every emitter, whether in range or not
+        UpdateSoundState(handle, dt);
 
-        if (emitter)
-        {
-            // Update values for every emitter, whether in range or not
-            UpdateSoundState(handle, dt);
-
-            CullEmitters(handle); // Release the source of emitters that are too far away or finished
-        }
+        CullEmitters(handle); // Release the source of emitters that are too far away or finished
     }
 
     if (emitters.size() > sources.size())
@@ -333,6 +319,13 @@ void gamedev::AudioSystem::CleanupLocalEmitters()
     for (vector<InstanceHandle>::iterator i = mLocalEmitters.begin(); i != mLocalEmitters.end();)
     {
         auto emitter = mECS->TryGetComponent<SoundEmitter>(*i);
+
+        // The emitter instance was destroyed elsewhere (e.g. by the editor)
+        if (!emitter)
+        {
+            i = mLocalEmitters.erase(i);
+            continue;
+        }
 
         if (emitter->timeLeft <= 0 && !emitter->isLooping)
         {

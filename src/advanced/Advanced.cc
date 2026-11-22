@@ -41,7 +41,7 @@ inline tg::vec4 unpackSaturatedFloat4(uint32_t value)
 }
 }
 
-void gamedev::AdvancedFeatures::setECS(std::shared_ptr<gamedev::EngineECS> ecs) { mECS = ecs; }
+void gamedev::AdvancedFeatures::setECS(gamedev::EngineECS* ecs) { mECS = ecs; }
 
 void gamedev::AdvancedFeatures::destroy()
 {
@@ -199,15 +199,8 @@ void gamedev::AdvancedFeatures::runImgui(bool& outFlyToSelection, bool& outCreat
             }
             ImGui::SameLine();
 
-            if (ImGui::Button("Destroy Selection"))
-            {
-                mWorld.destroyInstance(mSelectedInstance);
-                if (mECS)
-                    mECS->InstanceDestroyed(mSelectedInstance);
-                else
-                    glow::error() << "Destroying instance without ECS.";
-                mSelectedInstance = {};
-            }
+            // Destroyed at the end of this block: `inst` must stay valid while the rest of the panel uses it
+            bool const destroySelection = ImGui::Button("Destroy Selection");
 
             tg::vec4 unpackedColor = unpackSaturatedFloat4(inst.albedoBias);
             if (ImGui::ColorEdit4("Color Bias", tg::data_ptr(unpackedColor), ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreview))
@@ -243,6 +236,18 @@ void gamedev::AdvancedFeatures::runImgui(bool& outFlyToSelection, bool& outCreat
 
             ImGui::SliderFloat("Animation Speed", &inst.animSpeed, 0.f, 50.f);
             ImGui::SliderFloat("Animation Base Y", &inst.animBaseY, -50.f, 50.f);
+
+            if (destroySelection)
+            {
+                if (mECS)
+                    mECS->DestroyInstance(mSelectedInstance);
+                else
+                {
+                    glow::error() << "Destroying instance without ECS.";
+                    mWorld.destroyInstance(mSelectedInstance);
+                }
+                mSelectedInstance = {};
+            }
         }
         else
         {
