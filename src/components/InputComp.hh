@@ -3,7 +3,11 @@
 
 namespace gamedev
 {
-/// Movement orders for the `InputSystem`. Unused: neither is registered by `Game`.
+/**
+ * Movement orders for the `InputSystem`.
+ *
+ * Unused: `Game` registers neither this component nor the `InputSystem`.
+ */
 struct Input : public Component
 {
     using Component::Component;

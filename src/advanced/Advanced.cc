@@ -8,7 +8,12 @@
 
 namespace
 {
-/// Packs a color with components in [0, 1] into RGBA8 (R in the highest byte); inverse of `unpackSaturatedFloat4`.
+/**
+ * Packs a color into RGBA8 with R in the highest byte; inverse of `unpackSaturatedFloat4`.
+ *
+ * @param value Color with components in [0, 1].
+ * @return Packed color, as used by `Instance::albedoBias`.
+ */
 inline uint32_t packSaturatedFloat4(tg::vec4 value)
 {
     uint32_t res = 0;
@@ -19,7 +24,12 @@ inline uint32_t packSaturatedFloat4(tg::vec4 value)
     return res;
 }
 
-/// Unpacks an RGBA8 color (R in the highest byte) into components in [0, 1].
+/**
+ * Unpacks an RGBA8 color with R in the highest byte; inverse of `packSaturatedFloat4`.
+ *
+ * @param value Packed color, as used by `Instance::albedoBias`.
+ * @return Color with components in [0, 1].
+ */
 inline tg::vec4 unpackSaturatedFloat4(uint32_t value)
 {
     tg::vec4 res;

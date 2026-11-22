@@ -31,21 +31,21 @@ public:
 public:
     // meshes
     // misc
-    Mesh3D meshCube; ///< `cube.obj` (loaded by `initialize`, unused).
+    Mesh3D meshCube; ///< `cube.obj`, loaded by `initialize`. Unused.
 
     // terrain
-    Mesh3D meshWorld;        ///< `world_demo.obj` (loaded by `initialize`, unused).
-    Mesh3D meshWorld_ground; ///< `world_ground.obj` (loaded by `initialize`, unused).
-    Mesh3D meshWorld_water;  ///< `world_water.obj` (loaded by `initialize`, unused).
+    Mesh3D meshWorld;        ///< `world_demo.obj`, loaded by `initialize`. Unused.
+    Mesh3D meshWorld_ground; ///< `world_ground.obj`, loaded by `initialize`. Unused.
+    Mesh3D meshWorld_water;  ///< `world_water.obj`, loaded by `initialize`. Unused.
 
     // vaos
     // misc
-    glow::SharedVertexArray mVaoCube; ///< VAO of `meshCube` (unused).
+    glow::SharedVertexArray mVaoCube; ///< VAO of `meshCube`. Unused.
 
     // terrain
-    glow::SharedVertexArray mVaoWorld;        ///< VAO of `meshWorld` (unused).
-    glow::SharedVertexArray mVaoWorld_ground; ///< VAO of `meshWorld_ground` (unused).
-    glow::SharedVertexArray mVaoWorld_water;  ///< VAO of `meshWorld_water` (unused).
+    glow::SharedVertexArray mVaoWorld;        ///< VAO of `meshWorld`. Unused.
+    glow::SharedVertexArray mVaoWorld_ground; ///< VAO of `meshWorld_ground`. Unused.
+    glow::SharedVertexArray mVaoWorld_water;  ///< VAO of `meshWorld_water`. Unused.
 
     // textures
     glow::SharedTexture2D mTexAlbedoPolyPalette; ///< Shared color palette texture (`data/textures/BigPalette.png`, sRGB).
@@ -58,32 +58,52 @@ public:
     /// Registers every `.obj` file under `data/meshes/` (recursively) with `registerObject`.
     void scanMeshes();
 
-    /// Returns the paths of all registered meshes whose direct parent folder is named `parent_folder` (e.g. "units").
+    /**
+     * Lists the registered meshes in a folder.
+     *
+     * TODO: Iterates the name map, so a mesh is left out if a file with the same name was scanned before it.
+     * Five meshes in `data/meshes/` share their names with meshes in `nature/` (e.g. `bush.obj`);
+     * which one is listed depends on the scan order of the file system.
+     *
+     * @param parent_folder Name of the direct parent folder (e.g. "units"); case-sensitive, paths are lower-case.
+     * @return Lower-case paths of the meshes.
+     */
     std::vector<std::string> getObjectsByFolder(std::string parent_folder);
 
     /**
-     * Loads the mesh at `mesh_path`, uploads it and stores its VAO and bounds. Returns false if the mesh is empty or
-     * the path is already registered. If two files share a name, the name keeps referring to the first one.
+     * Loads a mesh, uploads it and stores its VAO and bounds under its lower-case path and name.
+     *
+     * If two files share a name, the name keeps referring to the first one.
+     *
+     * @param mesh_path Path of the `.obj` file.
+     * @return False if `Mesh3D::loadFromFile` fails (also for meshes without texture coordinates) or the path is already registered.
      */
     bool registerObject(std::filesystem::path mesh_path);
 
-    /// VAO of a registered mesh by name or path, or nullptr.
+    /// VAO of a registered mesh by name or path (an unknown path falls back to its file name), or nullptr.
     glow::SharedVertexArray getVAO(std::filesystem::path identifier);
 
-    /// Local-space bounds of a registered mesh by name or path, or an empty box.
+    /// Local-space bounds of a registered mesh by name or path (falls back like `getVAO`), or an empty box.
     tg::aabb3 getAABB(std::filesystem::path identifier);
 
-    /// True if a mesh with this name or path is registered.
+    /// True if a mesh with this name or path is registered (falls back like `getVAO`).
     bool hasObject(std::filesystem::path mesh_identifier);
 
-    /// Converts `aabb` into a flat box on the ground plane (y = 0) with the x/z extent of `aabb`.
+    /**
+     * Converts a box into a flat box on the ground plane.
+     *
+     * @param aabb Box to convert.
+     * @return Box centered below the center of `aabb` at y = 0, with the x/z extent of `aabb` and no height.
+     */
     tg::box3 aabb3_as_box(const tg::aabb3& aabb);
 
     /**
-     * Converts `aabb` into a circle on the ground plane (y = 0) around its center.
+     * Converts a box into a circle on the ground plane.
      *
-     * TODO: The radius is computed as max(x extent, max.z, min.z) / 2, probably meant to be
-     * max(x extent, z extent) / 2.
+     * TODO: The radius is computed as max(x extent, max.z, min.z) / 2, probably meant to be max(x extent, z extent) / 2.
+     *
+     * @param aabb Box to convert.
+     * @return Sphere centered below the center of `aabb` at y = 0.
      */
     tg::sphere3 aabb3_as_circle(const tg::aabb3& aabb);
 

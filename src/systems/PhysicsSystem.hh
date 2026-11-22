@@ -15,14 +15,18 @@ namespace gamedev
  *
  * Entities: all instances with a `Physics` component; units inside a tower (`InTower`) are skipped.
  *
- *  - After moving an instance it sends `EventType::NewPosition` (so the `CollisionSystem` updates its hash maps) and
- *    updates the ECS spatial hash map.
+ *  - It publishes the positions of instances with `Instance::new_position`: it sends `EventType::NewPosition`
+ *    (so the `CollisionSystem` updates its hash maps) and updates the ECS spatial hash map (see the TODO on `Update`).
  *  - On `EventType::StaticCollision` it resets the subject's `Physics::lastPosition`.
  */
 class PhysicsSystem : public System
 {
 public:
-    /// Stores the ECS and registers the collision listener.
+    /**
+     * Stores the ECS and registers the collision listener.
+     *
+     * @param ecs Shared ECS.
+     */
     void Init(std::shared_ptr<EngineECS>& ecs);
 
     /// Sets the terrain used for `Physics::forceGround`.
@@ -34,18 +38,30 @@ public:
     void RemoveAllEntities();
 
     /**
-     * Moves all entities by `dt` seconds. Returns the elapsed time in microseconds.
+     * Moves all entities and publishes their positions.
      *
-     * TODO: Position updates are published on 9 of every 10 calls (`mUpdateControl % 10` is non-zero); probably meant
-     * to be 1 of 10. `Instance::new_position` is also never reset, so every instance that moved once keeps publishing.
+     * TODO: Position updates are published on 9 of every 10 calls (`mUpdateControl % 10` is non-zero); probably meant to be 1 of 10.
+     * `Instance::new_position` is also set at creation and never reset, so every entity publishes, moving or not.
+     *
+     * @param dt Time step in seconds.
+     * @return Elapsed time in microseconds.
      */
     int Update(float dt);
 
 private:
-    /// Moves `handle` to `translation` in the ECS spatial hash map.
+    /**
+     * Moves an instance in the ECS spatial hash map.
+     *
+     * @param handle Instance to move.
+     * @param translation Its new world position.
+     */
     void UpdateHashmap(InstanceHandle handle, tg::vec3& translation);
 
-    /// `EventType::StaticCollision` listener: sets the subject's `lastPosition` to its current position.
+    /**
+     * `EventType::StaticCollision` listener: sets the subject's `lastPosition` to its current position.
+     *
+     * @param e Collision event; the subject is the dynamic collider.
+     */
     void CollisionListener(Event& e);
 
 private:

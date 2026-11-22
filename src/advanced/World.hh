@@ -31,33 +31,45 @@ struct InstanceHandle
 /**
  * An entity of the game world: render data, transform and ECS bookkeeping in one struct.
  *
- * Instances live in the `World`'s compact pool, which moves the last instance into a freed slot whenever an instance
- * is destroyed. References and pointers to an `Instance` (including `Component::instance`) are therefore only safe
- * until the next destruction. Keep the `InstanceHandle` instead.
+ * Instances live in the `World`'s compact pool, which moves the last instance into a freed slot whenever an instance is destroyed.
+ * References and pointers to an `Instance` (including `Component::instance`) are therefore only safe until the next destruction.
+ * Keep the `InstanceHandle` instead.
  */
 struct Instance
 {
     glow::SharedVertexArray vao; ///< Main mesh.
 
     glow::SharedTexture2D texAlbedo; ///< Base color texture (usually the shared palette texture).
-    glow::SharedTexture2D texNormal; ///< Normal map.
-    glow::SharedTexture2D texARM;    ///< Ambient occlusion + roughness + metallic packed into R/G/B.
-    uint32_t albedoBias;             ///< Packed RGBA tint (RGB in the high 24 bits); shaders blend albedo towards RGB by A.
+    glow::SharedTexture2D texNormal; ///< Normal map; not read by the game's shaders.
+    glow::SharedTexture2D texARM;    ///< Ambient occlusion + roughness + metallic packed into R/G/B; not read by the game's shaders.
+    uint32_t albedoBias;             ///< Packed RGBA tint (RGB in the high 24 bits); shaders blend albedo towards RGB by A (0: none).
 
-    transform xform;      ///< World transform.
-    tg::aabb3 max_bounds; ///< Local-space bounds used for the spatial hash map and spawn checks.
-    tg::dir3 facing;      ///< Direction the unrotated mesh faces (`+z` by default); rotate with `xform` for the heading.
-    bool new_position;    ///< Moved since creation; `PhysicsSystem` then publishes the position (TODO: never reset).
+    transform xform; ///< World transform.
+
+    /// Bounds relative to `xform.translation` (scaled mesh AABB, not rotated); used for the spatial hash map and spawn checks.
+    tg::aabb3 max_bounds;
+
+    tg::dir3 facing; ///< Direction the unrotated mesh faces (`+z` by default); rotate with `xform` for the heading.
 
     /**
-     * Additional meshes drawn with this instance; each `AuxiliaryModel::xform` is relative to `xform` (not to each
-     * other). Unused by the game: `RenderSystem::RenderAuxiliary` logs a message for every model it draws.
+     * Position changed; `PhysicsSystem` then sends `EventType::NewPosition` and updates the spatial hash map.
+     *
+     * TODO: `World::createInstance` sets it and nothing resets it, so it is always true.
+     */
+    bool new_position;
+
+    /**
+     * Additional meshes drawn with this instance; each `AuxiliaryModel::xform` is relative to `xform` (not to each other).
+     *
+     * Unused: nothing adds models, and `RenderSystem::RenderAuxiliary` would log a message for each one.
      */
     std::vector<AuxiliaryModel> auxModels;
 
     /**
-     * Procedural demo animation of the course framework. Only `AdvancedFeatures::updateAnimationsInWorld` applies it,
-     * and the game never calls that; the editor's "Objects" window can still change these fields.
+     * Procedural demo animation of the course framework.
+     *
+     * Unused: only `AdvancedFeatures::updateAnimationsInWorld` applies it, and the game never calls that.
+     * The editor's "Objects" window can still change these fields.
      */
     enum class AnimationType
     {
@@ -82,13 +94,22 @@ struct Instance
  *
  * Course framework code. Owned by `AdvancedFeatures` and wrapped by `EngineECS`.
  *
- * Use `EngineECS` instead of the `World` directly, so that components, systems and the spatial hash map stay
- * consistent.
+ * Use `EngineECS` instead of the `World` directly, so that components, systems and the spatial hash map stay consistent.
  */
 class World
 {
 public:
-    /// Creates an instance with the given mesh and textures, identity transform, no animation and empty signature.
+    /**
+     * Creates an instance with identity transform, no tint, no animation and an empty signature.
+     *
+     * Asserts if the pool is full. Use `EngineECS::CreateInstance` instead, which wraps this.
+     *
+     * @param vao Main mesh.
+     * @param albedo Base color texture.
+     * @param normal Normal map.
+     * @param arm Ambient occlusion + roughness + metallic texture.
+     * @return Handle of the new instance.
+     */
     [[nodiscard]] InstanceHandle createInstance(glow::SharedVertexArray const& vao,
                                                 glow::SharedTexture2D const& albedo,
                                                 glow::SharedTexture2D const& normal,
@@ -100,7 +121,13 @@ public:
     /// Returns a live instance's transform. The reference is invalidated by the next destruction.
     transform& getInstanceTransform(InstanceHandle handle) { return mCPoolInstances.get(handle._value).xform; }
 
-    /// Frees the instance; the last instance moves into its slot. Does not touch components or systems.
+    /**
+     * Frees an instance; the last instance moves into its slot.
+     *
+     * Does not touch components, systems or the spatial hash map (see `EngineECS::DestroyInstance`).
+     *
+     * @param handle Valid handle of a live instance (asserts if invalid).
+     */
     void destroyInstance(InstanceHandle handle);
 
     /// Frees all instances. Does not touch components or systems.
@@ -140,7 +167,11 @@ public:
     Signature GetSignature(InstanceHandle handle);
 
 public:
-    /// Allocates the pool for `maxNumInstances` instances. Must be called before creating instances.
+    /**
+     * Allocates the pool. Must be called once before creating instances.
+     *
+     * @param maxNumInstances Capacity; `AdvancedFeatures::initialize` passes 2048, the size of the component arrays.
+     */
     void initialize(uint32_t maxNumInstances);
 
     /// Destroys all instances and frees the pool.

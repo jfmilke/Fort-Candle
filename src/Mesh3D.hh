@@ -9,8 +9,9 @@
 /**
  * Polygon mesh with per-halfedge normals, tangents and texture coordinates, loaded from OBJ files.
  *
- * Course framework code. Derives from `pm::Mesh`, so it has `.vertices()`, `.faces()`, etc. Loading relies on the
- * patched polymesh OBJ reader (`has_valid_texcoords()`/`has_valid_normals()`, see CLAUDE.md).
+ * Course framework code.
+ * Derives from `pm::Mesh`, so it has `.vertices()`, `.faces()`, etc.
+ * Loading relies on the patched polymesh OBJ reader (`has_valid_texcoords()`/`has_valid_normals()`, see CLAUDE.md).
  */
 struct Mesh3D : public pm::Mesh
 {
@@ -25,23 +26,31 @@ struct Mesh3D : public pm::Mesh
     pm::halfedge_attribute<tg::pos2> texCoord{*this}; ///< Texture coordinate per halfedge (corner).
 
     /**
-     * Loads the OBJ file `filename`, computes vertex normals if the file has none, and computes tangents.
+     * Loads an OBJ file, computes area-weighted vertex normals if the file has none, and computes tangents.
      *
-     * By default, the tangents are interpolated per vertex from the face tangents; for flat shaded objects (e.g. a
-     * cube) set `interpolate_tangents` to false. Returns false (and logs) if the file cannot be opened, has faces
-     * that cannot be added, or has no texture coordinates; in the last case positions and normals are still loaded.
+     * Tangents are computed per face from its first three corners.
+     * Returns false (and logs) if the file cannot be opened, has faces that cannot be added, or has no texture coordinates;
+     * in the last case positions and normals are still loaded, but the tangents stay zero.
+     *
+     * @param filename Path of the OBJ file.
+     * @param interpolate_tangents Average the tangents per vertex (smooth); false keeps one tangent per face, for flat shaded objects (e.g. a cube).
+     * @return True if the mesh was loaded completely.
      */
     bool loadFromFile(std::string const& filename, bool interpolate_tangents = true);
 
     /**
-     * Uploads the mesh to the GPU as a GL_TRIANGLES vertex array with one vertex per halfedge; for non-triangle meshes
-     * an index buffer fans each polygon into triangles. Needs an OpenGL context.
+     * Uploads the mesh to the GPU as a GL_TRIANGLES vertex array with one vertex per halfedge;
+     * for non-triangle meshes an index buffer fans each polygon into triangles.
+     *
+     * Needs an OpenGL context.
      *
      * vertex layout:
      *     in vec3 aPosition;
      *     in vec3 aNormal;
      *     in vec3 aTangent;
      *     in vec2 aTexCoord;
+     *
+     * @return The new vertex array.
      */
     glow::SharedVertexArray createVertexArray() const;
 

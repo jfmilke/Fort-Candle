@@ -14,8 +14,7 @@ namespace gamedev
  * Performs the deferred destruction of instances flagged with `EngineECS::MarkDestruction`.
  *
  *  - Registered without a signature, so it sees every non-prototype instance.
- *  - `Game::update()` runs it last, after all other systems, so that no system iterates over an instance while it is
- *    destroyed.
+ *  - `Game::update()` runs it last, after all other systems, so that no system iterates over an instance while it is destroyed.
  */
 class CleanupSystem : public System
 {
@@ -29,8 +28,12 @@ public:
     void RemoveAllEntities();
 
     /**
-     * Destroys all instances whose `Instance::destroy` flag is set (removing them from components, systems and the
-     * spatial hash map). Returns the elapsed time in microseconds.
+     * Destroys all instances whose `Instance::destroy` flag is set.
+     *
+     * They are removed from components, systems and the spatial hash map.
+     * Marked prototypes are not in this system and stay alive.
+     *
+     * @return Elapsed time in microseconds.
      */
     int Update();
 

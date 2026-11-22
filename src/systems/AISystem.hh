@@ -8,16 +8,16 @@
 namespace gamedev
 {
 /**
- * Empty system skeleton (template for new systems).
+ * Empty system skeleton, kept as a template for new systems.
  *
- * Not registered by `Game`, so it never receives entities. To use a system like this:
+ * Unused: `Game` does not register it.
  *
- *  1. Register it and set its signature in `Game::init()` (see `System`).
- *  2. Call `Init`, and call `Update` from `Game::update()`.
- *  3. `AddEntity`/`RemoveEntity` are called by the `SystemManager`. Keep their signatures, but their bodies may store
- *     the handles in custom containers (always remove an entity when asked).
- *  4. To access components, use `mECS->TryGetComponent<T>(handle)` (nullptr if missing), or
- *     `mECS->TestSignature<T>(handle)` followed by `mECS->GetComponent<T>(handle)`.
+ * To turn a copy into a working system, register and initialize it as shown in `System`, and call its `Update` from `Game::update()`.
+ * Then:
+ *  - Keep the signatures of `AddEntity`/`RemoveEntity` (the `SystemManager` calls them).
+ *    Their bodies may store the handles in custom containers (always remove an entity when asked).
+ *  - To access components, use `mECS->TryGetComponent<T>(handle)` (nullptr if missing),
+ *    or `mECS->TestSignature<T>(handle)` followed by `mECS->GetComponent<T>(handle)`.
  */
 class AISystem : public System
 {
@@ -37,7 +37,11 @@ public:
     /// Called when all entities are destroyed.
     void RemoveAllEntities();
 
-    /// Main update; does nothing.
+    /**
+     * Main update; does nothing.
+     *
+     * @param dt Time step in seconds.
+     */
     void Update(float dt);
 
 private:

@@ -45,7 +45,15 @@ public:
         return mComponentTypes[typeName];
     }
 
-    /// Adds a new `CompT(&instance)` to `handle` and returns it. Asserts if `handle` already has a `CompT`.
+    /**
+     * Adds a default `CompT` to an instance. Asserts if the instance already has a `CompT`.
+     *
+     * Does not touch the signature; use `EngineECS::CreateComponent`, which does.
+     *
+     * @param handle Instance to add the component to.
+     * @param instance Data of `handle`; becomes the component's `instance` pointer.
+     * @return The new component, valid until the next removal of a `CompT`.
+     */
     template <typename CompT>
     CompT* CreateComponent(InstanceHandle handle, Instance& instance)
     {
@@ -57,7 +65,13 @@ public:
         return CompArray->GetData(handle);
     }
 
-    /// Like `CreateComponent`, but if `handle` already has a `CompT` it is kept and returned.
+    /**
+     * Like `CreateComponent`, but if the instance already has a `CompT` it is kept and returned.
+     *
+     * @param handle Instance to add the component to.
+     * @param instance Data of `handle`; becomes the new component's `instance` pointer.
+     * @return The new or existing component, valid until the next removal of a `CompT`.
+     */
     template <typename CompT>
     CompT* TryCreateComponent(InstanceHandle handle, Instance& instance)
     {
@@ -70,8 +84,10 @@ public:
     }
 
     /**
-     * Adds a copy of `component` to `handle` (its `handle_value` is set, its `instance` pointer is kept as is).
-     * Asserts if `handle` already has a `CompT`.
+     * Adds a copy of a component to an instance. Asserts if the instance already has a `CompT`. Unused.
+     *
+     * @param handle Instance to add the component to.
+     * @param component Component to copy; the copy gets `handle`'s `handle_value` and keeps the `instance` pointer.
      */
     template <typename CompT>
     void AddComponent(InstanceHandle handle, CompT component)
@@ -80,18 +96,30 @@ public:
         GetComponentArray<CompT>()->InsertData(handle, component);
     }
 
-    /// Removes `handle`'s `CompT`. Asserts if it has none.
+    /**
+     * Removes an instance's `CompT`. Asserts if it has none.
+     *
+     * @param handle Instance to remove the component from.
+     */
     template <typename CompT>
     void RemoveComponent(InstanceHandle handle) { GetComponentArray<CompT>()->RemoveData(handle); }
 
-    /// Removes `handle`'s `CompT` if it has one.
+    /**
+     * Removes an instance's `CompT` if it has one.
+     *
+     * @param handle Instance to remove the component from.
+     */
     template <typename CompT>
     void TryRemoveComponent(InstanceHandle handle)
     {
         GetComponentArray<CompT>()->TryRemoveData(handle);
     }
 
-    /// Removes all of `handle`'s components.
+    /**
+     * Removes all components of an instance.
+     *
+     * @param handle Instance to remove the components from.
+     */
     void RemoveAllComponents(InstanceHandle handle)
     {
         for (auto& arr : mComponentArrays)
@@ -108,7 +136,11 @@ public:
     template <typename CompT>
     CompT* TryGetComponent(InstanceHandle handle) { return GetComponentArray<CompT>()->TryGetData(handle); }
 
-    /// Removes the destroyed instance's components from all component arrays.
+    /**
+     * Removes a destroyed instance's components from all component arrays.
+     *
+     * @param handle Destroyed instance.
+     */
     void EntityDestroyed(InstanceHandle handle)
     {
         for (const auto& pair : mComponentArrays)
@@ -131,8 +163,12 @@ public:
     }
 
     /**
-     * Copies every component of `instance_source` to `instance_copy` (overwriting existing ones) and points the copies'
-     * `instance` to `instance_copy`. Does not update the copy's signature.
+     * Copies every component of one instance to another, overwriting existing ones.
+     *
+     * Does not update the copy's signature.
+     *
+     * @param instance_source Instance to copy from.
+     * @param instance_copy Instance to copy to; becomes the copies' `instance` pointer.
      */
     void CloneEntityComponents(Instance& instance_source, Instance& instance_copy)
     {

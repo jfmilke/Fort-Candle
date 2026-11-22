@@ -21,10 +21,14 @@ public:
     void InitResources();
 
 private:
-    /// Gives every item preset a `Render` component.
+    /**
+     * Gives every item preset a `Render` component.
+     *
+     * @param presetHandle Preset that `Factory::Register` is creating.
+     */
     void PostProcessRegistration(InstanceHandle presetHandle) override;
 
-    /// `arrow`: rendered, not selectable, with `Arrow`, `Physics` and `Animated`.
+    /// `arrow`: rendered, not selectable, with `Arrow`, `Physics` and `Animated`; `GamelogicSystem` sets up the flight.
     void Init_Arrow();
 
     /// `bow`: adds `Animated` (drawn/scaled when a soldier shoots).

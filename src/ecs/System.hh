@@ -17,12 +17,12 @@ namespace gamedev
  *  - `Game` keeps a second `shared_ptr` to call `Init` and `Update`.
  *
  * Membership:
- *  - Whenever an entity's signature changes, the `SystemManager` calls `AddEntity` if the entity's signature contains
- *    the system's signature, and `RemoveEntity` otherwise (whether or not the entity was in the system before).
+ *  - Whenever an entity's signature changes, the `SystemManager` calls `AddEntity` if the entity's signature contains the system's signature,
+ *    and `RemoveEntity` otherwise (whether or not the entity was in the system before).
  *  - A system without a signature receives every entity.
  *  - `Prototype` entities are never added (see `EngineECS::UpdateSystems`).
- *  - By default the qualifying handles are kept in `mEntities`. Override `AddEntity`/`RemoveEntity` (same
- *    signatures) to store them in custom containers instead.
+ *  - By default the qualifying handles are kept in `mEntities`.
+ *    Override `AddEntity`/`RemoveEntity` (same signatures) to store them in custom containers instead.
  *
  * Registering a new system in `Game::init()`:
  * @code
@@ -38,13 +38,27 @@ namespace gamedev
 class System
 {
 public:
-    /// Called when `handle`'s signature (`entitySignature`) matches the system signature. Adding twice is harmless.
+    /**
+     * Called when an entity's new signature matches the system signature. Adding an entity twice is harmless.
+     *
+     * @param handle Entity to add.
+     * @param entitySignature The entity's new signature.
+     */
     virtual void AddEntity(InstanceHandle& handle, Signature entitySignature) { mEntities.insert(handle); };
 
-    /// Called when `handle`'s new signature no longer matches; the entity may not have been in the system.
+    /**
+     * Called when an entity's new signature does not match the system signature.
+     *
+     * @param handle Entity to remove; it may not be in the system.
+     * @param entitySignature The entity's new signature.
+     */
     virtual void RemoveEntity(InstanceHandle& handle, Signature entitySignature) { mEntities.erase(handle); };
 
-    /// Called when `handle` is destroyed or becomes a prototype; the entity may not have been in the system.
+    /**
+     * Called when an entity is destroyed or becomes a prototype.
+     *
+     * @param handle Entity to remove; it may not be in the system.
+     */
     virtual void RemoveEntity(InstanceHandle& handle) { mEntities.erase(handle); };
 
     /// Called when all instances are destroyed at once.

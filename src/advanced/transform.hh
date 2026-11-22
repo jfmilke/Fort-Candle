@@ -4,7 +4,12 @@
 
 namespace gamedev
 {
-/// Returns the twist of `q` about the x axis (the part of the rotation that turns around x).
+/**
+ * Returns the twist of a rotation about the x axis (swing-twist decomposition).
+ *
+ * @param q Rotation to decompose.
+ * @return Rotation about the x axis only.
+ */
 inline tg::quat xRotation(const tg::quat& q)
 {
     tg::angle_t<tg::f32> theta = tg::atan2(q.x, q.w);
@@ -13,7 +18,12 @@ inline tg::quat xRotation(const tg::quat& q)
     return tg::quat::from_axis_angle(tg::dir3::pos_x, 2.f * theta);
 }
 
-/// Returns the twist of `q` about the y (up) axis, i.e. its heading on the ground plane.
+/**
+ * Returns the twist of a rotation about the y (up) axis, i.e. its heading on the ground plane.
+ *
+ * @param q Rotation to decompose.
+ * @return Rotation about the y axis only.
+ */
 inline tg::quat yRotation(const tg::quat& q)
 {
     tg::angle_t<tg::f32> theta = tg::atan2(q.y, q.w);
@@ -22,7 +32,12 @@ inline tg::quat yRotation(const tg::quat& q)
     return tg::quat::from_axis_angle(tg::dir3::pos_y, 2.f * theta);
 }
 
-/// Returns the twist of `q` about the z axis.
+/**
+ * Returns the twist of a rotation about the z axis (swing-twist decomposition).
+ *
+ * @param q Rotation to decompose.
+ * @return Rotation about the z axis only.
+ */
 inline tg::quat zRotation(const tg::quat& q)
 {
     tg::angle_t<tg::f32> theta = tg::atan2(q.z, q.w);
@@ -34,8 +49,8 @@ inline tg::quat zRotation(const tg::quat& q)
 /**
  * Placement of an instance in world space: translation, rotation and per-axis scale, applied as T * R * S.
  *
- * The `*2D` functions describe the instance on the ground plane (x/z, y is up) for 2D collision. They only use the
- * rotation about the y axis and ignore the y scale.
+ * The `*2D` functions describe the instance on the ground plane (x/z, y is up) for 2D collision.
+ * They only use the rotation about the y axis; `linear_mat2D` and `scale_mat2D` also ignore the y scale.
  */
 struct transform
 {
@@ -44,7 +59,11 @@ struct transform
     tg::quat rotation = {0, 0, 0, 1}; ///< Orientation (x, y, z, w), identity by default.
 
 public:
-    /// Moves by `dir` given in local (rotated) coordinates.
+    /**
+     * Moves along the rotated axes.
+     *
+     * @param dir Offset in local (rotated, unscaled) coordinates.
+     */
     void move_relative(tg::vec3 dir)
     {
         auto const m = tg::mat3(rotation);
@@ -53,7 +72,11 @@ public:
         translation.z += dot(m.row(2), dir);
     }
 
-    /// Moves by `dir` given in world coordinates.
+    /**
+     * Moves along the world axes.
+     *
+     * @param dir Offset in world coordinates.
+     */
     void move_absolute(tg::vec3 dir)
     {
         translation.x += dir.x;
@@ -61,7 +84,11 @@ public:
         translation.z += dir.z;
     }
 
-    /// Applies `q1` in local space: `rotation = rotation * q1`.
+    /**
+     * Rotates in local space: `rotation = rotation * q1`.
+     *
+     * @param q1 Rotation to apply, about the local axes.
+     */
     void rotate(tg::quat q1)
     {
         rotation = {
@@ -72,7 +99,11 @@ public:
         };
     }
 
-    /// Multiplies the scale uniformly by `s`.
+    /**
+     * Multiplies the scale uniformly.
+     *
+     * @param s Factor for all three axes.
+     */
     void scale(float s)
     {
         scaling.width *= s;
@@ -80,7 +111,11 @@ public:
         scaling.depth *= s;
     }
 
-    /// Multiplies the scale per axis by `s`.
+    /**
+     * Multiplies the scale per axis.
+     *
+     * @param s Factors for the local x, y and z axes.
+     */
     void scale(tg::size3 s)
     {
         scaling.width *= s.width;
@@ -88,19 +123,44 @@ public:
         scaling.depth *= s.depth;
     }
 
-    /// Moves the translation the fraction `alpha` (0..1) towards `p`.
+    /**
+     * Moves the translation linearly towards a target.
+     *
+     * @param p Target translation.
+     * @param alpha Fraction of the way to go, 0..1.
+     */
     void lerp_to_translation(tg::vec3 p, float alpha) { translation = tg::lerp(translation, p, alpha); }
 
-    /// Rotates the fraction `alpha` (0..1) towards `q` (spherical interpolation).
+    /**
+     * Rotates towards a target by spherical interpolation.
+     *
+     * @param q Target rotation.
+     * @param alpha Fraction of the way to go, 0..1.
+     */
     void slerp_to_rotation(tg::quat q, float alpha) { rotation = tg::slerp(rotation, q, alpha); }
 
-    /// Like `slerp_to_rotation`, but interpolates the quaternion components linearly without renormalizing.
+    /**
+     * Like `slerp_to_rotation`, but interpolates the quaternion components linearly without renormalizing.
+     *
+     * @param q Target rotation.
+     * @param alpha Fraction of the way to go, 0..1.
+     */
     void inaccurate_lerp_to_rotation(tg::quat q, float alpha) { rotation = tg::lerp(rotation, q, alpha); }
 
-    /// Moves the scale the fraction `alpha` (0..1) towards `s`.
+    /**
+     * Moves the scale linearly towards a target.
+     *
+     * @param s Target scale.
+     * @param alpha Fraction of the way to go, 0..1.
+     */
     void lerp_to_scale(tg::size3 s, float alpha) { scaling = tg::lerp(scaling, s, alpha); }
 
-    /// Interpolates translation, rotation and scale the fraction `alpha` (0..1) towards `target`.
+    /**
+     * Interpolates translation, rotation (spherically) and scale towards a target.
+     *
+     * @param target Target transform.
+     * @param alpha Fraction of the way to go, 0..1.
+     */
     void lerp_to(transform const& target, float alpha)
     {
         lerp_to_translation(target.translation, alpha);
@@ -117,10 +177,18 @@ public:
      * Unrotated transform with uniform scale.
      *
      * TODO: `scaling` is truncated to an integer (it goes through `tg::isize3`).
+     *
+     * @param translation World position.
+     * @param scaling Scale for all three axes.
      */
     transform(tg::vec3 const& translation, float scaling) : translation(translation), scaling(tg::isize3(scaling, scaling, scaling)) {}
 
-    /// Unrotated transform with integer per-axis scale.
+    /**
+     * Unrotated transform with integer per-axis scale.
+     *
+     * @param translation World position.
+     * @param scaling Scale along the x, y and z axes.
+     */
     transform(tg::vec3 const& translation, tg::isize3 const& scaling) : translation(translation), scaling(scaling) {}
 
 public:
@@ -233,7 +301,12 @@ public:
     /// Local z axis in world space.
     tg::vec3 forward_vec() const { return forward_vec_from_rotation(rotation_mat()); }
 
-    /// Returns the translation moved by `dir` given in local (rotated) coordinates, without changing this transform.
+    /**
+     * Like `move_relative`, but returns the result instead of changing this transform.
+     *
+     * @param dir Offset in local (rotated, unscaled) coordinates.
+     * @return The moved translation.
+     */
     tg::vec3 get_moved_relative(tg::vec3 dir) const
     {
         auto const m = tg::mat3(rotation);
@@ -264,9 +337,13 @@ public:
 };
 
 /**
- * Combines `child`, given relative to `parent`, into a world transform.
+ * Combines a child transform, given relative to its parent, into a world transform.
  *
  * TODO: The parent scale is applied after the parent rotation, so this is only exact for a uniform parent scale.
+ *
+ * @param parent World transform of the parent.
+ * @param child Transform relative to `parent`.
+ * @return World transform of the child.
  */
 inline transform compute_global_transform(transform const& parent, transform const& child)
 {
@@ -277,7 +354,12 @@ inline transform compute_global_transform(transform const& parent, transform con
     return res;
 }
 
-/// Extends an affine 4x3 matrix to a 4x4 matrix with last row (0, 0, 0, 1).
+/**
+ * Extends an affine matrix to a 4x4 matrix.
+ *
+ * @param m Affine 4x3 matrix (4 columns, 3 rows), e.g. from `transform::transform_mat`.
+ * @return `m` with the last row (0, 0, 0, 1).
+ */
 inline tg::mat4 affine_to_mat4(tg::mat4x3 const& m)
 {
     tg::mat4 res;

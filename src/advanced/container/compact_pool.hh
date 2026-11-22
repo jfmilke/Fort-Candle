@@ -1,6 +1,6 @@
 #pragma once
 
-// Course framework code; the reason this game depends on clean-core.
+// Course framework code; together with `World` the only direct use of clean-core in the game.
 #include <clean-core/alloc_array.hh>
 #include <clean-core/atomic_linked_pool.hh>
 #include <clean-core/storage.hh>
@@ -12,10 +12,9 @@ namespace gamedev
  * Fixed-capacity pool with stable handles and densely packed values.
  *
  *  - Acquire, release and access are O(1).
- *  - Values are contiguous (`get_span()`); access via a handle goes through one extra indirection
- *    (handle -> slot index).
- *  - Releasing a value moves the last value into the freed slot, so references and pointers to values are
- *    invalidated by every `release`. Keep handles instead.
+ *  - Values are contiguous (`get_span()`); access via a handle goes through one extra indirection (handle -> slot index).
+ *  - Releasing a value moves the last value into the freed slot, so references and pointers to values are invalidated by every `release`.
+ *    Keep handles instead.
  */
 template <class T>
 struct compact_pool
@@ -25,7 +24,12 @@ public:
 
     compact_pool() = default;
 
-    /// Creates a pool with capacity `size` (see `initialize`).
+    /**
+     * Creates a pool and allocates its storage (see `initialize`).
+     *
+     * @param size Capacity; 0 leaves the pool uninitialized.
+     * @param alloc Allocator for the storage.
+     */
     explicit compact_pool(size_t size, cc::allocator* alloc = cc::system_allocator) { initialize(size, alloc); }
 
     compact_pool(compact_pool&&) = delete;
@@ -35,7 +39,12 @@ public:
 
     ~compact_pool() { _destroy(); }
 
-    /// Allocates storage for `size` values from `alloc`. Does nothing for size 0; asserts if already initialized.
+    /**
+     * Allocates storage for a fixed number of values. Asserts if already initialized.
+     *
+     * @param size Capacity; 0 does nothing.
+     * @param alloc Allocator for the storage.
+     */
     void initialize(size_t size, cc::allocator* alloc = cc::system_allocator)
     {
         if (size == 0)
@@ -50,7 +59,11 @@ public:
     /// Destroys all values and frees the storage; the pool can be initialized again.
     void destroy() { _destroy(); }
 
-    /// Default-constructs a new value at the end of the packed range and returns its handle. Asserts if full.
+    /**
+     * Default-constructs a new value at the end of the packed range. Asserts if full.
+     *
+     * @return Handle of the new value.
+     */
     [[nodiscard]] handle_t acquire()
     {
         CC_ASSERT(!is_full() && "overcommited");
@@ -70,8 +83,10 @@ public:
     }
 
     /**
-     * Destroys the value of `handle` and moves the last value into its slot.
-     * Returns true if a value was moved (from index `size()` after the call to the released index), false otherwise.
+     * Destroys a value and moves the last value into its slot.
+     *
+     * @param handle Handle of a live value; it is invalid afterwards.
+     * @return True if a value was moved (from index `size()` after the call to the released index), false if the released value was the last one.
      */
     bool release(handle_t handle)
     {
@@ -105,8 +120,9 @@ public:
     }
 
     /**
-     * Destroys all values and invalidates all handles; the storage is kept. Returns the result of the handle pool's
-     * `release_all()`.
+     * Destroys all values and invalidates all handles; the storage is kept.
+     *
+     * @return Number of released handles.
      */
     unsigned release_all()
     {
@@ -120,10 +136,7 @@ public:
         return _sparse_indices.release_all();
     }
 
-    /**
-     * Returns the value of a live `handle`.
-     * Do not keep the reference: it is invalidated by the next `release`.
-     */
+    /// Returns the value of a live `handle`. Do not keep the reference: it is invalidated by the next `release`.
     CC_FORCE_INLINE T& get(handle_t handle) { return _compact_values[_sparse_indices.get(handle)].value; }
 
     /// Const version of `get`.

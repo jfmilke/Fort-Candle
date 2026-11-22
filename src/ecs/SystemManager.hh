@@ -32,8 +32,13 @@ public:
     }
 
     /**
-     * Sets the component signature that entities need to be added to system `SysT`. Only the first call per system has an
-     * effect (`insert` does not overwrite). Does not re-check existing entities.
+     * Sets the component signature that entities need to be added to system `SysT`.
+     *
+     * Only the first call per system has an effect (`insert` does not overwrite), and existing entities are not re-checked.
+     * Call it right after `RegisterSystem`: `EntitySignatureChanged` stores an empty signature for every system that has none yet,
+     * and this call cannot replace it.
+     *
+     * @param signature Components an entity needs; an empty signature matches every entity.
      */
     template <typename SysT>
     void SetSignature(Signature signature)
@@ -45,7 +50,11 @@ public:
         mSignatures.insert({typeName, signature});
     }
 
-    /// Removes `handle` from every system.
+    /**
+     * Removes an entity from every system.
+     *
+     * @param handle Entity that was destroyed or became a prototype.
+     */
     void EntityDestroyed(InstanceHandle handle)
     {
         for (const auto& pair : mSystems)
@@ -67,7 +76,12 @@ public:
         }
     }
 
-    /// Adds `handle` to every system whose signature is contained in `entitySignature` and removes it from all others.
+    /**
+     * Adds an entity to every system whose signature is contained in the entity's signature and removes it from all others.
+     *
+     * @param handle Entity whose signature changed.
+     * @param entitySignature The entity's new signature.
+     */
     void EntitySignatureChanged(InstanceHandle handle, Signature entitySignature)
     {
         for (const auto& pair : mSystems)

@@ -10,25 +10,29 @@ namespace gamedev
 /**
  * Forward renderer for all instances with a `Render` component.
  *
- * `Game::render()` pushes the per-frame state (camera, lights, effect parameters, selection, outlines) through the
- * `Update*` / `Switch*` functions and then calls `Update`, which renders one frame:
+ * `Game::render()` pushes the per-frame state (camera, lights, effect parameters, selection, outlines)
+ * through the `Update*` / `Switch*` functions and then calls `Update`, which renders one frame:
  *
- *  1. Shadows: point-light shadow cube map (`depth` shader) and directional shadow map (`poly` shader, orthographic,
- *     centered on the point the camera looks at).
- *  2. Scene: skybox (`background`) and all instances (`poly`) into the HDR scene framebuffer
- *     (color, bright parts, picking IDs, depth).
+ *  1. Shadows: point-light shadow cube map (`depth` shader) and directional shadow map
+ *     (`poly` shader, orthographic, centered on the point the camera looks at).
+ *  2. Scene: skybox (`background`) and all instances (`poly`) into the HDR scene framebuffer (color, bright parts, picking IDs, depth).
  *  3. Particles (`particles`) and outlines of the selected/highlighted instances (`outline_forward`).
  *  4. Bloom (5 ping-pong `blur` passes).
  *  5. Post-processing to the screen (`output`: tonemap, gamma, sepia, vignette, desaturation, distance fade).
  *  6. Outline resolve (`outline_resolve`).
  *
- * Shaders are loaded from `data/shaders/` by `InitResources`. The picking buffer stores the instance handle per pixel
- * for mouse selection. Needs an OpenGL context.
+ * Shaders are loaded from `data/shaders/` by `InitResources`.
+ * The picking buffer stores the instance handle per pixel for mouse selection.
+ * Needs an OpenGL context.
  */
 class RenderSystem : public System
 {
 public:
-    /// Stores the ECS and loads the quad and skybox.
+    /**
+     * Stores the ECS and loads the quad and skybox.
+     *
+     * @param ecs Shared ECS.
+     */
     void Init(std::shared_ptr<EngineECS>& ecs);
 
     void AddEntity(InstanceHandle& handle, Signature entitySignature);
@@ -36,25 +40,48 @@ public:
     void RemoveEntity(InstanceHandle& handle);
     void RemoveAllEntities();
 
-    /// Renders one frame (see class description). `dt` is unused. Returns the elapsed time in microseconds.
+    /**
+     * Renders one frame (see class description).
+     *
+     * @param dt Unused.
+     * @return Elapsed time in microseconds.
+     */
     int Update(float dt);
 
     /**
-     * Creates render targets and framebuffers and loads textures, meshes and shaders. Set the shadow resolutions
-     * before (the point shadow cube map keeps the resolution it is created with).
+     * Creates render targets and framebuffers and loads textures, meshes and shaders.
+     *
+     * Set the shadow resolutions before (the point shadow cube map keeps the resolution it is created with).
      */
     void InitResources();
 
     /// Sets the particle VAO (cube with per-instance attributes, from the `ParticleSystem`).
     void InitParticles(glow::SharedVertexArray& vao);
 
-    /// Resizes all screen-sized render targets to `w` x `h` pixels.
+    /**
+     * Resizes all screen-sized render targets.
+     *
+     * @param w Width in pixels.
+     * @param h Height in pixels.
+     */
     void ResizeRenderTargets(int w, int h);
 
-    /// Returns the instance handle rendered at pixel (`x`, `y`) (origin bottom left), or an invalid handle.
+    /**
+     * Reads the picking buffer of the last frame at one pixel.
+     *
+     * @param x Pixel column, from the left.
+     * @param y Pixel row, from the bottom.
+     * @return Instance rendered at the pixel, or an invalid handle.
+     */
     InstanceHandle ReadPickingBuffer(int x, int y);
 
-    /// Unprojects pixel (`x`, `y`) (origin bottom left) with the scene depth buffer and returns the world position.
+    /**
+     * Unprojects a pixel with the scene depth buffer of the last frame.
+     *
+     * @param x Pixel column, from the left.
+     * @param y Pixel row, from the bottom.
+     * @return World position of the surface at the pixel.
+     */
     tg::pos3 MouseToWorld(int x, int y);
 
     /// Binds the particle shader with the camera matrices and returns it.
@@ -69,7 +96,15 @@ public:
     /// Sets the real time and the game time of day (seconds) for animated shaders.
     void UpdateTime(float runtime, float gametime);
 
-    /// Sets the camera and recomputes view and projection (60° vertical field of view, near 0.01, far 500).
+    /**
+     * Sets the camera and recomputes view and projection (60° vertical field of view, near 0.01, far 500).
+     *
+     * Uses the aspect ratio of the window size from `UpdateWindowResolution`.
+     *
+     * @param cameraPos Camera position in world space.
+     * @param cameraForward View direction.
+     * @param cameraUp Up vector.
+     */
     void UpdateCamera(const tg::pos3& cameraPos, const tg::vec3& cameraForward, const tg::vec3& cameraUp);
 
     /// Sets the window size in pixels (used for the aspect ratio and `MouseToWorld`).
@@ -151,18 +186,28 @@ public:
     /// Renders the six faces of the point shadow cube map around the shadow-casting light.
     void RenderDepthCubemap();
 
-    /// Outlines `handle` in the default selection color (orange).
+    /**
+     * Outlines an instance in the default selection color (orange).
+     *
+     * @param handle Instance to outline; nothing happens if it is not live.
+     */
     void RenderOutline(InstanceHandle handle);
 
-    /// Draws `handle` with `color` into the outline target (depth-tested against the scene).
+    /**
+     * Draws an instance into the outline target (depth test `GL_EQUAL` against the scene).
+     *
+     * @param handle Instance to outline; nothing happens if it is not live.
+     * @param color RGBA outline color.
+     */
     void RenderOutline(InstanceHandle handle, const tg::vec4& color);
 
     /// Composites the outline target onto the screen.
     void RenderOutlineResolve();
 
     /**
-     * Draws all instances (and their auxiliary models) with the bound `shader`, setting model matrix, albedo texture,
-     * picking ID and albedo bias.
+     * Draws all instances and their auxiliary models.
+     *
+     * @param shader Bound program; receives `uModel`, `uTexAlbedo`, `uPickingID` and `uAlbedoBiasPacked` per instance.
      */
     void RenderInstances(glow::UsedProgram& shader);
 
@@ -175,12 +220,22 @@ public:
     /// Blurs the bright parts of the scene (5 horizontal + vertical ping-pong passes).
     void RenderBloom();
 
-    /// Draws all instances with only the model matrix set (shadow passes).
+    /**
+     * Draws all instances for a shadow pass, with depth test and back-face culling.
+     *
+     * @param shader Bound program; receives `uModel` per instance.
+     */
 	  void RenderDepth(glow::UsedProgram& shader);
 
 
 private:
-    /// Draws the auxiliary models of `instance` relative to `parentTransform` (unused by the game; logs per model).
+    /**
+     * Draws the auxiliary models of an instance and logs a message per model. Unused: no instance has any.
+     *
+     * @param shader Bound program; receives `uModel`, `uTexAlbedo` and `uAlbedoBiasPacked` per model.
+     * @param instance Instance whose `auxModels` are drawn.
+     * @param parentTransform Model matrix of `instance`; the models' transforms are relative to it.
+     */
     void RenderAuxiliary(glow::UsedProgram& shader, const Instance& instance, const tg::mat4x3& parentTransform);
 
 private:
@@ -193,7 +248,11 @@ private:
     /// (Re)creates the directional shadow map if its resolution changed.
     void UpdateShadowMapTexture();
 
-    /// Sets the uniforms shared by the scene and shadow passes (time, camera, lights, shadow maps, switches).
+    /**
+     * Sets the uniforms shared by the scene and shadow passes (time, camera, lights, shadow maps, switches).
+     *
+     * @param program Bound `poly` program.
+     */
     void SetupSceneShader(glow::UsedProgram& program);
 
 // ECS Specifics
@@ -288,8 +347,8 @@ private:
 private:
     // shaders
     glow::SharedProgram mShaderOutput;         ///< Post-processing to the screen.
-    glow::SharedProgram mShaderObject;         ///< PBR object shader (unused).
-    glow::SharedProgram mShaderObjectSimple;   ///< Simple object shader (unused).
+    glow::SharedProgram mShaderObject;         ///< PBR object shader. Unused.
+    glow::SharedProgram mShaderObjectSimple;   ///< Simple object shader. Unused.
     glow::SharedProgram mShaderOutlineForward; ///< Draws outlined instances.
     glow::SharedProgram mShaderOutlineResolve; ///< Composites the outlines.
 
@@ -335,15 +394,15 @@ private:
 
     // meshes (as vertex array obejects)
     glow::SharedVertexArray mVaoParticle; ///< Particle cube with instance attributes.
-    glow::SharedVertexArray mVaoCube;     ///< Test cube (unused).
-    glow::SharedVertexArray mVaoSphere;   ///< Test sphere (unused).
-    glow::SharedVertexArray mVaoTest;     ///< Test tree (unused).
+    glow::SharedVertexArray mVaoCube;     ///< Test cube. Unused.
+    glow::SharedVertexArray mVaoSphere;   ///< Test sphere. Unused.
+    glow::SharedVertexArray mVaoTest;     ///< Test tree. Unused.
 
     // textures
-    glow::SharedTexture2D mTexAlbedo; ///< Test texture (unused).
-    glow::SharedTexture2D mTexNormal; ///< Test texture (unused).
-    glow::SharedTexture2D mTexARM;    ///< Test texture (unused).
-    glow::SharedTexture2D mTexTest;   ///< Test texture (unused).
+    glow::SharedTexture2D mTexAlbedo; ///< Test texture. Unused.
+    glow::SharedTexture2D mTexNormal; ///< Test texture. Unused.
+    glow::SharedTexture2D mTexARM;    ///< Test texture. Unused.
+    glow::SharedTexture2D mTexTest;   ///< Test texture. Unused.
 
     // Lights
     glow::SharedUniformBuffer mPointLightUBO; ///< `ubPointLights` uniform buffer.
