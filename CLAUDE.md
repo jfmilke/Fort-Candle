@@ -73,7 +73,8 @@ Updating `extern/`:
 - Import upstream trees as git objects (copy the objects of `<rev>^{tree}` into this repository, `git read-tree --prefix=extern/<lib>/ <tree>`, `git checkout -- extern/<lib>`), not by copying a checkout. With `core.autocrlf=true`, copied files get their line endings changed.
 - Known blockers (2026-11): OpenAL 1.25.2 fails on MSVC 19.52 (C3889 in `alc.cpp`) and Clang 21 (`-Wfunction-effects`). imgui ≥ 1.92.7 removed the `Combo`/`ListBox` getter overload that glow-extras' `debugging/imgui-util.cc` still uses.
 - typed-geometry's `tg::perspective_opengl` takes a `tg::horizontal_fov_t` since 2024 (it used to treat the angle as vertical FOV). The game converts its 60° vertical FOV in `RenderSystem::UpdateCamera` and in the editor gizmo (`Game::onGui`).
-- The game still uses deprecated APIs that newer versions may remove: `tg::distance_sqr(vec, vec)` and `tg::length_sqr(pos)` (deprecation warnings), and the old imgui names `ImGuiCol_TabActive`/`TabUnfocused`/`TabUnfocusedActive`/`NavHighlight` and single-argument `ImGui::PushFont` (available while `IMGUI_DISABLE_OBSOLETE_FUNCTIONS` is not defined).
+- The game still uses deprecated APIs that newer versions may remove: `tg::distance_sqr(vec, vec)` and `tg::length_sqr(pos)` (deprecation warnings), and the old imgui names `ImGuiCol_TabActive`/`TabUnfocused`/`TabUnfocusedActive` (renamed in 1.90.9, available while `IMGUI_DISABLE_OBSOLETE_FUNCTIONS` is not defined).
+- `ImGuiCol_NavHighlight` and single-argument `ImGui::PushFont` are still current in the vendored imgui 1.91.2, but change in newer versions: 1.91.4 renames `NavHighlight` to `NavCursor` (the old name becomes obsolete), and 1.92 adds a font size parameter to `PushFont`.
 
 ## Architecture
 
