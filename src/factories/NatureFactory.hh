@@ -17,7 +17,11 @@ public:
     NatureFactory() { mSavefilePath = "../data/config/nature.fac"; }
 
 private:
-    /// Gives every nature preset a `Render` component (no collision).
+    /**
+     * Gives every nature preset a `Render` component (no collision).
+     *
+     * @param presetHandle Preset that `Factory::Register` is creating.
+     */
     void PostProcessRegistration(InstanceHandle presetHandle) override;
 };
 }

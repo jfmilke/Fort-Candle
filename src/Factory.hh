@@ -16,8 +16,7 @@ namespace gamedev
  * Base class of the unit, structure, nature and item factories.
  *
  * Presets:
- *  - A preset is a `Prototype` instance (never part of any system) that carries the mesh and all components of an
- *    entity type.
+ *  - A preset is a `Prototype` instance (never part of any system) that carries the mesh and all components of an entity type.
  *  - `Create` clones a preset into a live instance.
  *  - Identifiers are case-insensitive and can be a name or a path:
  *    @code
@@ -42,71 +41,182 @@ public:
     void AttachTerrain(std::shared_ptr<Terrain>& terrain);
 
     /**
-     * Adds `presetHandle` as preset under `identifier` (a name, or a path whose file name becomes the name).
-     * If the identifier exists, the existing preset's components are replaced by copies of `presetHandle`'s.
+     * Adds `presetHandle` as preset under `identifier`.
+     *
+     * If the identifier exists, the existing preset's components are replaced by copies of `presetHandle`'s
+     * (and `presetHandle` itself is not stored).
      * Prefer `Register` + `GetPreset` to add and then modify a preset.
+     *
+     * @param identifier Name, or path whose file name without extension becomes the name (both are then added).
+     * @param presetHandle `Prototype` instance to use as preset.
      */
     void AddPreset(std::string identifier, InstanceHandle presetHandle);
 
-    /// Adds `presetHandle` under both the name `identifier` and the path `identifying_path` (see above).
+    /**
+     * Adds `presetHandle` as preset under a name and a path.
+     *
+     * If the name or the path exists, that preset is overwritten as in `AddPreset(identifier, presetHandle)` and gets the other identifier as well.
+     *
+     * @param identifier Preset name.
+     * @param identifying_path Preset path.
+     * @param presetHandle `Prototype` instance to use as preset.
+     */
     void AddPreset(std::string identifier, std::filesystem::path identifying_path, InstanceHandle presetHandle);
 
     /// Returns the preset instance for a name or path (to modify it), or an invalid handle.
     InstanceHandle GetPreset(std::string identifier);
 
     /**
-     * Creates a `Prototype` instance from the asset `asset_identifier` (mesh name or path known to the asset manager),
-     * scaled uniformly by `scaling`, runs `PostProcessRegistration` and adds it as preset under the asset name (and
-     * path). Returns the preset, or an invalid handle if the asset is unknown. Preferred way to add presets.
+     * Creates a preset from an asset and adds it under the asset's name (and path, if `asset_identifier` is one).
+     *
+     * Preferred way to add presets.
+     *
+     * The preset is an instance with the asset's VAO and the palette texture (no normal or ARM texture),
+     * the `Prototype` component and a uniform scale.
+     * Its `max_bounds` is the asset's AABB with `max` scaled by `scaling * 1.15` (`min` stays unscaled, see the TODO in the code).
+     * `PostProcessRegistration` runs after the `Prototype` component is added and before the preset is added.
+     *
+     * @param asset_identifier Mesh name or path known to the asset manager.
+     * @param scaling Uniform scale of the preset.
+     * @return The preset, or an invalid handle if the asset is unknown.
      */
     InstanceHandle Register(std::string asset_identifier, float scaling = 1.0);
 
-    /// Like above, but registers the preset under `factory_identifier`.
+    /**
+     * Like `Register(asset_identifier, scaling)`, but adds the preset under `factory_identifier`, and `max_bounds.max` is scaled by `scaling * 1.25`.
+     *
+     * @param asset_identifier Mesh name or path known to the asset manager.
+     * @param factory_identifier Preset name, or path whose file name becomes the name.
+     * @param scaling Uniform scale of the preset.
+     * @return The preset, or an invalid handle if the asset is unknown.
+     */
     InstanceHandle Register(std::string asset_identifier, std::string factory_identifier, float scaling = 1.0);
 
-    /// Like above, but registers the preset under `factory_identifier` and `factory_path`.
+    /**
+     * Like `Register(asset_identifier, factory_identifier, scaling)`, but adds the preset under `factory_identifier` and `factory_path`.
+     *
+     * @param asset_identifier Mesh name or path known to the asset manager.
+     * @param factory_identifier Preset name.
+     * @param factory_path Preset path.
+     * @param scaling Uniform scale of the preset.
+     * @return The preset, or an invalid handle if the asset is unknown.
+     */
     InstanceHandle Register(std::string asset_identifier, std::string factory_identifier, std::filesystem::path factory_path, float scaling = 1.0);
 
     /**
-     * Creates a live instance from the preset `identifier` (without the `Prototype` component), adds it to the spatial
-     * hash map and remembers it for saving. Returns an invalid handle if the preset does not exist.
+     * Creates a live instance from a preset, at the preset's transform.
+     *
+     * The instance gets copies of all components except `Prototype`, so it joins the systems.
+     * It is added to the spatial hash map, announced with `EventType::NewPosition` and remembered for saving and for `MarkLastCreated`.
+     *
+     * @param identifier Preset name or path.
+     * @return The new instance, or an invalid handle if the preset does not exist.
      */
     InstanceHandle Create(std::string identifier);
 
-    /// Like `Create`, placed at `position` (height taken from the terrain, if attached).
+    /**
+     * Like `Create(identifier)`, placed at `position`.
+     *
+     * TODO: Does not check the result of `Create(identifier)`, so an unknown preset makes it use an invalid handle
+     * (undefined behavior; asserts in Debug).
+     * The same holds for the overloads below, which call this one.
+     *
+     * @param identifier Preset name or path.
+     * @param position World position; the height is taken from the terrain, if attached.
+     * @return The new instance.
+     */
     InstanceHandle Create(std::string identifier, tg::pos3 position);
 
-    /// Like `Create`, placed at `position` with `rotation`.
+    /**
+     * Like `Create(identifier, position)`, with `rotation`.
+     *
+     * @param identifier Preset name or path.
+     * @param position World position; the height is taken from the terrain, if attached.
+     * @param rotation Rotation (replaces the preset rotation).
+     * @return The new instance.
+     */
     InstanceHandle Create(std::string identifier, tg::pos3 position, tg::quat rotation);
 
-    /// Like `Create`, placed at `position` with `rotation` and `scaling` (replaces the preset scale).
+    /**
+     * Like `Create(identifier, position)`, with `rotation` and `scaling`.
+     *
+     * @param identifier Preset name or path.
+     * @param position World position; the height is taken from the terrain, if attached.
+     * @param rotation Rotation (replaces the preset rotation).
+     * @param scaling Scale (replaces the preset scale).
+     * @return The new instance.
+     */
     InstanceHandle Create(std::string identifier, tg::pos3 position, tg::quat rotation, tg::size3 scaling);
 
-    /// Like `Create`, placed at `position` with `scaling` (replaces the preset scale).
+    /**
+     * Like `Create(identifier, position)`, with `scaling`.
+     *
+     * @param identifier Preset name or path.
+     * @param position World position; the height is taken from the terrain, if attached.
+     * @param scaling Scale (replaces the preset scale).
+     * @return The new instance.
+     */
     InstanceHandle Create(std::string identifier, tg::pos3 position, tg::size3 scaling);
 
     /**
-     * Creates a copy of `templateHandle` with all its components (a `Prototype` stays a prototype) and adds it to the
-     * spatial hash map. Unlike `Create`, the copy is not remembered for saving.
+     * Creates a copy of an instance with all its components (a `Prototype` stays a prototype) and adds it to the spatial hash map.
+     *
+     * Unlike `Create`, the copy is not remembered for saving, and no `EventType::NewPosition` is sent.
+     *
+     * @param templateHandle Live instance to copy.
+     * @return The copy.
      */
     InstanceHandle Clone(InstanceHandle templateHandle);
 
-    /// Like `Clone`, placed at `position` (height taken from the terrain, if attached).
+    /**
+     * Like `Clone(templateHandle)`, placed at `position` and announced with `EventType::NewPosition`.
+     *
+     * @param templateHandle Live instance to copy.
+     * @param position World position; the height is taken from the terrain, if attached.
+     * @return The copy.
+     */
     InstanceHandle Clone(InstanceHandle templateHandle, tg::pos3 position);
 
-    /// Like `Clone`, placed at `position` with `rotation`.
+    /**
+     * Like `Clone(templateHandle, position)`, with `rotation`.
+     *
+     * @param templateHandle Live instance to copy.
+     * @param position World position; the height is taken from the terrain, if attached.
+     * @param rotation Rotation (replaces the template's rotation).
+     * @return The copy.
+     */
     InstanceHandle Clone(InstanceHandle templateHandle, tg::pos3 position, tg::quat rotation);
 
-    /// Like `Clone`, placed at `position` with `rotation` and `scaling`.
+    /**
+     * Like `Clone(templateHandle, position)`, with `rotation` and `scaling`.
+     *
+     * @param templateHandle Live instance to copy.
+     * @param position World position; the height is taken from the terrain, if attached.
+     * @param rotation Rotation (replaces the template's rotation).
+     * @param scaling Scale (replaces the template's scale).
+     * @return The copy.
+     */
     InstanceHandle Clone(InstanceHandle templateHandle, tg::pos3 position, tg::quat rotation, tg::size3 scaling);
 
-    /// Like `Clone`, placed at `position` with `scaling`.
+    /**
+     * Like `Clone(templateHandle, position)`, with `scaling`.
+     *
+     * @param templateHandle Live instance to copy.
+     * @param position World position; the height is taken from the terrain, if attached.
+     * @param scaling Scale (replaces the template's scale).
+     * @return The copy.
+     */
     InstanceHandle Clone(InstanceHandle templateHandle, tg::pos3 position, tg::size3 scaling);
 
-    /// Marks the instance of the last `Create` call, so `SaveMarkedObjects` saves it.
+    /// Marks the instance of the last `Create` call, so `SaveMarkedObjects` saves it (once per call).
     void MarkLastCreated();
 
-    /// `Register`s every asset in `asset_identifiers` with the same `scaling`.
+    /**
+     * `Register`s every asset with the same scale.
+     *
+     * @param asset_identifiers Mesh names or paths known to the asset manager.
+     * @param scaling Uniform scale of the presets.
+     */
     void RegisterAutomatically(std::vector<std::string> asset_identifiers, float scaling = 1.0);
 
     /// All preset names (unordered).
@@ -119,10 +229,10 @@ public:
      */
     std::vector<std::string> GetPathIdentifiers();
 
-    /// Handles of all live instances created by this factory.
+    /// Handles of all live instances created by this factory (drops destroyed ones from the list first).
     std::vector<InstanceHandle> GetGeneratedHandles();
 
-    /// Handles and preset names of all live instances created by this factory.
+    /// Handles and preset names of all live instances created by this factory (drops destroyed ones first).
     std::vector<std::pair<InstanceHandle, std::string>> GetGeneratedIdentifiers();
 
     /// True if a preset with this name or path exists.
@@ -131,40 +241,84 @@ public:
     /// Saves all live instances created by this factory to `mSavefilePath`. Returns false on I/O errors.
     bool SaveObjects();
 
-    /// Saves all live marked instances to `filepath` (a full path). Returns false on I/O errors.
+    /**
+     * Saves all live marked instances (see `MarkLastCreated`).
+     *
+     * @param filepath Full path of the `.fac` file.
+     * @return False on I/O errors.
+     */
     bool SaveMarkedObjects(std::filesystem::path filepath);
 
     /// Creates the instances saved in `mSavefilePath`. Returns false if none were loaded.
     bool LoadObjects();
 
-    /// Creates the instances saved in `data/config/<filepath>.fac`. Returns false if none were loaded.
+    /**
+     * Creates the instances saved in a `.fac` file in the folder of `mSavefilePath` (`data/config/`).
+     *
+     * @param filepath File name without extension, relative to that folder.
+     * @return False if none were loaded.
+     */
     bool LoadObjects(std::filesystem::path filepath);
 
-    /// Like `LoadObjects(filepath)`, but also marks the created instances and returns their handles.
+    /**
+     * Like `LoadObjects(filepath)`, but also marks the created instances.
+     *
+     * @param filepath File name without extension, relative to `data/config/`.
+     * @return The created instances.
+     */
     std::vector<InstanceHandle> LoadObjectsMarked(std::filesystem::path filepath);
 
     virtual ~Factory() {}
 
 private:
-    /// Replaces the components of preset `presetID` by copies of `templateHandle`'s. No sanity checks.
+    /**
+     * Replaces the components of a preset by copies of another instance's. No sanity checks.
+     *
+     * @param presetID ID of an existing preset.
+     * @param templateHandle Live instance to copy the components from.
+     */
     void OverwritePreset(int presetID, InstanceHandle templateHandle);
 
-    /// Writes all live created instances to `filepath` (`.fac` format).
+    /**
+     * Writes all live created instances in `.fac` format.
+     *
+     * @param filepath File to write (overwritten).
+     * @return False on I/O errors.
+     */
     bool SaveObjectsTo(std::filesystem::path filepath);
 
-    /// Writes all live marked instances to `filepath` (`.fac` format).
+    /**
+     * Writes all live marked instances in `.fac` format.
+     *
+     * @param filepath File to write (overwritten).
+     * @return False on I/O errors.
+     */
     bool SaveMarkedObjectsTo(std::filesystem::path filepath);
 
     /**
-     * Creates one instance per `.fac` record of `filepath` with the saved transform (including the saved height) and
-     * returns their handles; with `marked`, also marks them.
+     * Creates one instance per `.fac` record with the saved transform (including the saved height).
+     *
+     * TODO: A record with an unknown preset name leads to undefined behavior (see `Create(identifier, position)`).
+     *
+     * @param filepath `.fac` file to read.
+     * @param marked Also mark the created instances (see `MarkLastCreated`).
+     * @return The created instances; empty if the file cannot be opened.
      */
     std::vector<InstanceHandle> LoadObjectsFrom(std::filesystem::path filepath, bool marked = false);
 
-    /// Returns `boundingBox` unchanged (the code after the `return` is dead).
+    /**
+     * Returns `boundingBox` unchanged (the code after the `return` is dead).
+     *
+     * @param boundingBox Bounds.
+     * @return `boundingBox`.
+     */
     tg::aabb3 MaxBoundingBox(tg::aabb3& boundingBox);
 protected:
-    /// Hook for subclasses, called by `Register` before the preset is added, e.g. to attach components.
+    /**
+     * Hook for subclasses, called by `Register` after the `Prototype` component is added and before the preset is added, e.g. to attach components.
+     *
+     * @param presetHandle The new preset instance.
+     */
     virtual void PostProcessRegistration(InstanceHandle presetHandle){};
 
 protected:
@@ -174,7 +328,8 @@ protected:
     int mFreeID = 0;                                                                 ///< Next preset ID.
     std::pair<InstanceHandle, std::string> mLastCreated = {{std::uint32_t(-1)}, ""}; ///< Last `Create` result.
 
-    std::filesystem::path mSavefilePath = "../data/config/undefined.fac"; ///< Default save file; its folder is used by `LoadObjects(path)`.
+    /// Default save file (each subclass sets its own); its folder is used by `LoadObjects(path)` and `LoadObjectsMarked`.
+    std::filesystem::path mSavefilePath = "../data/config/undefined.fac";
 
     std::unordered_map<std::string, int> mObjectNameToID; ///< Preset name -> preset ID.
     std::unordered_map<std::string, int> mObjectPathToID; ///< Preset path -> preset ID.

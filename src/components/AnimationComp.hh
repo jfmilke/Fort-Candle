@@ -3,7 +3,14 @@
 
 namespace gamedev
 {
-/// Pending rotation and scale animations, played by the `AnimationSystem` (one-shot: each flag resets when done).
+/**
+ * Pending rotation and scale animations, played by the `AnimationSystem`.
+ *
+ * Each animation runs while its flag is set; `scaleAnim` resets itself when the target is reached.
+ *
+ * TODO: The remaining angles `rot_x`/`rot_y`/`rot_z` only decay exponentially and never reach zero, so their flags stay set
+ * (harmless: the game sets a new `rot_y` with every turn).
+ */
 struct Animated : Component
 {
     using Component::Component; // Use constructor of component

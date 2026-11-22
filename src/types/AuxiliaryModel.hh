@@ -7,7 +7,11 @@
 
 namespace gamedev
 {
-/// Extra mesh drawn together with an `Instance` (see `Instance::auxModels`; unused by the game).
+/**
+ * Extra mesh drawn together with an `Instance` (see `Instance::auxModels`).
+ *
+ * Unused: no instance has auxiliary models.
+ */
 struct AuxiliaryModel
 {
       glow::SharedVertexArray vao; ///< Mesh.

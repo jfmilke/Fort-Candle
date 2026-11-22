@@ -4,7 +4,11 @@
 
 namespace gamedev
 {
-/// Kinds of buildings. Unused: the `StructureFactory` identifies presets by name.
+/**
+ * Kinds of buildings.
+ *
+ * Unused: the `StructureFactory` identifies presets by name.
+ */
 enum class StructType
 {
     Undefined = 0,

@@ -21,20 +21,26 @@ struct TimeOfDay
  * Game clock (time of day and day counter) and the sun position derived from it.
  *
  * Not an ECS system with entities: `Game` creates it directly and calls `Update` every tick.
- * The game time runs `secondsPerDay / (minutes per day * 60)` times faster than real time.
+ * The game time runs `secondsPerDay / (minutes per day * 60)` times faster than real time; `Game::init()` sets a day length of 0.5 real minutes.
  *
- * The sun computed here (`mSunLight`) is not used for rendering; `Game` passes its own fixed sun parameters to
- * `GenerateSunlight` (see the day/night TODO below).
+ * The sun computed here (`mSunLight`) is not used for rendering; `Game` passes its own fixed sun parameters to `GenerateSunlight`
+ * (see the day/night TODO below).
  */
 class EnvironmentSystem : public System
 {
 public:
-    /// Sets the default sun, ambient light, a day length of 0.2 real minutes, sunrise at 6:00 and sunset at 21:00.
+    /**
+     * Sets the default sun, ambient light, a day length of 0.2 real minutes, sunrise at 6:00 and sunset at 21:00.
+     *
+     * @param ecs Shared ECS. Unused: only stored.
+     */
     void Init(std::shared_ptr<EngineECS>& ecs);
 
     /**
-     * Advances the game time by `dt` real seconds, counts days (`mNewDay`) and interpolates the sun.
-     * Returns the elapsed time in microseconds.
+     * Advances the game time, counts days (`mNewDay`) and interpolates the sun.
+     *
+     * @param dt Time step in real seconds.
+     * @return Elapsed time in microseconds.
      */
     int Update(float dt);
 
@@ -53,16 +59,35 @@ public:
     /// Undoes `LockSun`.
     void UnlockSun();
 
-    /// Returns an ambient light of `lightColor * lightIntensity`.
+    /**
+     * Creates an ambient light.
+     *
+     * @param lightColor Color.
+     * @param lightIntensity Factor for `lightColor`.
+     * @return Ambient light of `lightColor * lightIntensity`.
+     */
     AmbientLight GenerateAmbientlight(tg::vec3 lightColor = {0.75, 1.0, 0.9}, float lightIntensity = 0.5);
 
     /**
-     * Returns a directional light towards the sun at polar angle `theta` and azimuth `phi` (degrees), with color
-     * `lightColor * lightIntensity`. The direction points from the scene to the sun.
+     * Creates a sun light from spherical angles.
+     *
+     * @param theta Polar angle from the zenith in degrees.
+     * @param phi Azimuth in degrees.
+     * @param lightColor Color.
+     * @param lightIntensity Factor for `lightColor`.
+     * @return Directional light whose direction points from the scene to the sun (length `mSunRadius`).
      */
     DirectionalLight GenerateSunlight(float theta = 70, float phi = -64, tg::vec3 lightColor = {0.985, 1.0, 0.876}, float lightIntensity = 1.0);
 
-    /// Returns a point light with the given parameters.
+    /**
+     * Creates a point light.
+     *
+     * @param lightPosition Position.
+     * @param lightColor Color.
+     * @param lightIntensity Intensity.
+     * @param lightRadius Radius of influence.
+     * @return The point light.
+     */
     PointLight GeneratePointlight(tg::pos3 lightPosition = {0.0, 0.0, 0.0}, tg::vec3 lightColor = {1.0, 1.0, 1.0}, float lightIntensity = 1.0, float lightRadius = 50.0);
 
     /// Current time of day in game seconds [0, 86400].
@@ -72,12 +97,12 @@ public:
     int getDayCount();
 
 public:
-    DirectionalLight mSunLight; ///< Sun interpolated over the day; `direction` points to the sun (unused for rendering).
-    tg::vec3 mAmbientLight;     ///< Ambient color set by `Init` (unused).
+    DirectionalLight mSunLight; ///< Sun interpolated over the day; `direction` points to the sun. Unused: `Game` passes its own sun.
+    tg::vec3 mAmbientLight;     ///< Ambient color set by `Init`. Unused.
     float mSunRadius;           ///< Distance of the sun position from the origin.
     float mSunTheta;            ///< Current sun polar angle in degrees.
     float mSunPhi;              ///< Current sun azimuth in degrees.
-    float mSunIntensity;        ///< Sun intensity set by `Init` (unused).
+    float mSunIntensity;        ///< Sun intensity set by `Init`. Unused.
     tg::pos3 mSunPos;           ///< Current sun position.
 
     bool mNewDay = false; ///< True during the update in which a new day started.
@@ -87,11 +112,16 @@ private:
     void CalculateSun();
 
 private:
-    std::shared_ptr<EngineECS> mECS; ///< Shared ECS (unused).
+    std::shared_ptr<EngineECS> mECS; ///< Shared ECS. Unused.
 
     const float secondsPerDay = 86400.f; ///< Game seconds per day (60 * 60 * 24).
     float mSecondToGameSecond;           ///< Game seconds per real second.
-    float mGameTime;                     ///< Time of day in game seconds: [0, 86400].
+    /**
+     * Time of day in game seconds: [0, 86400].
+     *
+     * TODO: Not set by `Init`; it only starts at 0 because `Game` value-initializes the system with `make_shared`.
+     */
+    float mGameTime;
     int mDayCount;                       ///< Current day, starting at 1.
 
     // in seconds

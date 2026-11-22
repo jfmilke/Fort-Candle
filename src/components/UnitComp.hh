@@ -9,7 +9,7 @@ struct Living : public Component
 {
     using Component::Component;
 
-    int idle = 0; ///< Reset when moving; otherwise unused.
+    int idle = 0; ///< Unused: only reset when moving.
 
     // Friendly stuff
     bool friendly; ///< Pioneer (true) or monster (false).
@@ -26,12 +26,16 @@ struct Living : public Component
     bool inFocus = false;                             ///< Unused.
 };
 
-/// A pioneer that can live in a home. Unused apart from the presets.
+/**
+ * A pioneer that can live in a home.
+ *
+ * Unused: the unit presets attach it, but nothing reads it.
+ */
 struct Dweller : public Component
 {
     using Component::Component;
 
-    InstanceHandle home = {std::uint32_t(-1)}; ///< Home building (unused).
+    InstanceHandle home = {std::uint32_t(-1)}; ///< Home building. Unused.
     bool hasHome = false;                      ///< Unused.
 };
 
@@ -44,7 +48,13 @@ struct Attacker : public Component
 
     bool forceAttack = false; ///< Set when the player orders an attack (not read).
 
-    Weapon weapon = {1, 0.5, 1, WeaponType(-1)};       ///< Weapon properties.
+    /**
+     * Weapon properties; the unit presets overwrite them.
+     *
+     * TODO: The initializer skips `missileSpeed`, so `WeaponType(-1)` sets `missileSpeed` to -1 (`type` keeps `Undefined`).
+     */
+    Weapon weapon = {1, 0.5, 1, WeaponType(-1)};
+
     float currentCooldown = 0;                         ///< Seconds until the next attack.
     InstanceHandle weaponHandle = {std::uint32_t(-1)}; ///< Visible weapon instance (bow), created when first needed.
 
@@ -78,20 +88,24 @@ struct Producer : public Component
     int idle = 0; ///< Unused.
 
     float income = 0.5;     ///< Base gold income; per second it yields `3 * income * (1 + 2 * forges)`.
-    bool producing = false; ///< Unused (production is continuous).
+    bool producing = false; ///< Unused: production is continuous.
 
-    InstanceHandle produceOrder = {std::uint32_t(-1)}; ///< Production building (only set by the unused `LookForProduction`).
+    InstanceHandle produceOrder = {std::uint32_t(-1)}; ///< Production building. Unused: only the unused `LookForProduction` sets it.
 };
 
-/// A unit that could climb walls. Unused apart from the soldier preset.
+/**
+ * A unit that could climb walls.
+ *
+ * Unused: the soldier preset attaches it, but nothing reads it.
+ */
 struct Climber : public Component
 {
     using Component::Component;
 
-    float speed = 1.0;     ///< Climbing speed (unused).
-    bool elevated = false; ///< On a wall (unused).
+    float speed = 1.0;     ///< Climbing speed. Unused.
+    bool elevated = false; ///< On a wall. Unused.
 
-    tg::vec3 climbOrder = tg::vec3::zero; ///< Climb target (unused).
+    tg::vec3 climbOrder = tg::vec3::zero; ///< Climb target. Unused.
 };
 
 /// A flying arrow; see `AnimationSystem` (flight, hit detection) and `GamelogicSystem::ArrowListener` (damage).
@@ -101,7 +115,7 @@ struct Arrow : public Component
 
     float damage = 1.0;                          ///< Damage on hit.
     float lifetime = 4.0;                        ///< Seconds until the arrow is removed.
-    float velocity = 0.0;                        ///< Unused (see `Physics`).
+    float velocity = 0.0;                        ///< Unused: `Physics::velocity` moves the arrow.
     tg::angle32 angle = 0_deg;                   ///< Unused.
     InstanceHandle shotBy = {std::uint32_t(-1)}; ///< Shooter (credited for kills).
     InstanceHandle target = {std::uint32_t(-1)}; ///< Target; the arrow hits when it gets close to it.
@@ -128,6 +142,6 @@ struct ForeignControl : public Component
 
     std::vector<tg::pos3> waypoints;         ///< Path in world space.
     tg::pos3 currentTarget = tg::pos3::zero; ///< Current waypoint (zero before the first update).
-    int currentIndex = 0;                    ///< Index of the current waypoint; starts after this one.
+    int currentIndex = 0;                    ///< Index of `currentTarget`; the first target is the waypoint after the initial value.
 };
 }

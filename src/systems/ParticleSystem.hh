@@ -14,18 +14,20 @@ namespace gamedev
  * Inspired by https://github.com/TheCherno/OneHourParticleSystem.
  *
  *  - Entities: all instances with a `ParticleEmitter`, which emit continuously.
- *  - Death and hit events (`MonsterDeath`, `PioneerDeath`, `BuildingDestroyed`, `MonsterHit`, `PioneerHit`,
- *    `BuildingHit`) emit bursts at the event subject.
+ *  - Death and hit events (`MonsterDeath`, `PioneerDeath`, `BuildingDestroyed`, `MonsterHit`, `PioneerHit`, `BuildingHit`)
+ *    emit bursts at the event subject.
  *  - Particles live in a pool whose first `mAlive` entries are alive; the pool grows by 20% when it is 80% full.
- *  - `Game::render()` uploads the instance data, and the `RenderSystem` draws the VAO from `GetParticleVAO` with the
- *    `particles` shader.
+ *  - `Game::render()` uploads the instance data, and the `RenderSystem` draws the VAO from `GetParticleVAO` with the `particles` shader.
  */
 class ParticleSystem : public System
 {
 public:
     /**
      * Loads the cube mesh, allocates the pool, defines the burst emitters and registers the event listeners.
+     *
      * Needs an OpenGL context.
+     *
+     * @param ecs Shared ECS.
      */
     void Init(SharedEngineECS& ecs);
 
@@ -33,10 +35,17 @@ public:
      * Adds the entity to the system.
      *
      * TODO: Meant to accept only entities with a `Render` component, but the filter has no effect.
+     *
+     * @param handle Entity with a `ParticleEmitter`.
+     * @param entitySignature Its signature.
      */
     void AddEntity(InstanceHandle& handle, Signature entitySignature);
 
-    /// Resizes the pool to `particleCount` and (re)defines the per-instance attributes on the cube VAO.
+    /**
+     * Resizes the pool and (re)defines the per-instance attributes on the cube VAO.
+     *
+     * @param particleCount New pool size.
+     */
     void SetupParticleCount(int particleCount);
 
     /// Uploads the attributes of the living particles to the instance buffer.
@@ -46,22 +55,38 @@ public:
     glow::SharedVertexArray& GetParticleVAO();
 
     /**
-     * Emits new particles for all emitters, ages and moves the living ones by `elapsed_time` seconds and rebuilds the
-     * instance data. Returns the elapsed time in microseconds.
+     * Emits new particles for all emitters, ages and moves the living ones and rebuilds the instance data.
+     *
+     * TODO: When a particle dies, the one swapped into its slot is skipped (not moved, not drawn) for this update.
+     *
+     * @param elapsed_time Time step in seconds.
+     * @return Elapsed time in microseconds.
      */
     int Update(float elapsed_time);
 
     /**
-     * Binds `framebuffer`, uploads the instance data and draws all living particles. Unused (see `RenderSystem`).
+     * Binds the framebuffer, uploads the instance data and draws all living particles.
      *
-     * The caller must have bound `shader`; the parameter itself is unused.
+     * Unused: `RenderSystem::RenderParticles` draws them.
+     *
+     * @param shader Unused: the caller must have bound the particle shader.
+     * @param framebuffer Target to draw into.
      */
     void RenderInstanced(const glow::UsedProgram& shader, const glow::SharedFramebuffer& framebuffer);
 
-    /// Spawns one particle described by `particleProperties` relative to `xform`.
+    /**
+     * Spawns one particle. Grows the pool by 20% when it is 80% full.
+     *
+     * @param particleProperties Emitter description; positions and velocities are relative to `xform`.
+     * @param xform Transform of the emitting instance (position, scale of offsets, velocity and size).
+     */
     void EmitParticle(const ParticleProperties& particleProperties, transform& xform);
 
-    /// Removes the living particle at pool index `id` by swapping it with the last living one.
+    /**
+     * Removes a living particle by swapping it with the last living one.
+     *
+     * @param id Pool index of the particle, in [0, `mAlive`).
+     */
     void KillParticle(int id);
 
     /// Number of living particles.
@@ -78,7 +103,11 @@ private:
     void Init_BuildingDestroyedParticles();
 
 private:
-    /// Emits a burst at the event subject; the burst type and size depend on the event type.
+    /**
+     * Emits a burst at the event subject; the burst type and size depend on the event type.
+     *
+     * @param e Death, destruction or hit event.
+     */
     void ParticleListener(Event& e);
 
 private:
@@ -95,7 +124,7 @@ private:
     int mAlive = 0;     ///< Number of living particles.
 
     int MAX_PARTICLES = 100000;    ///< Current pool size.
-    int INSTANCE_DATA_LENGTH = 17; ///< Unused (4 * 4 + 1).
+    int INSTANCE_DATA_LENGTH = 17; ///< Instance data length in floats (4 * 4 + 1). Unused.
 
     ParticleProperties mMonsterDeath;      ///< Burst for monster deaths and hits.
     ParticleProperties mPioneerDeath;      ///< Burst for pioneer deaths and hits.

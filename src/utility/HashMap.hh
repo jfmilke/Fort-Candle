@@ -25,77 +25,151 @@ namespace gamedev
  *  - Each instance is stored in every cell its bounding rectangle overlaps.
  *  - Positions outside the map bounds are clamped to the border cells.
  *
- * Used as the ECS-wide spatial hash map (`EngineECS::GetHashMap`, set up by `Terrain::CreateGround`) and as broad
- * phase by the `CollisionSystem`.
+ * Used as the ECS-wide spatial hash map (`EngineECS::GetHashMap`, set up by `Terrain::CreateGround`) and as broad phase by the `CollisionSystem`.
  */
 class Hash2D
 {
 public:
-    /// Sets up a grid of `cellCount` cells covering `bounds` (x/y of `bounds` = world x/z). Does not clear entries.
+    /**
+     * Sets up the grid. Does not clear existing entries.
+     *
+     * @param cellCount Number of cells per axis.
+     * @param bounds Covered area; x/y of `bounds` are world x/z.
+     */
     void Init(tg::size2 cellCount, tg::aabb2 bounds);
 
-    /// Same as above, with the x/z part of 3D `bounds`.
+    /**
+     * Same as above, with the x/z part of 3D bounds.
+     *
+     * @param cellCount Number of cells per axis (x, z).
+     * @param bounds Covered area in world space; y is ignored.
+     */
     void Init(tg::size2 cellCount, tg::aabb3 bounds);
 
     /**
-     * Inserts `identifier` at `translation` with local bounds `dimensions` (only x/z are used).
+     * Inserts an instance into all cells its bounding rectangle overlaps.
+     *
      * Does nothing if the handle is already known, even after `RemoveInstance` (see there).
+     *
+     * @param identifier Instance to insert.
+     * @param translation Its world position (only x/z are used).
+     * @param dimensions Its bounds relative to `translation` (only x/z are used).
      */
     void AddInstance(const InstanceHandle identifier, const tg::vec3& translation, const tg::aabb3& dimensions);
 
-    /// Moves a known instance to `translation` (keeping its bounds).
+    /**
+     * Moves a known instance, keeping its bounds. Does nothing for unknown instances.
+     *
+     * @param identifier Instance to move.
+     * @param translation Its new world position (only x/z are used).
+     */
     void UpdateInstance(const InstanceHandle identifier, const tg::vec3& translation);
 
-    /// Moves a known instance to `translation` and replaces its bounds.
+    /**
+     * Moves a known instance and replaces its bounds. Does nothing for unknown instances.
+     *
+     * @param identifier Instance to move.
+     * @param translation Its new world position (only x/z are used).
+     * @param dimensions Its new bounds relative to `translation` (only x/z are used).
+     */
     void UpdateInstance(const InstanceHandle identifier, const tg::vec3& translation, const tg::aabb3& dimensions);
 
     /**
-     * Removes the instance from all cells.
+     * Removes an instance from all cells.
      *
-     * TODO: Its entry in `mClientMap` is kept, so `AddInstance` ignores a recycled handle; it is only re-inserted by
-     * the next `UpdateInstance`.
+     * TODO: Its entry in `mClientMap` is kept, so `AddInstance` ignores a recycled handle; it is only re-inserted by the next `UpdateInstance`.
+     *
+     * @param identifier Instance to remove; nothing happens for unknown instances.
      */
     void RemoveInstance(const InstanceHandle identifier);
 
     /**
-     * Returns all instances in the cells overlapping the rectangle [min, max] (x/z) around `translation`.
+     * Returns all instances in the cells overlapping a rectangle on the ground plane.
+     *
      * The result may contain instances that are not inside the rectangle.
+     *
+     * @param translation World position the rectangle is relative to.
+     * @param min Minimum corner relative to `translation` (only x/z are used).
+     * @param max Maximum corner relative to `translation` (only x/z are used).
+     * @return Handles of the instances in these cells, each once.
      */
     std::unordered_set<gamedev::InstanceHandle, InstanceHandleHash> FindNear(const tg::vec3& translation, const tg::pos3& min, const tg::pos3& max);
 
-    /// `FindNear` with `bounds` relative to `translation`.
+    /**
+     * `FindNear` with the rectangle given as bounds.
+     *
+     * @param translation World position the rectangle is relative to.
+     * @param bounds Rectangle relative to `translation` (only x/z are used).
+     * @return Handles of the instances in these cells, each once.
+     */
     std::unordered_set<gamedev::InstanceHandle, InstanceHandleHash> FindNear(const tg::vec3& translation, const tg::aabb3& bounds);
 
-    /// `FindNear` for the rectangle `translation` ± (width, depth) of `bounds`.
+    /**
+     * `FindNear` for a rectangle centered on a position.
+     *
+     * @param translation Center of the rectangle in world space.
+     * @param bounds Half extents: `width` along x, `depth` along z.
+     * @return Handles of the instances in these cells, each once.
+     */
     std::unordered_set<gamedev::InstanceHandle, InstanceHandleHash> FindNear(const tg::vec3& translation, const tg::size3& bounds);
 
-    /// Returns all instances in the cell that contains `position`.
+    /**
+     * Returns all instances in the cell that contains a position.
+     *
+     * @param position World position (only x/z are used).
+     * @return Handles of the instances in these cells, each once.
+     */
     std::unordered_set<gamedev::InstanceHandle, InstanceHandleHash> FindNear(const tg::pos3& position);
 
     /// Removes all instances.
     void Clear();
 
 private:
-    /// Cell containing the ground-plane position (world x, z), clamped to the grid.
+    /**
+     * Finds the cell containing a ground-plane position.
+     *
+     * @param spatial_key Position (world x, z).
+     * @return Cell index, clamped to the grid.
+     */
     tg::ipos2 PositionToGrid_(const tg::pos2& spatial_key);
 
-    /// Cell containing the x/z part of `spatial_key`, clamped to the grid.
+    /**
+     * Finds the cell containing the x/z part of a position.
+     *
+     * @param spatial_key World position.
+     * @return Cell index, clamped to the grid.
+     */
     tg::ipos2 PositionToGrid_(const tg::pos3& spatial_key);
 
-    /// String key of a cell. Unused (replaced by `GetIndexID_`).
+    /**
+     * Builds the string key of a cell. Unused: replaced by `GetIndexID_`.
+     *
+     * @param p Cell index.
+     * @return "x.y".
+     */
     std::string Key_(const tg::ipos2& p);
 
-    /// Stores `c` in all cells its rectangle overlaps and records it in `mClientMap`.
+    /**
+     * Stores a client in all cells its rectangle overlaps and records it in `mClientMap`.
+     *
+     * @param[in,out] c Client; its `indicies` are set to the covered cells.
+     */
     void Insert_(Hash2Client& c);
 
-    /// Removes `c` from the cells recorded in `c.indicies`.
+    /**
+     * Removes a client from the cells recorded in its `indicies`.
+     *
+     * @param c Client to remove.
+     */
     void Remove_(Hash2Client& c);
 
     /**
-     * Integer key of a cell.
+     * Computes the integer key of a cell.
      *
-     * TODO: Rows are `mMaxCells.width` (cells - 1) apart, so the last cell of a row shares its key with the first
-     * cell of the next row.
+     * TODO: Rows are `mMaxCells.width` (cells - 1) apart, so the last cell of a row shares its key with the first cell of the next row.
+     *
+     * @param pos Cell index.
+     * @return Key into `mBinMap`.
      */
     int GetIndexID_(tg::ipos2 pos);
 

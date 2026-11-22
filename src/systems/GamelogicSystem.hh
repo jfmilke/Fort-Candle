@@ -14,23 +14,21 @@
 namespace gamedev
 {
 /**
- * All gameplay: resources, building, unit orders and AI, combat, enemy waves and reinforcements, and the
- * fire-dependent screen effects.
+ * All gameplay: resources, building, unit orders and AI, combat, enemy waves and reinforcements, and the fire-dependent screen effects.
  *
- * Entities: all instances with a `Living` component (pioneers and monsters), sorted into people, artisans, soldiers
- * and monsters. Positions are world space (x/z ground plane), times in seconds.
+ * Entities: all instances with a `Living` component (pioneers and monsters), sorted into people, artisans, soldiers and monsters.
+ * Positions are world space (x/z ground plane), times in seconds.
  *
  * Each update:
  *  - moves units along their orders,
  *  - lets artisans produce gold,
  *  - lets attackers find, aim at and attack enemies,
  *  - sends monsters to the bonfire, where they steal firewood,
- *  - burns 0.1 firewood per second. The fire, light and sound of the bonfire, the desaturation and the vignette
- *    follow the amount of firewood.
+ *  - burns 0.1 firewood per second.
+ *    The fire, light and sound of the bonfire, the desaturation and the vignette follow the amount of firewood.
  *
  * The player spends gold through the HUD buttons (`Assign*`, `Upgrade*`, `ConstructHome`, `AddWood`, `Heal`, ...).
- * The game is lost when `GetWood()` drops below zero and won when the supply route is complete (both checked in
- * `Game::gameUI`).
+ * The game is lost when `GetWood()` drops below zero and won when the supply route is complete (both checked in `Game::gameUI`).
  *
  * Collaborators:
  *  - the unit, structure and item factories create instances,
@@ -41,8 +39,15 @@ class GamelogicSystem : public System
 {
 public:
     /**
-     * Stores the ECS, the audio system and the factories, registers the event listeners and starts the ambient sounds
-     * and the music. `globalScale` scales the baked positions (start, reinforcement path).
+     * Stores the ECS, the audio system and the factories, registers the event listeners and starts the ambient sounds and the music.
+     *
+     * @param ecs Shared ECS.
+     * @param as Audio system for all game sounds.
+     * @param uf Factory for units.
+     * @param sf Factory for structures.
+     * @param itf Factory for items (arrows, bows).
+     * @param go Asset manager (mesh bounds).
+     * @param globalScale Scale of the baked positions (camp center, reinforcement path).
      */
     void Init(std::shared_ptr<EngineECS>& ecs,
               std::shared_ptr<AudioSystem>& as,
@@ -58,7 +63,12 @@ public:
     void RemoveEntity(InstanceHandle& handle);
     void RemoveAllEntities();
 
-    /// Advances the game by `dt` seconds (see class description). Returns the elapsed time in microseconds.
+    /**
+     * Advances the game (see class description).
+     *
+     * @param dt Time step in seconds.
+     * @return Elapsed time in microseconds.
+     */
     int Update(float dt);
 
     // ================
@@ -69,18 +79,26 @@ public:
     void AttachTerrain(std::shared_ptr<Terrain>& terrain);
 
     /**
-     * Creates the camp: bonfire, two soldiers and a pioneer, the first fortification, two tents, the reinforcement path
-     * and the enemy spawn points.
+     * Creates the camp: bonfire, two soldiers and a pioneer, the first fortification, two tents, the reinforcement path and the enemy spawn points.
      */
     void SpawnPlayer();
 
-    /// Spawns `number` monsters near random enemy spawn points, heading for the bonfire.
+    /**
+     * Spawns monsters near random enemy spawn points, heading for the bonfire.
+     *
+     * @param number Number of monsters.
+     */
     void SpawnEnemyWave(int number);
 
-    /// Spawns `number` pioneers on the reinforcement path, walking to the camp, unless the camp is full.
+    /**
+     * Spawns pioneers on the reinforcement path, walking to the camp, unless the camp is full.
+     *
+     * @param number Number of pioneers.
+     */
     void SpawnReinforcements(int number);
 
     // Selection/Deselection
+
     /// Selects the unit that receives right-click orders.
     void Select(InstanceHandle selected);
 
@@ -88,16 +106,25 @@ public:
     void Deselect();
 
     // Initiate Action
-    /// Orders the selected unit to move to `world_position`.
+
+    /**
+     * Orders the selected unit to move to a position.
+     *
+     * @param world_position Move target in world space.
+     */
     void Rightclick(tg::pos3 world_position);
 
     /**
-     * Orders the selected unit to approach `handle` and, if it is a soldier and `handle` an enemy, to attack it.
+     * Orders the selected unit to approach an instance and, if it is a soldier and the instance an enemy, to attack it.
+     *
      * Briefly outlines the target in red.
+     *
+     * @param handle Right-clicked instance.
      */
     void Rightclick(InstanceHandle handle);
 
     // Getters for UI
+
     /// Number of pioneers (people, artisans and soldiers).
     int GetPioneerCount();
 
@@ -207,10 +234,19 @@ public:
     float GetDesaturation();
 
 private:
-    /// Subtracts `gold` if affordable; returns false otherwise.
+    /**
+     * Pays a price if affordable.
+     *
+     * @param gold Price.
+     * @return True if the gold was subtracted, false if there is not enough.
+     */
     bool Pay(int gold);
 
-    /// Burns 0.1 firewood per second.
+    /**
+     * Burns 0.1 firewood per second (on every update that crosses a full second).
+     *
+     * @param dt Time step in seconds.
+     */
     void ConsumeWood(float dt);
 
     /**
@@ -225,105 +261,224 @@ private:
     /// Empty.
     void UpdateDesaturation();
 
-    /// Orders `subject` to move to `moveTo`.
+    /**
+     * Orders a unit to move; the heading and velocity are re-applied on the next update.
+     *
+     * @param subject `Living` component of the unit.
+     * @param moveTo Move target in world space.
+     */
     void SetMoveOrder(Living* subject, tg::vec3 moveTo);
 
     /// Makes `subject` face `focusHandle`.
     void SetFocus(Living* subject, InstanceHandle focusHandle);
 
-    /// Turns the unit towards its move target and sets its velocity; stops it when it has arrived.
+    /**
+     * Turns the unit towards its move target and sets its velocity; stops it when it has arrived.
+     *
+     * @param instance Data of the unit.
+     * @param subject Its `Living` component.
+     * @param dt Time step in seconds.
+     */
     void UpdateMoveOrder(const Instance& instance, Living* subject, float dt);
 
     /**
      * Turns the unit towards its focus instance.
      *
      * TODO: A dead focus is replaced by handle 1 instead of the invalid handle.
+     *
+     * @param instance Data of the unit.
+     * @param subject Its `Living` component.
      */
     void UpdateFocus(const Instance& instance, Living* subject);
 
-    /// Monster AI: walk to the bonfire and steal firewood there unless attacking.
+    /**
+     * Monster AI: walk to the bonfire and steal firewood there unless attacking. Does nothing for pioneers.
+     *
+     * @param instance Data of the unit.
+     * @param subject Its `Living` component.
+     * @param dt Time step in seconds.
+     */
     void UpdateMonster(const Instance& instance, Living* subject, float dt);
 
-    /// Removes `dt / 2` firewood (a monster at the bonfire).
+    /**
+     * Removes `dt / 2` firewood (a monster at the bonfire).
+     *
+     * @param instance Unused.
+     * @param dt Time step in seconds.
+     */
     void StealFirewood(const Instance& instance, float dt);
 
-    /// Moves a unit with `ForeignControl` along its waypoints and removes the component at the end.
+    /**
+     * Moves a unit with `ForeignControl` along its waypoints and removes the component at the end.
+     *
+     * @param instance Data of the unit; nothing happens without a `ForeignControl` component.
+     * @param subject Its `Living` component.
+     */
     void UpdateForeignControl(const Instance& instance, Living* subject);
 
     // Attacking
+
     /**
      * Every 30 updates without a target: soldiers pick a monster in weapon range, monsters pick a pioneer near them
      * (weapon range + 1) and approach it.
+     *
+     * @param instance Data of the unit.
+     * @param lifeform Its `Living` component.
+     * @param attacker Its `Attacker` component.
      */
     void LookForEnemy(const Instance& instance, Living* lifeform, Attacker* attacker);
 
-    /// Keeps a soldier stationed in a tower from moving.
+    /**
+     * Keeps a soldier stationed in a tower from moving.
+     *
+     * @param instance Data of the unit; nothing happens without an `InTower` component.
+     * @param lifeform Its `Living` component.
+     * @param attacker Its `Attacker` component.
+     */
     void UpdateTowerSoldier(const Instance& instance, Living* lifeform, Attacker* attacker);
 
-    /// Sets `target` as attack target and focus.
+    /**
+     * Sets the attack target, which is also the unit's focus.
+     *
+     * @param subject `Living` component of the unit.
+     * @param attacker Its `Attacker` component.
+     * @param target Instance to attack.
+     */
     void SetAttackOrder(Living* subject, Attacker* attacker, InstanceHandle target);
 
     /**
-     * Drops dead or out-of-range targets; otherwise draws and aims the weapon and attacks when the cooldown is over and
-     * the unit faces the target.
+     * Drops dead or out-of-range targets; otherwise draws and aims the weapon and attacks when the cooldown is over and the unit faces the target.
+     *
+     * @param instance Data of the unit.
+     * @param subject Its `Living` component.
+     * @param attacker Its `Attacker` component.
+     * @param dt Time step in seconds.
      */
     void UpdateAttackOrder(const Instance& instance, Living* subject, Attacker* attacker, float dt);
 
-    /// Creates (bows only) and shows the weapon.
+    /**
+     * Creates (bows only) and shows the weapon.
+     *
+     * @param attacker `Attacker` component of the unit.
+     */
     void EquipWeapon(Attacker* attacker);
 
-    /// Hides the weapon. Unused (sheathing is disabled).
+    /**
+     * Hides the weapon. Unused: sheathing is disabled.
+     *
+     * @param attacker `Attacker` component of the unit.
+     */
     void SheathWeapon(Attacker* attacker);
 
-    /// Keeps the weapon at the unit's side.
+    /**
+     * Keeps the weapon at the unit's side.
+     *
+     * @param instance Data of the unit.
+     * @param attacker Its `Attacker` component; nothing happens without a weapon instance.
+     */
     void MoveWeapon(const Instance& instance, Attacker* attacker);
 
-    /// Holds the bow in front of the unit, tilted for shooting.
+    /**
+     * Holds the bow in front of the unit, tilted for shooting.
+     *
+     * @param attacker `Attacker` component of the unit; nothing happens without a weapon instance.
+     */
     void AimWeapon(Attacker* attacker);
 
     /**
      * Computes the arrow trajectory to hit the (moving) target: horizontal intercept and fake arc height.
-     * Returns `xMax <= 0` if there is no intercept.
+     *
+     * The target speed is estimated from its `Physics::lastPosition`.
+     *
+     * @param attacker `Attacker` component of the soldier, with a bow and an attack target.
+     * @param dt Time step in seconds (for the target speed).
+     * @return The trajectory; `xMax` is 0 if there is no intercept.
      */
     arcEq GetArrowArc(Attacker* attacker, float dt);
 
-    /// Creates an arrow with a smoke trail flying along `GetArrowArc`.
+    /**
+     * Creates an arrow with a smoke trail flying along `GetArrowArc`.
+     *
+     * @param attacker `Attacker` component of the soldier, with a bow and an attack target.
+     * @param dt Time step in seconds (for `GetArrowArc`).
+     */
     void ShootArrow(Attacker* attacker, float dt);
 
-    /// Deals claw damage to the target pioneer or structure; kills or destroys it at zero health.
+    /**
+     * Deals claw damage to the target pioneer or structure; kills or destroys it at zero health.
+     *
+     * @param attacker `Attacker` component of the monster, with an attack target.
+     * @param dt Unused.
+     */
     void AttackClaw(Attacker* attacker, float dt);
 
-    /// Sends the death event, plays the death sound and marks `killedHandle` for destruction.
+    /**
+     * Sends the death event, plays the death sound and marks the unit for destruction.
+     *
+     * @param killedHandle Killed unit.
+     * @param killedPioneer True for a pioneer (`PioneerDeath`), false for a monster (`MonsterDeath`).
+     * @param killerHandle Attacker; the sender of the death event.
+     */
     void Kill(InstanceHandle killedHandle, bool killedPioneer, InstanceHandle killerHandle);
 
-    /// Sends the destruction event; walls become `Prototype` (hidden, repairable), other structures are removed.
+    /**
+     * Sends the destruction event; walls become `Prototype` (hidden, repairable), other structures are removed.
+     *
+     * @param destroyedHandle Destroyed structure.
+     * @param destroyerHandle Attacker; its attack target is cleared.
+     */
     void Destroy(InstanceHandle destroyedHandle, InstanceHandle destroyerHandle);
 
     // Production
-    /// Picks a random production building for the artisan `handle`. Unused (there are none).
+
+    /**
+     * Picks a random production building for an artisan.
+     *
+     * Unused: `mProductionBuildings` is never filled, so it would always fail.
+     *
+     * @param handle Artisan.
+     * @return False if there is no production building.
+     */
     bool LookForProduction(InstanceHandle handle);
 
-    /// Adds a work particle emitter to an idle artisan. Unused.
+    /**
+     * Adds a work particle emitter to an idle artisan. Unused.
+     *
+     * @param handle Artisan.
+     */
     void StartProduction(InstanceHandle handle);
 
     /**
      * Stops the artisan's production. Unused.
      *
      * TODO: Reads the `Producer` right after removing it (asserts).
+     *
+     * @param handle Artisan.
      */
     void StopProduction(InstanceHandle handle);
 
-    /// Adds the artisan's gold income for `dt` seconds (more with forges).
+    /**
+     * Adds the artisan's gold income: `3 * income * (1 + 2 * forges)` per second.
+     *
+     * @param p `Producer` component of the artisan.
+     * @param dt Time step in seconds.
+     */
     void Produce(Producer* p, float dt);
 
     // Buildings
+
     /// Builds a forge on a random free outer slot, facing the camp center.
     void SpawnForge();
 
-    /// Builds a tent on a random free inner slot; outlined if `highlighted`.
+    /**
+     * Builds a tent on a random free inner slot.
+     *
+     * @param highlighted Outline the new tent for a moment.
+     */
     void SpawnHouse(bool highlighted = true);
 
     // Fortifications
+
     /// Replaces the fortification with a ring of stone walls, pillars and a gate.
     void SpawnStoneWalls();
 
@@ -343,11 +498,19 @@ private:
      * Moves the vignette and desaturation towards their targets.
      *
      * TODO: `Update` calls it once per entity, so the effects change faster the more units there are.
+     *
+     * @param dt Time step in seconds.
      */
     void UpdateEffects(float dt);
 
     // Misc
-    /// True if `handle` is inside the camp circle. Unused.
+
+    /**
+     * Tests whether an instance is inside the camp circle. Unused.
+     *
+     * @param handle Live instance.
+     * @return True if its position is inside `mHome`.
+     */
     bool WithinFort(InstanceHandle handle);
 
     /// Fills the free inner (tents) and outer (forges) building slots on rings around the camp center.
@@ -368,27 +531,55 @@ private:
     /// Builds a tent at a random free spot in the camp. Unused.
     InstanceHandle TryConstructHome();
 
-    /// Creates `object_id` at `position` with random rotation and scale (1.0-1.4).
+    /**
+     * Creates a structure with random rotation about the y axis and a random uniform scale factor (1.0-1.4).
+     *
+     * @param position World position.
+     * @param object_id Structure preset name.
+     * @return The new instance.
+     */
     InstanceHandle SpawnObjectRandomly(tg::pos3 position, std::string object_id);
 
     /**
-     * Tries 20 random spots in the camp for `object_id`. Unused.
+     * Tries 20 random spots in the camp for a structure. Unused.
      *
-     * TODO: The overlap test compares local-space bounds, ignoring the positions.
+     * TODO: The overlap test compares the bounds relative to each instance's position, ignoring the positions.
+     *
+     * @param object_id Structure preset name.
+     * @return The new instance, or an invalid handle if no spot was free.
      */
     InstanceHandle TryConstructObject(std::string object_id);
 
-    /// Like `TryConstructObject` with a random preset of `object_ids`. Only used by the unused `TryConstructHome`.
+    /**
+     * Like `TryConstructObject` with a random preset. Unused: only the unused `TryConstructHome` calls it.
+     *
+     * TODO: Same overlap test, and it uses the bounds of the first preset for all of them.
+     *
+     * @param object_ids Structure preset names to choose from.
+     * @return The new instance, or an invalid handle if no spot was free.
+     */
     InstanceHandle TryConstructRandomObject(std::vector<std::string> object_ids);
 
-    /// Fades out temporary outlines and drops outlines of dead instances.
+    /**
+     * Fades out temporary outlines and drops outlines of dead instances.
+     *
+     * @param dt Time step in seconds.
+     */
     void UpdateOutlines(float dt);
 
 private:
-    /// `StaticCollision` listener: stops units that reached their target; monsters attack the structure they hit.
+    /**
+     * `StaticCollision` listener: stops units that reached their target; monsters attack the structure they hit.
+     *
+     * @param e Collision event; the sender is the structure, the subject the unit.
+     */
     void CollisionListener(Event& e);
 
-    /// `ArrowHit` listener: damages the target, kills it at zero health, removes the arrow.
+    /**
+     * `ArrowHit` listener: damages the target, kills it at zero health, removes the arrow.
+     *
+     * @param e Hit event; the sender is the arrow, the subject its target.
+     */
     void ArrowListener(Event& e);
 
 public:
@@ -409,7 +600,7 @@ public:
 private:
     std::vector<InstanceHandle> mWalls;               ///< Current fortification instances.
     std::vector<InstanceHandle> mProductionBuildings; ///< Never filled.
-    std::vector<InstanceHandle> mDwellings;           ///< Tents built by `TryConstructHome` (unused).
+    std::vector<InstanceHandle> mDwellings;           ///< Tents built by `TryConstructHome`. Unused.
     std::vector<InstanceHandle> mTowers;              ///< Supply route towers (level 2).
 
     std::vector<InstanceHandle> mUnits;     ///< Starting units (not updated).
@@ -429,7 +620,7 @@ private:
     float mFireWood = 25;        ///< Firewood.
     int mFortificationLevel = 0; ///< Number of fortification upgrades built.
     int mFireLevel = 0;          ///< Fire level 0-6 derived from the firewood.
-    int mMaxPioneers = 0;        ///< Unused (see `GetMaxPioneers`).
+    int mMaxPioneers = 0;        ///< Unused: `GetMaxPioneers` computes the capacity from `mHomes`.
     int mForges = 0;             ///< Number of forges.
     int mHomes = 0;              ///< Number of tents.
     int mSupplyLevel = 0;        ///< See `GetSupplyLevel`.

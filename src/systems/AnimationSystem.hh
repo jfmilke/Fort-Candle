@@ -30,21 +30,47 @@ public:
     void RemoveAllEntities();
 
     /**
-     * Advances arrows and animations by `dt` seconds. Expired arrows are marked for destruction.
-     * Returns the elapsed time in microseconds.
+     * Advances arrows and animations. Expired arrows are marked for destruction.
+     *
+     * @param dt Time step in seconds.
+     * @return Elapsed time in microseconds.
      */
     int Update(float dt);
 
-    /// Applies the pending rotations of `subject` (quaternion target and eased x/y/z angles) to `instance`.
+    /**
+     * Applies the pending rotations (quaternion target and eased x/y/z angles).
+     *
+     * @param instance Instance to rotate.
+     * @param subject Its `Animated` component; the remaining angles are reduced.
+     * @param dt Time step in seconds.
+     */
     void Rotate(Instance& instance, Animated* subject, float dt);
 
-    /// Moves the uniform scale of `instance` towards `subject->scale` by at most `dt`.
+    /**
+     * Moves the scale towards `Animated::scale` by at most 1 per second.
+     *
+     * The same amount is added to all three axes; the z scale decides when the target is reached.
+     *
+     * @param instance Instance to scale.
+     * @param subject Its `Animated` component; `scaleAnim` is reset at the target.
+     * @param dt Time step in seconds.
+     */
     void Scale(Instance& instance, Animated* subject, float dt);
 
-    /// Empty.
+    /**
+     * Does nothing. Unused.
+     *
+     * @param subject Unused.
+     * @param dt Unused.
+     */
     void Wiggle(Living* subject, float dt);
 
-    /// Pitches an arrow so it points along the slope of its arc (`Physics::arc_ySlope`).
+    /**
+     * Pitches an arrow so it points along the slope of its arc.
+     *
+     * @param instance Arrow instance to rotate about its local x axis.
+     * @param physics Its `Physics` component (`arc_ySlope`).
+     */
     void AlignTrajectory(Instance& instance, Physics* physics);
 
 private:

@@ -18,7 +18,11 @@ using namespace std;
 
 typedef unsigned long DWORD;
 
-/// Layout of a WAV "fmt " chunk (legacy loader, unused).
+/**
+ * Layout of a WAV "fmt " chunk.
+ *
+ * Unused: only meant for the legacy loader, which is not implemented.
+ */
 struct FMTCHUNK
 {
     short format;
@@ -66,40 +70,61 @@ public:
     double GetLength();
 
     /**
-     * Loads `data/audio/<n>` into a new OpenAL buffer and registers it under `n`, unless already registered.
+     * Loads a sound into a new OpenAL buffer and registers it under its file name, unless already registered.
+     *
      * Files without `.wav` extension are registered as empty sounds and log an error.
+     * A WAV file that cannot be read throws (see `LoadFromWAV2`).
+     *
+     * @param n File name in `data/audio/`.
      */
     static void AddSound(string n);
 
     /// Returns the sound registered under `name`, or nullptr.
     static Sound* GetSound(string name);
 
-    /// Deletes all registered sounds and their buffers (TODO: the registry keeps the dangling pointers).
+    /**
+     * Deletes all registered sounds and their buffers. Unused.
+     *
+     * TODO: The registry keeps the dangling pointers.
+     */
     static void DeleteSounds();
 
 protected:
     Sound();
     virtual ~Sound(void);
 
-    /// Legacy WAV loader; declared but not implemented.
+    /**
+     * Legacy WAV loader; declared but not implemented.
+     *
+     * @param filename Path of the WAV file.
+     */
     void LoadFromWAV(string filename);
 
     /**
      * Decodes a WAV file to 16-bit samples with dr_wav into `mPcmData` and sets channels, sample rate and length.
+     *
      * Throws a `const char*` if the file cannot be read.
+     *
+     * @param filename Path of the WAV file, relative to the working directory.
      */
     void LoadFromWAV2(string filename);
 
-    /// Reads a RIFF chunk header (4-character name and size) from `file`. Only used by the legacy loader.
+    /**
+     * Reads a RIFF chunk header from a file. Unused: only meant for the legacy loader, which is not implemented.
+     *
+     * @param file Open WAV file, positioned at a chunk header.
+     * @param[out] name 4-character chunk name.
+     * @param[out] size Chunk size in bytes.
+     */
     void LoadWAVChunkInfo(ifstream& file, string& name, unsigned int& size);
 
-    char* mData;    ///< Legacy loader data (unused, nullptr).
+    char* mData;    ///< Legacy loader data, always nullptr. Unused.
     ALuint mBuffer; ///< OpenAL buffer.
 
-    float mFreqRate;        ///< Legacy loader sample rate (unused).
+    float mFreqRate;        ///< Legacy loader sample rate. Unused.
     double mSoundLength;    ///< Duration in seconds.
-    unsigned int mBitRate;  ///< Legacy loader bits per sample (unused).
-    unsigned int mSize;     ///< Legacy loader data size (unused).
+    unsigned int mBitRate;  ///< Legacy loader bits per sample. Unused.
+    unsigned int mSize;     ///< Legacy loader data size. Unused.
     unsigned int mChannels; ///< Number of channels.
 
     unsigned int mSampleRate = 0;         ///< Samples per second and channel.

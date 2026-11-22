@@ -375,6 +375,8 @@ void Game::render(float elapsedSeconds)
     auto runtime = getCurrentTime();
 
     // Capture mouse clicks in worldspace
+    // TODO: Unlike the selection above, not limited to state != MENU: right clicks next to the main menu still give
+    // orders (or spawn in editor mode).
     if (!ImGui::GetIO().WantCaptureMouse && input().isMouseButtonReleased(GLFW_MOUSE_BUTTON_2))
     {
         auto const mousePos = input().getMousePosition();
@@ -1167,6 +1169,7 @@ void Game::gameUI()
                 ImGui::Text("Construct Home: %i g", mGamelogicSys->GetHomePrice());
                 ImGui::Text("Construct Artisans Place: %i g", mGamelogicSys->GetProductionPrice());
                 auto supplyLevel = mGamelogicSys->GetSupplyLevel();
+                // TODO: There are three upgrades, so the last one shows as "3/2".
                 if (supplyLevel < 3)
                     ImGui::Text("Supply Route (%i/2): %i g", mGamelogicSys->GetSupplyLevel() + 1, mGamelogicSys->GetSupplyPrice());
                 ImGui::Text("Upgrade Fortifications: %i g", mGamelogicSys->GetFortificationPrice());
