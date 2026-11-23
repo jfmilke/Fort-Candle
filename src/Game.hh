@@ -30,10 +30,13 @@
 #include "factories/NatureFactory.hh"
 #include "factories/ItemFactory.hh"
 
-#include "benchmark/Benchmark.hh"
+#include "GameHooks.hh"
+#include "GameSettings.hh"
+#include "ScenarioActions.hh"
+#include "profiling/Profiler.hh"
 
-#include <chrono>
 #include <memory>
+#include <optional>
 
 /// Top-level game state, switched by the main menu, Escape and P.
 enum GameState
@@ -53,10 +56,16 @@ enum GameState
  *  - `render()` handles mouse/keyboard input, passes the per-frame state to the `RenderSystem` and renders.
  *  - `onGui()` builds the menus, the in-game HUD and, in editor mode (key E), the debug, editor and spawn windows.
  *
- * In benchmark mode (`setBenchmark`, from `--benchmark`), the game starts straight into play with a fixed seed, vsync off and no input,
- * and reports its timings to a `benchmark::Runner`, which ends the game when the scenario is done.
+ * Every run measures its startup phases, system updates, render, GPU time and frame interval with a `profiling::Profiler`;
+ * the debug UI shows the latest values.
+ *
+ * Outside code controls a run through two seams, both set at construction:
+ *  - `GameSettings`: how the game starts (seed, vsync, input, straight into play, daily waves).
+ *  - `GameHooks` (optional, not owned): notified at startup, after every played tick and at shutdown.
+ *    It gets the profiler and the gameplay commands of `ScenarioActions`, which `Game` implements privately.
+ *    `benchmark::Session` uses this to play scripted scenarios.
  */
-class Game : public glow::glfw::GlfwApp
+class Game : public glow::glfw::GlfwApp, private gamedev::ScenarioActions
 {
 private:
 
@@ -120,17 +129,6 @@ private:
     bool mEnableFreeFlyCam = false;       ///< Free-fly camera instead of the strategy camera.
 
 private:
-    // Debug: system update times of the last tick in milliseconds
-    float mTime_PhysicsSys = 0.0;     ///< `PhysicsSystem`.
-    float mTime_CollisionSys = 0.0;   ///< `CollisionSystem`.
-    float mTime_EnvironmentSys = 0.0; ///< `EnvironmentSystem`.
-    float mTime_LightSys = 0.0;       ///< `LightSystem`.
-    float mTime_ParticleSys = 0.0;    ///< `ParticleSystem`.
-    float mTime_GamelogicSys = 0.0;   ///< `GamelogicSystem`.
-    float mTime_AnimationSys = 0.0;   ///< `AnimationSystem`.
-    float mTime_CleanSys = 0.0;       ///< `CleanupSystem`.
-    float mTime_AllSys = 0.0;         ///< Everything that runs only while playing (physics to cleanup, with the waves).
-
     // Shadows
     int mPointShadowResolution = 1024; ///< Edge length of the point shadow cube map faces.
     int mDirShadowResolution = 1024;   ///< Edge length of the sun shadow map.
@@ -224,24 +222,56 @@ private:
     int frameControl = 0;                                                                             ///< Counts simulation ticks. Unused.
     unsigned int attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2}; ///< Unused.
 
-    // Benchmark
-    std::unique_ptr<gamedev::benchmark::Runner> mBenchmark; ///< Set in benchmark mode only.
+    // Launch
+    gamedev::GameSettings mSettings;      ///< How the game starts and runs.
+    gamedev::GameHooks* mHooks = nullptr; ///< Observer of the run (e.g. a benchmark), or nullptr; not owned.
+
+    // Profiling
+
+    /// Zones of `mProfiler`, in the order of the debug UI and benchmark results.
+    struct ProfileZones
+    {
+        // Startup phases of `init` (once)
+
+        gamedev::profiling::ZoneId window; ///< Window, GL context and ImGui.
+        gamedev::profiling::ZoneId engine; ///< ECS, systems, factories, terrain and render resources.
+        gamedev::profiling::ZoneId assets; ///< Mesh scan and preset registration.
+        gamedev::profiling::ZoneId world;  ///< Start layout (`.fac` files) and player.
+
+        // Per tick
+
+        gamedev::profiling::ZoneId update;      ///< The whole `update` tick (all systems and the wave logic).
+        gamedev::profiling::ZoneId audio;       ///< `AudioSystem::Update`.
+        gamedev::profiling::ZoneId particles;   ///< `ParticleSystem::Update` (not while particles are off).
+        gamedev::profiling::ZoneId lights;      ///< `LightSystem::Update`.
+        gamedev::profiling::ZoneId physics;     ///< `PhysicsSystem::Update`.
+        gamedev::profiling::ZoneId collision;   ///< `CollisionSystem::Update`.
+        gamedev::profiling::ZoneId environment; ///< `EnvironmentSystem::Update`.
+        gamedev::profiling::ZoneId gamelogic;   ///< `GamelogicSystem::Update`.
+        gamedev::profiling::ZoneId animation;   ///< `AnimationSystem::Update`.
+        gamedev::profiling::ZoneId cleanup;     ///< `CleanupSystem::Update`.
+
+        // Per frame
+
+        gamedev::profiling::ZoneId render; ///< CPU time in `render`: submitting the GL work, plus driver waits when the GPU is the bottleneck.
+        gamedev::profiling::ZoneId gpu;    ///< GPU time of `render` (glow-extras' GPU timer), reported one frame late.
+        gamedev::profiling::ZoneId frame;  ///< Time between two frame starts: the frame rate the whole game reaches.
+    };
+
+    gamedev::profiling::Profiler mProfiler;                               ///< Timings of this run.
+    ProfileZones mZones;                                                  ///< Zones of `mProfiler`.
+    std::optional<gamedev::profiling::Clock::time_point> mLastFrameStart; ///< Start of the previous frame.
 
 
     // ctor
 public:
-    /// Creates the app with the ImGui integration of `GlfwApp`.
-    Game();
-
     /**
-     * Switches to benchmark mode; call before `run()`.
+     * Creates the app with the ImGui integration of `GlfwApp` and registers the profiler zones.
      *
-     * @param options Benchmark settings, with a scenario name checked by `benchmark::ParseCommandLine`.
+     * @param settings How the game starts and runs.
+     * @param hooks Observer of the run, or nullptr; not owned, must outlive `run()`.
      */
-    void setBenchmark(gamedev::benchmark::Options options);
-
-    /// The benchmark of this run, or nullptr if this is a normal game.
-    gamedev::benchmark::Runner const* getBenchmark() const { return mBenchmark.get(); }
+    explicit Game(gamedev::GameSettings settings = {}, gamedev::GameHooks* hooks = nullptr);
 
     // events
 public:
@@ -257,7 +287,10 @@ public:
      */
     void init() override;
 
-    /// Called at the start of each frame, after input polling (local glow-extras patch, see CLAUDE.md): starts a new statistics frame.
+    /**
+     * Called at the start of each frame, after input polling (local glow-extras patch, see CLAUDE.md):
+     * starts a new statistics frame and records the frame interval and the GPU time of the previous frame.
+     */
     void onFrameStart() override;
 
     /**
@@ -267,13 +300,15 @@ public:
      *  - while playing: all other simulation systems, the daily enemy waves (day + 3 monsters) and reinforcements (day / 2 + 2 pioneers),
      *    and the deferred destruction (`CleanupSystem`, last).
      *
+     * Then, if a tick was played, notifies `GameHooks::OnTickEnd` and closes the window if it asks to.
+     *
      * @param elapsedSeconds Fixed time step in seconds (1/60).
      */
     void update(float elapsedSeconds) override;
 
     /**
      * Called once per frame (variable timestep):
-     * camera, mouse/keyboard input (`processInput`, not in benchmark mode), renderer state, and rendering.
+     * camera and mouse/keyboard input (`processInput`; only if `GameSettings::inputEnabled`), renderer state, and rendering.
      *
      * Cursor capture for camera rotation (`setCursorMode`) takes effect at the start of the next frame,
      * when glow-extras applies it in `updateInput()`.
@@ -286,7 +321,10 @@ public:
     /// Called once per frame to build the UI: main menu, HUD and dialogs, or the editor windows.
     void onGui() override;
 
-    /// Releases the statistics, all instances, the factories, the systems and the ECS while the GL context still exists.
+    /**
+     * Notifies `GameHooks::OnClosing`, then releases the statistics, all instances, the factories, the systems and the ECS
+     * while the GL context still exists.
+     */
     void onClose() override;
 
     /**
@@ -334,30 +372,25 @@ public:
     void processInput();
 
     /**
-     * Runs one system update and measures it, for the debug timings and, in benchmark mode, the benchmark.
+     * Registers the zones of `Game` in a profiler.
      *
-     * @param channel Benchmark channel of the system.
-     * @param update Calls the system's `Update`.
-     * @return Duration in milliseconds.
+     * @param profiler Profiler to register in.
+     * @return The registered zones.
      */
-    template <class Fn>
-    float timeSystem(gamedev::benchmark::Channel channel, Fn&& update)
-    {
-        auto const start = gamedev::benchmark::Runner::Clock::now();
-        update();
-        auto const duration = gamedev::benchmark::Runner::Clock::now() - start;
-
-        if (mBenchmark)
-            mBenchmark->Record(channel, duration);
-        return std::chrono::duration<float, std::milli>(duration).count();
-    }
+    static ProfileZones registerProfileZones(gamedev::profiling::Profiler& profiler);
 
     /**
-     * Benchmark mode: records the tick, runs the scenario and, after the last tick, writes the results and closes the window.
+     * Runs the systems and the wave logic of one 60 Hz tick (see `update`).
      *
-     * @param tickStart When `update` started.
+     * @param elapsedSeconds Fixed time step in seconds (1/60).
      */
-    void endBenchmarkTick(gamedev::benchmark::Runner::Clock::time_point tickStart);
+    void updateSystems(float elapsedSeconds);
+
+    /// Where the game stands: won, lost or still running.
+    gamedev::GameOutcome outcome() const;
+
+    /// The GL renderer and the framebuffer size.
+    gamedev::RunEnvironment runEnvironment() const;
 
     /// Stores the preset names shown in the editor's spawn menu.
     void fillSpawnMenu(std::vector<std::string> nature, std::vector<std::string> items, std::vector<std::string> units, std::vector<std::string> structures);
@@ -460,4 +493,20 @@ public:
 
     /// Leaves the menu paused, behind the intro dialog (which unpauses). Does not reset the world (see TODO).
     void newGame();
+
+private:
+    // ScenarioActions, for GameHooks (documented there); forwarded to the GamelogicSystem
+
+    void SpawnEnemyWave(int monsters) override;
+    void SpawnReinforcements(int pioneers) override;
+    void SetDailyWaves(bool enabled) override; // sets mHoldSpawns
+    void AddGold(int amount) override;
+    void ConstructHome() override;
+    void UpgradeProduction() override;
+    void BuyWood() override;
+    void AssignArtisan() override;
+    void AssignSoldier() override;
+    void UpgradeFortifications() override;
+    void RepairFortifications() override;
+    void UpgradeSupply() override;
 };

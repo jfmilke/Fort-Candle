@@ -1,53 +1,66 @@
 #include "Game.hh"
-#include "benchmark/Benchmark.hh"
+#include "app/CommandLine.hh"
+#include "benchmark/Session.hh"
 
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <vector>
 
-// Exit codes: 0 success, 1 bad command line or working directory, 2 benchmark aborted (window closed), 3 benchmark results not written
+namespace
+{
+/// Process exit codes (also listed by `--help`).
+enum class ExitCode : int
+{
+    Success = 0,           ///< Normal game ended, or benchmark results written.
+    BadLaunch = 1,         ///< Invalid command line or wrong working directory.
+    BenchmarkAborted = 2,  ///< The window was closed before the benchmark finished.
+    ResultsNotWritten = 3, ///< The benchmark finished, but its result file could not be written.
+};
+
+ExitCode ToExitCode(gamedev::benchmark::Session::Status status)
+{
+    using Status = gamedev::benchmark::Session::Status;
+    switch (status)
+    {
+    case Status::Completed: return ExitCode::Success;
+    case Status::WriteFailed: return ExitCode::ResultsNotWritten;
+    case Status::Running:
+    case Status::Aborted: break;
+    }
+    return ExitCode::BenchmarkAborted;
+}
+}
+
 int main(int argc, char** argv)
 {
     std::vector<char const*> const args(argv, argv + argc);
-    auto const request = gamedev::benchmark::ParseCommandLine(args);
-    if (!request)
+    auto const launch = gamedev::app::ParseCommandLine(args);
+    if (!launch)
     {
-        std::cerr << "Error: " << request.error() << "\nRun with --help for the usage.\n";
-        return EXIT_FAILURE;
+        std::cerr << "Error: " << launch.error() << "\nRun with --help for the usage.\n";
+        return int(ExitCode::BadLaunch);
     }
 
-    if (request->showHelp)
+    if (launch->showHelp)
     {
-        gamedev::benchmark::PrintUsage(std::cout);
-        return EXIT_SUCCESS;
+        gamedev::app::PrintUsage(std::cout);
+        return int(ExitCode::Success);
     }
 
-    // make sure the executable is run from the correct path
-    // (this way we can find all the resources in the data folder)
+    // all asset paths are relative to a direct subfolder of the repository root, e.g. bin/
     if (!std::filesystem::exists("../data"))
     {
         std::cerr << "Working directory must be set to 'bin/'" << std::endl;
-        return EXIT_FAILURE;
+        return int(ExitCode::BadLaunch);
     }
 
-    // create an instance of the game class
-    Game game;
-    if (request->benchmark)
-        game.setBenchmark(*request->benchmark);
+    std::optional<gamedev::benchmark::Session> benchmark;
+    if (launch->benchmark)
+        benchmark.emplace(*launch->benchmark);
 
-    // run the actual game, i.e. initialize and enter the main loop
-    game.run();
+    Game game(benchmark ? benchmark->Settings() : gamedev::GameSettings{}, benchmark ? &*benchmark : nullptr);
+    game.run(); // initializes and runs the main loop until the window closes
 
-    if (auto const benchmark = game.getBenchmark())
-    {
-        if (!benchmark->IsFinished())
-        {
-            std::cerr << "Benchmark aborted: the window was closed before all ticks were played." << std::endl;
-            return 2;
-        }
-        if (!benchmark->WroteResults())
-            return 3;
-    }
-
-    return EXIT_SUCCESS;
+    return int(benchmark ? ToExitCode(benchmark->GetStatus()) : ExitCode::Success);
 }

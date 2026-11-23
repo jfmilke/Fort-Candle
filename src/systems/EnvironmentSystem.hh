@@ -40,9 +40,8 @@ public:
      * Advances the game time, counts days (`mNewDay`) and interpolates the sun.
      *
      * @param dt Time step in real seconds.
-     * @return Elapsed time in microseconds.
      */
-    int Update(float dt);
+    void Update(float dt);
 
     /// Sets how many real minutes a game day lasts.
     void SetMinutesPerDay(float gameMinutes);

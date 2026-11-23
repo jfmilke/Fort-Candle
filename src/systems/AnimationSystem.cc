@@ -31,10 +31,8 @@ void gamedev::AnimationSystem::Init(EngineECS& ecs) {
     mECS = &ecs;
 }
 
-int gamedev::AnimationSystem::Update(float dt)
+void gamedev::AnimationSystem::Update(float dt)
 {
-    auto t0 = std::chrono::steady_clock::now();
-
     for (const auto& handle : mArrows)
     {
         auto arrow = mECS->TryGetComponent<Arrow>(handle);
@@ -79,9 +77,6 @@ int gamedev::AnimationSystem::Update(float dt)
         Rotate(instance, animation, dt);
         Scale(instance, animation, dt);
     }
-
-    auto tn = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::microseconds>(tn - t0).count();
 }
 
 void gamedev::AnimationSystem::AlignTrajectory(Instance& instance, Physics* physics)

@@ -1,6 +1,5 @@
 #include "Game.hh"
 
-#include <format>
 #include <limits>
 
 // glow OpenGL wrapper
@@ -38,23 +37,54 @@
 
 #define GAMEDEV_ADVANCED 1 // unused
 
-Game::Game() : GlfwApp(Gui::ImGui) {}
+Game::Game(gamedev::GameSettings settings, gamedev::GameHooks* hooks)
+  : GlfwApp(Gui::ImGui), mSettings(std::move(settings)), mHooks(hooks), mZones(registerProfileZones(mProfiler))
+{
+}
 
-void Game::setBenchmark(gamedev::benchmark::Options options) { mBenchmark = std::make_unique<gamedev::benchmark::Runner>(std::move(options)); }
+Game::ProfileZones Game::registerProfileZones(gamedev::profiling::Profiler& profiler)
+{
+    using gamedev::profiling::Cadence;
+    auto const add = [&](char const* name, Cadence cadence) { return profiler.AddZone(name, cadence); };
+
+    ProfileZones zones;
+    zones.window = add("window", Cadence::Once);
+    zones.engine = add("engine", Cadence::Once);
+    zones.assets = add("assets", Cadence::Once);
+    zones.world = add("world", Cadence::Once);
+
+    zones.update = add("update", Cadence::Tick);
+    zones.audio = add("audio", Cadence::Tick);
+    zones.particles = add("particles", Cadence::Tick);
+    zones.lights = add("lights", Cadence::Tick);
+    zones.physics = add("physics", Cadence::Tick);
+    zones.collision = add("collision", Cadence::Tick);
+    zones.environment = add("environment", Cadence::Tick);
+    zones.gamelogic = add("gamelogic", Cadence::Tick);
+    zones.animation = add("animation", Cadence::Tick);
+    zones.cleanup = add("cleanup", Cadence::Tick);
+
+    zones.render = add("render", Cadence::Frame);
+    zones.gpu = add("gpu", Cadence::Frame);
+    zones.frame = add("frame", Cadence::Frame);
+    return zones;
+}
 
 void Game::init()
 {
-    using gamedev::benchmark::Phase;
+    // startup phases: each one lasts until the next endPhase
+    auto phaseStart = gamedev::profiling::Clock::now();
+    auto const endPhase = [&](gamedev::profiling::ZoneId zone) {
+        auto const now = gamedev::profiling::Clock::now();
+        mProfiler.Record(zone, now - phaseStart);
+        phaseStart = now;
+    };
 
-    if (mBenchmark)
-    {
-        mBenchmark->BeginStartup();
-        gamedev::SeedRandom(mBenchmark->GetOptions().seed);
-    }
+    if (mSettings.seed)
+        gamedev::SeedRandom(*mSettings.seed);
 
-    // enable vertical synchronization to synchronize rendering to monitor refresh rate
-    // (not in benchmarks: they measure the frame rate the game reaches)
-    setVSync(!mBenchmark);
+    // vertical synchronization limits the frame rate to the monitor refresh rate
+    setVSync(mSettings.vsync);
 
     // disable built-in camera
     setUseDefaultCamera(false);
@@ -72,14 +102,13 @@ void Game::init()
     applyCustomImguiTheme();
 
     // set window title
-    setTitle(mBenchmark ? std::format("Fort Candle - benchmark {}", mBenchmark->GetOptions().scenario) : std::string("Fort Candle"));
+    setTitle(mSettings.title);
 
-    if (mBenchmark)
-    {
-        // benchmarks run without input: ignore the mouse over the UI as well
+    // without input, the UI ignores the mouse as well
+    if (!mSettings.inputEnabled)
         ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
-        mBenchmark->EndPhase(Phase::Window);
-    }
+
+    endPhase(mZones.window);
 
     // set initial camera state
     mEnableTopDownCamera = false;
@@ -182,8 +211,7 @@ void Game::init()
     mRenderSys->InitResources();
     mRenderSys->InitParticles(mParticleSys->GetParticleVAO());
 
-    if (mBenchmark)
-        mBenchmark->EndPhase(Phase::Engine);
+    endPhase(mZones.engine);
 
     mGameAssets->scanMeshes();
     mUnitFac->RegisterAutomatically(mGameAssets->getObjectsByFolder("units"), 0.25f, true);
@@ -197,15 +225,15 @@ void Game::init()
 
     fillSpawnMenu(mNatureFac->GetNameIdentifiers(), mItemFac->GetNameIdentifiers(), mUnitFac->GetNameIdentifiers(), mStructFac->GetNameIdentifiers());
 
-    if (mBenchmark)
-    {
-        mBenchmark->EndPhase(Phase::Assets);
+    endPhase(mZones.assets);
 
+    if (mSettings.startPlaying)
+    {
         // straight into play, without the intro dialog (which pauses)
         state = PLAY;
         mNewGame = false;
-        mHoldSpawns = mBenchmark->GetScenario().holdSpawns;
     }
+    mHoldSpawns = !mSettings.dailyWaves;
 
     // Initialize Game State
     mGamelogicSys->SpawnPlayer();
@@ -229,24 +257,42 @@ void Game::init()
 
     mEnvironmentSys->SetMinutesPerDay(0.5);
 
-    if (mBenchmark)
-        mBenchmark->EndPhase(Phase::World);
+    endPhase(mZones.world);
+
+    if (mHooks)
+        mHooks->OnStarted(mProfiler);
 }
 
 void Game::onFrameStart()
 {
     gamedev::newStatFrame(mAdvancedFeatures.mStats);
 
-    if (mBenchmark)
-        mBenchmark->FrameStarted();
+    auto const now = gamedev::profiling::Clock::now();
+    if (mLastFrameStart)
+    {
+        mProfiler.Record(mZones.frame, now - *mLastFrameStart);
+        mProfiler.Record(mZones.gpu, gamedev::profiling::Milliseconds(getLastGpuTimeMs())); // measured during the previous frame
+    }
+    mLastFrameStart = now;
 }
 
 // update game in 60 Hz fixed timestep
 void Game::update(float elapsedSeconds)
 {
-    using gamedev::benchmark::Channel;
-    auto const tickStart = gamedev::benchmark::Runner::Clock::now();
+    bool const playing = state == PLAY;
 
+    mProfiler.Measure(mZones.update, [&] { updateSystems(elapsedSeconds); });
+
+    if (playing && mHooks)
+    {
+        gamedev::TickContext const context{*this, mProfiler, mECS->getNumLiveInstances()};
+        if (mHooks->OnTickEnd(context) == gamedev::TickResult::CloseGame)
+            requestClose();
+    }
+}
+
+void Game::updateSystems(float elapsedSeconds)
+{
     *mAdvancedFeatures.mStatNumUpdates += 1.f;
 
     mAudioSys->SetMasterVolume(mMasterVolume / 100.f);
@@ -256,22 +302,22 @@ void Game::update(float elapsedSeconds)
     mAudioSys->SetVolume(3, mUIVolume / 100.f);
     mAudioSys->UpdateListener(mCamera.physical.position, mCamera.physical.forward);
 
-    timeSystem(Channel::Audio, [&] { mAudioSys->Update(elapsedSeconds); });
+    mProfiler.Measure(mZones.audio, [&] { mAudioSys->Update(elapsedSeconds); });
 
     if (state == PLAY || state == MENU)
     {
-        mTime_ParticleSys = (mEnableParticleSpawn) ? timeSystem(Channel::Particles, [&] { mParticleSys->Update(elapsedSeconds); }) : 0.f;
-        mTime_LightSys = timeSystem(Channel::Lights, [&] { mLightSys->Update(elapsedSeconds); });
+        if (mEnableParticleSpawn)
+            mProfiler.Measure(mZones.particles, [&] { mParticleSys->Update(elapsedSeconds); });
+        mProfiler.Measure(mZones.lights, [&] { mLightSys->Update(elapsedSeconds); });
     }
 
     if (state == PLAY)
     {
-        auto t_0 = std::chrono::steady_clock::now();
-        mTime_PhysicsSys = timeSystem(Channel::Physics, [&] { mPhysicsSys->Update(elapsedSeconds); });
-        mTime_CollisionSys = timeSystem(Channel::Collision, [&] { mCollisionSys->Update(elapsedSeconds); });
-        mTime_EnvironmentSys = timeSystem(Channel::Environment, [&] { mEnvironmentSys->Update(elapsedSeconds); });
-        mTime_GamelogicSys = timeSystem(Channel::Gamelogic, [&] { mGamelogicSys->Update(elapsedSeconds); });
-        mTime_AnimationSys = timeSystem(Channel::Animation, [&] { mAnimationSys->Update(elapsedSeconds); });
+        mProfiler.Measure(mZones.physics, [&] { mPhysicsSys->Update(elapsedSeconds); });
+        mProfiler.Measure(mZones.collision, [&] { mCollisionSys->Update(elapsedSeconds); });
+        mProfiler.Measure(mZones.environment, [&] { mEnvironmentSys->Update(elapsedSeconds); });
+        mProfiler.Measure(mZones.gamelogic, [&] { mGamelogicSys->Update(elapsedSeconds); });
+        mProfiler.Measure(mZones.animation, [&] { mAnimationSys->Update(elapsedSeconds); });
 
         if (mEnvironmentSys->mNewDay)
         {
@@ -287,48 +333,38 @@ void Game::update(float elapsedSeconds)
             }
         }
 
-        mTime_CleanSys = timeSystem(Channel::Cleanup, [&] { mCleanSys->Update(); });
-
-        auto t_n = std::chrono::steady_clock::now();
-        mTime_AllSys = std::chrono::duration<float, std::milli>(t_n - t_0).count();
+        mProfiler.Measure(mZones.cleanup, [&] { mCleanSys->Update(); });
 
         frameControl++;
-
-        if (mBenchmark)
-            endBenchmarkTick(tickStart);
     }
 }
 
-void Game::endBenchmarkTick(gamedev::benchmark::Runner::Clock::time_point tickStart)
+gamedev::GameOutcome Game::outcome() const
 {
-    mBenchmark->Record(gamedev::benchmark::Channel::Update, gamedev::benchmark::Runner::Clock::now() - tickStart);
+    if (mGameWon)
+        return gamedev::GameOutcome::Won;
+    if (mGameLost)
+        return gamedev::GameOutcome::Lost;
+    return gamedev::GameOutcome::Running;
+}
 
-    gamedev::benchmark::ScenarioContext context{*mGamelogicSys, mHoldSpawns};
-    if (!mBenchmark->EndTick(context, mECS->getNumLiveInstances()))
-        return;
-
-    gamedev::benchmark::RunInfo info;
-    info.renderer = reinterpret_cast<char const*>(glGetString(GL_RENDERER));
-    info.windowWidth = getWindowWidth();
-    info.windowHeight = getWindowHeight();
-    info.outcome = mGameWon ? "won" : (mGameLost ? "lost" : "running");
-
-    mBenchmark->Finish(info);
-    requestClose();
+gamedev::RunEnvironment Game::runEnvironment() const
+{
+    auto const renderer = reinterpret_cast<char const*>(glGetString(GL_RENDERER));
+    return {renderer ? renderer : "unknown", getWindowWidth(), getWindowHeight()};
 }
 
 // render game variable timestep
 void Game::render(float elapsedSeconds)
 {
-    auto const renderStart = gamedev::benchmark::Runner::Clock::now();
+    gamedev::profiling::ScopedZone const zone(mProfiler, mZones.render);
 
     if (mFullscreen != GlfwApp::isFullscreen())
         toggleFullscreen();
 
     *mAdvancedFeatures.mStatFrametime = (elapsedSeconds * 1000.f); // in milliseconds
 
-    // Benchmarks run without input, so that the mouse over the window cannot change what is measured
-    if (!mBenchmark)
+    if (mSettings.inputEnabled)
     {
         updateCamera(elapsedSeconds);
         processInput();
@@ -377,9 +413,6 @@ void Game::render(float elapsedSeconds)
     mRenderSys->Update(elapsedSeconds);
 
     mAdvancedFeatures.updateStatDraws(mRenderSys->GetDrawCalls());
-
-    if (mBenchmark)
-        mBenchmark->Record(gamedev::benchmark::Channel::Render, gamedev::benchmark::Runner::Clock::now() - renderStart);
 }
 
 void Game::processInput()
@@ -675,15 +708,10 @@ void Game::onGui()
 
                 if (ImGui::TreeNodeEx("Performance (ms)", ImGuiTreeNodeFlags_DefaultOpen))
                 {
-                    ImGui::Text("All Systems: %.2f", mTime_AllSys);
-                    ImGui::Text("Animations: %.2f", mTime_AnimationSys);
-                    ImGui::Text("Cleaning: %.2f", mTime_CleanSys);
-                    ImGui::Text("Collisions: %.2f", mTime_CollisionSys);
-                    ImGui::Text("Environment: %.2f", mTime_EnvironmentSys);
-                    ImGui::Text("Gamelogic: %.2f", mTime_GamelogicSys);
-                    ImGui::Text("Lights: %.2f", mTime_LightSys);
-                    ImGui::Text("Particles: %.2f", mTime_ParticleSys);
-                    ImGui::Text("Physics: %.2f", mTime_PhysicsSys);
+                    // latest tick and frame
+                    for (auto const& zone : mProfiler.Zones())
+                        if (zone.cadence != gamedev::profiling::Cadence::Once)
+                            ImGui::Text("%s: %.2f", zone.name.c_str(), zone.last.count());
 
                     ImGui::TreePop();
                 }
@@ -763,6 +791,9 @@ void Game::onGui()
 
 void Game::onClose()
 {
+    if (mHooks)
+        mHooks->OnClosing({mProfiler, runEnvironment(), outcome()});
+
     // Release everything that owns GL objects while the context still exists; GlfwApp terminates GLFW right after this.
     // Order: instances (meshes, textures), then the users of the ECS, then the ECS, which destroys the systems.
     mAdvancedFeatures.destroy();
@@ -1609,3 +1640,17 @@ void Game::applyCustomImguiTheme()
     colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
     colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
 }
+
+// ScenarioActions
+void Game::SpawnEnemyWave(int monsters) { mGamelogicSys->SpawnEnemyWave(monsters); }
+void Game::SpawnReinforcements(int pioneers) { mGamelogicSys->SpawnReinforcements(pioneers); }
+void Game::SetDailyWaves(bool enabled) { mHoldSpawns = !enabled; }
+void Game::AddGold(int amount) { mGamelogicSys->AddGold(amount); }
+void Game::ConstructHome() { mGamelogicSys->ConstructHome(); }
+void Game::UpgradeProduction() { mGamelogicSys->UpgradeProduction(); }
+void Game::BuyWood() { mGamelogicSys->AddWood(); }
+void Game::AssignArtisan() { mGamelogicSys->AssignArtisan(); }
+void Game::AssignSoldier() { mGamelogicSys->AssignSoldier(); }
+void Game::UpgradeFortifications() { mGamelogicSys->UpgradeFortifications(); }
+void Game::RepairFortifications() { mGamelogicSys->RepairFortifications(); }
+void Game::UpgradeSupply() { mGamelogicSys->UpgradeSupply(); }

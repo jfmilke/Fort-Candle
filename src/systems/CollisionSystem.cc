@@ -66,17 +66,12 @@ void gamedev::CollisionSystem::Init(EngineECS& ecs, tg::aabb3 map_bounds)
 }
 
 
-int gamedev::CollisionSystem::Update(float dt)
+void gamedev::CollisionSystem::Update(float dt)
 {
-    auto t0 = std::chrono::steady_clock::now();
-
     mDT = dt;
 
     ResolveStaticCollisions();
     ResolveDynamicCollisions();
-
-    auto tn = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::microseconds>(tn - t0).count();
 }
 
 void gamedev::CollisionSystem::ResolveStaticCollisions()

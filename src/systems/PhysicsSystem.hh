@@ -40,9 +40,8 @@ public:
      * `Instance::new_position` is also set at creation and never reset, so every entity publishes, moving or not.
      *
      * @param dt Time step in seconds.
-     * @return Elapsed time in microseconds.
      */
-    int Update(float dt);
+    void Update(float dt);
 
 private:
     /**

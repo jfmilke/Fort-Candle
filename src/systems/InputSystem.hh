@@ -30,9 +30,8 @@ public:
      * so an entity at rest never starts moving, and nothing stops it at the target.
      *
      * @param dt Unused.
-     * @return Elapsed time in microseconds.
      */
-    int Update(float dt);
+    void Update(float dt);
 
     /// Sets the position `handle` should move to.
     void InstructMove(InstanceHandle handle, tg::pos3 targetPosition);

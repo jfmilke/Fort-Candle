@@ -47,9 +47,8 @@ public:
      * Rebuilds the light lists (see `BuildLights`).
      *
      * @param dt Unused.
-     * @return Elapsed time in microseconds.
      */
-    int Update(float dt);
+    void Update(float dt);
 
     /// Regular (non-shadowing) point lights in world space, as built by the last `Update`.
     const std::vector<PointLight>& GetLights();

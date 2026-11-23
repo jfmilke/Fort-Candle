@@ -60,9 +60,8 @@ public:
      * TODO: When a particle dies, the one swapped into its slot is skipped (not moved, not drawn) for this update.
      *
      * @param elapsed_time Time step in seconds.
-     * @return Elapsed time in microseconds.
      */
-    int Update(float elapsed_time);
+    void Update(float elapsed_time);
 
     /**
      * Binds the framebuffer, uploads the instance data and draws all living particles.
