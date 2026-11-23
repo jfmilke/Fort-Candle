@@ -70,6 +70,9 @@ struct Options
     int ticks = 3600;             ///< Measured ticks (60 per second of game time).
     std::uint32_t seed = 1;       ///< Seed for `SeedRandom`.
     std::filesystem::path output; ///< Result file; empty: `benchmarks/<scenario>-<UTC time>.json` in the working directory.
+
+    /// The running program (from the command line); its last-write time identifies the build in the results.
+    std::filesystem::path executable;
 };
 
 /// What `main` should do, according to the command line.

@@ -44,7 +44,7 @@ python ../tools/compare_benchmarks.py benchmarks/baseline benchmarks/candidate
 - Scenarios (`src/benchmark/Benchmark.cc`): `idle` (start camp, no waves), `waves` (normal play), `stress` (60 monsters + 30 reinforcements at once), `exercise` (building, recruiting, wall upgrades and repairs, supply routes, an 80-monster wave).
 - A run is reproducible: fixed RNG seed (`--seed`, `SeedRandom`), straight into play without the intro dialog, vsync off, and no input (`Game::processInput` and `updateCamera` are skipped, ImGui ignores the mouse). Each tick has the same fixed time step, so the simulation does not depend on the frame rate. The window opens at 1920x1080.
 - It measures `--ticks` ticks (default 3600) after `--warmup` ticks (default 120): every system update and the whole `Game::update` tick per tick, the time in `Game::render` and the frame interval per frame, and the startup phases of `Game::init`. Scenario actions run after the tick is recorded.
-- Results go to `benchmarks/<scenario>-<UTC time>.json` in the working directory (`--output` overrides; `bin/` is gitignored). They record the git commit and dirty state at build time (`cmake/BuildInfo.cmake` writes `BuildInfo.hh` into the build directory on every build), the compiler, config, renderer and window size.
+- Results go to `benchmarks/<scenario>-<UTC time>.json` in the working directory (`--output` overrides; `bin/` is gitignored). They record the build time (the executable's last-write time), the compiler, config, renderer and window size.
 - `tools/compare_benchmarks.py` (Python 3, standard library only) compares two result files or folders of repeated runs (median over runs, with the spread between runs as noise estimate) and warns about runs with different settings, builds or renderers.
 - Measure RelWithDebInfo builds, run each side several times, and leave the window alone (minimizing or covering it can throttle rendering). `steady_clock` has 100 ns resolution on Windows, so the smallest systems only show that floor. Exit codes: 0 done, 1 bad command line, 2 window closed early, 3 result file not written.
 
@@ -136,6 +136,6 @@ Notes:
 
 - `src/advanced/` contains the instance `World`, `transform`, the stats/debug helpers, and the editor. It originated from course framework code.
 - `src/utility/` contains the spatial hash map (`Hash2D`; `FindNear` returns a sorted, deduplicated `std::vector`), a quadtree (fully commented out), RNG (seedable with `SeedRandom`), and WAV loading (`Sound.cc` with dr_wav; only `.wav` files are loaded).
-- `src/benchmark/` contains the benchmark mode (command line, scenarios, recording, JSON results); `tools/` the result comparison script; `cmake/` build-time helper scripts.
+- `src/benchmark/` contains the benchmark mode (command line, scenarios, recording, JSON results); `tools/` the result comparison script.
 - `src/types/` contains plain data types shared across components (lights, materials, particles, unit and structure properties).
 - `docs/` contains early design notes and a ToDo list from the start of the project. They are not authoritative about the current code.

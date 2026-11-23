@@ -33,7 +33,7 @@ def load_runs(path):
             data = json.load(f)
         if data.get("format") != "fort-candle-benchmark":
             sys.exit(f"{file}: not a Fort Candle benchmark result")
-        if data.get("version") != 1:
+        if data.get("version") != 2:
             sys.exit(f"{file}: unsupported result version {data.get('version')}")
         runs.append((file, data))
     if not runs:
@@ -43,8 +43,8 @@ def load_runs(path):
 
 def describe(runs):
     """One line about the builds of a side."""
-    builds = {(d["build"]["commit"][:10] + (" (dirty)" if d["build"]["dirty"] else ""), d["build"]["compiler"], d["build"]["config"]) for _, d in runs}
-    parts = [f"{commit}, {compiler} {config}" for commit, compiler, config in sorted(builds)]
+    builds = {(d["build"]["time"], d["build"]["compiler"], d["build"]["config"]) for _, d in runs}
+    parts = [f"built {time}, {compiler} {config}" for time, compiler, config in sorted(builds)]
     return f"{len(runs)} run(s): " + "; ".join(parts)
 
 
@@ -64,8 +64,6 @@ def check_setup(baseline, candidate):
         warnings.append(f"runs differ in build config: {sorted(configs)}")
     if any(d["build"]["config"] == "Debug" for _, d in baseline + candidate):
         warnings.append("Debug builds are much slower and not representative")
-    if any(d["build"]["dirty"] for _, d in baseline + candidate):
-        warnings.append("some runs were built from uncommitted changes (dirty): the commit alone does not identify them")
     return warnings
 
 
