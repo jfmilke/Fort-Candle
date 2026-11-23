@@ -254,7 +254,7 @@ private:
         // Per frame
 
         gamedev::profiling::ZoneId render; ///< CPU time in `render`: submitting the GL work, plus driver waits when the GPU is the bottleneck.
-        gamedev::profiling::ZoneId gpu;    ///< GPU time of `render` (glow-extras' GPU timer), reported one frame late.
+        gamedev::profiling::ZoneId gpu;    ///< GPU time of `render` as glow-extras' non-blocking GPU timer last reported it (see `onFrameStart`).
         gamedev::profiling::ZoneId frame;  ///< Time between two frame starts: the frame rate the whole game reaches.
     };
 
@@ -289,7 +289,11 @@ public:
 
     /**
      * Called at the start of each frame, after input polling (local glow-extras patch, see CLAUDE.md):
-     * starts a new statistics frame and records the frame interval and the GPU time of the previous frame.
+     * starts a new statistics frame and records the frame interval and the GPU time of `render`.
+     *
+     * The GPU time comes from glow-extras' non-blocking GPU timer and is not exactly per frame:
+     * it is usually 1-3 frames old, averages all measurements that finished since the last frame, and repeats the previous value if none did.
+     * It is not recorded until the timer has a first result.
      */
     void onFrameStart() override;
 

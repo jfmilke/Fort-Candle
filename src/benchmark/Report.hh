@@ -56,7 +56,7 @@ struct Report
     std::chrono::sys_seconds timestamp{}; ///< When the run ended (UTC).
     BuildInfo build;                      ///< Build that ran.
     RunEnvironment environment;           ///< Renderer and window size.
-    GameOutcome outcome{};                ///< Game state at the end.
+    GameOutcome outcome{};                ///< Game state at shutdown (see `GameHooks::OnClosing`).
     InstanceCounts instances;             ///< Live instances during the measurement.
     std::vector<StartupPhase> startup;    ///< Startup phases in order.
     std::vector<ZoneSummary> zones;       ///< Per-tick and per-frame zones in profiler order.

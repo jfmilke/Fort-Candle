@@ -7,7 +7,7 @@
 #include <vector>
 
 /**
- * CPU timing of named zones (startup phases, system updates, render, frames).
+ * Timing of named zones (startup phases, system updates, render, GPU time, frames).
  *
  * `Game` owns one `Profiler`, registers its zones once and records them every tick and frame, in every mode.
  * The debug UI shows the latest value per zone; a benchmark captures every sample between `StartCapture` and `StopCapture`.

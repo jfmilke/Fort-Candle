@@ -40,7 +40,7 @@ struct ClosingContext
 {
     profiling::Profiler const& profiler; ///< The game's profiler.
     RunEnvironment environment;          ///< Graphics setup.
-    GameOutcome outcome;                 ///< Where the game stands.
+    GameOutcome outcome;                 ///< Where the game stands at shutdown (after the frame in which `OnTickEnd` asked to close).
 };
 
 /// What `Game` does after `GameHooks::OnTickEnd`.
@@ -82,6 +82,9 @@ public:
 
     /**
      * Called once when the game shuts down, by request or because the window was closed.
+     *
+     * After `OnTickEnd` returns `CloseGame`, the main loop still finishes its frame (remaining ticks, UI and render) before this call,
+     * so the outcome may differ from the one at that tick.
      *
      * @param context The game at the end.
      */

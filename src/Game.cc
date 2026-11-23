@@ -271,7 +271,10 @@ void Game::onFrameStart()
     if (mLastFrameStart)
     {
         mProfiler.Record(mZones.frame, now - *mLastFrameStart);
-        mProfiler.Record(mZones.gpu, gamedev::profiling::Milliseconds(getLastGpuTimeMs())); // measured during the previous frame
+
+        // 0 until the GPU timer has its first result
+        if (auto const gpuMs = getLastGpuTimeMs(); gpuMs > 0.f)
+            mProfiler.Record(mZones.gpu, gamedev::profiling::Milliseconds(gpuMs));
     }
     mLastFrameStart = now;
 }
@@ -708,10 +711,17 @@ void Game::onGui()
 
                 if (ImGui::TreeNodeEx("Performance (ms)", ImGuiTreeNodeFlags_DefaultOpen))
                 {
-                    // latest tick and frame
+                    // latest tick and frame; particles keep their last value while they are off, so hide it
+                    auto const& particles = mProfiler.GetZone(mZones.particles);
                     for (auto const& zone : mProfiler.Zones())
-                        if (zone.cadence != gamedev::profiling::Cadence::Once)
+                    {
+                        if (zone.cadence == gamedev::profiling::Cadence::Once)
+                            continue;
+                        if (&zone == &particles && !mEnableParticleSpawn)
+                            ImGui::Text("%s: -", zone.name.c_str());
+                        else
                             ImGui::Text("%s: %.2f", zone.name.c_str(), zone.last.count());
+                    }
 
                     ImGui::TreePop();
                 }
