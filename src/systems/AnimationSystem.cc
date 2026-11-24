@@ -16,7 +16,8 @@ void gamedev::AnimationSystem::AddEntity(InstanceHandle handle, Signature entity
     }
 }
 
-void gamedev::AnimationSystem::RemoveEntity(InstanceHandle handle) {
+void gamedev::AnimationSystem::RemoveEntity(InstanceHandle handle)
+{
     mArrows.erase(handle);
     mEntities.erase(handle);
 }
@@ -27,9 +28,7 @@ void gamedev::AnimationSystem::RemoveAllEntities()
     mEntities.clear();
 }
 
-void gamedev::AnimationSystem::Init(EngineECS& ecs) {
-    mECS = &ecs;
-}
+void gamedev::AnimationSystem::Init(EngineECS& ecs) { mECS = &ecs; }
 
 void gamedev::AnimationSystem::Update(float dt)
 {
@@ -81,7 +80,8 @@ void gamedev::AnimationSystem::Update(float dt)
 
 void gamedev::AnimationSystem::AlignTrajectory(Instance& instance, Physics* physics)
 {
-    auto angle = tg::acos(tg::dot(instance.xform.rotation_quat_x() * instance.xform.global_forward(), tg::normalize(tg::vec3(0.0f, physics->arc_ySlope, 1.f))));
+    auto angle
+        = tg::acos(tg::dot(instance.xform.rotation_quat_x() * instance.xform.global_forward(), tg::normalize(tg::vec3(0.0f, physics->arc_ySlope, 1.f))));
     instance.xform.rotate(tg::quat::from_axis_angle(tg::dir3::pos_x, angle));
 }
 
@@ -138,7 +138,7 @@ void gamedev::AnimationSystem::Rotate(Instance& instance, Animated* subject, flo
 
         instance.xform.rotate(tg::quat::from_axis_angle(tg::dir3::pos_y, rotate));
     }
-    
+
     if (subject->rotZAnim)
     {
         if (subject->rot_z < 0_deg)
@@ -199,7 +199,4 @@ void gamedev::AnimationSystem::Scale(Instance& instance, Animated* subject, floa
     xform.scaling += scale;
 }
 
-void gamedev::AnimationSystem::Wiggle(Living* subject, float dt)
-{
-    
-}
+void gamedev::AnimationSystem::Wiggle(Living* subject, float dt) {}

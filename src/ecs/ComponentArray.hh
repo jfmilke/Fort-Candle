@@ -1,12 +1,12 @@
 #pragma once
-#include "advanced/World.hh"
-#include "components/Component.hh"
-#include "glow/common/log.hh"
-#include <clean-core/assert.hh>
 #include <array>
+#include <clean-core/assert.hh>
 #include <cstdint>
 #include <typeinfo>
 #include <utility>
+#include "advanced/World.hh"
+#include "components/Component.hh"
+#include "glow/common/log.hh"
 
 namespace gamedev
 {

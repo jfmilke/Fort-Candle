@@ -13,20 +13,20 @@ struct Component;
  */
 enum class EventType
 {
-  StaticCollision,   ///< `CollisionSystem`: a dynamic entity (subject) overlaps a static one (sender).
-  NewPosition,       ///< The sender (= subject) moved or was created; `CollisionSystem` updates its hash maps.
-  ArrowHit,          ///< `AnimationSystem`: arrow (sender) reached its target (subject).
-  MonsterHit,        ///< An arrow (sender) damaged a monster (subject).
-  PioneerHit,        ///< A monster (sender) damaged a pioneer (subject).
-  BuildingHit,       ///< A monster (sender) damaged a building (subject).
-  MonsterDeath,      ///< A monster (subject) was killed by the sender.
-  PioneerDeath,      ///< A pioneer (subject) was killed by the sender.
-  BuildingDestroyed, ///< A building (subject) was destroyed by the sender.
-  Supply1,           ///< First supply route upgrade bought (both handles invalid). No listeners.
-  Supply2,           ///< Second supply route upgrade bought (both handles invalid). No listeners.
-  MoreWood,          ///< Wood was added to the bonfire (sender = subject = bonfire). No listeners.
+    StaticCollision,   ///< `CollisionSystem`: a dynamic entity (subject) overlaps a static one (sender).
+    NewPosition,       ///< The sender (= subject) moved or was created; `CollisionSystem` updates its hash maps.
+    ArrowHit,          ///< `AnimationSystem`: arrow (sender) reached its target (subject).
+    MonsterHit,        ///< An arrow (sender) damaged a monster (subject).
+    PioneerHit,        ///< A monster (sender) damaged a pioneer (subject).
+    BuildingHit,       ///< A monster (sender) damaged a building (subject).
+    MonsterDeath,      ///< A monster (subject) was killed by the sender.
+    PioneerDeath,      ///< A pioneer (subject) was killed by the sender.
+    BuildingDestroyed, ///< A building (subject) was destroyed by the sender.
+    Supply1,           ///< First supply route upgrade bought (both handles invalid). No listeners.
+    Supply2,           ///< Second supply route upgrade bought (both handles invalid). No listeners.
+    MoreWood,          ///< Wood was added to the bonfire (sender = subject = bonfire). No listeners.
 
-  Count ///< Number of event types; not an event.
+    Count ///< Number of event types; not an event.
 };
 
 /// A typed message between two instances; see `EventType` for what sender and subject mean.

@@ -3,8 +3,8 @@
 #include <glow/fwd.hh>
 #include "advanced/World.hh"
 #include "components/ShapeComp.hh"
-#include "ecs/System.hh"
 #include "ecs/Engine.hh"
+#include "ecs/System.hh"
 
 namespace gamedev
 {

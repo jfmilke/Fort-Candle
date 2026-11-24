@@ -6,7 +6,7 @@ void gamedev::EnvironmentSystem::Init(EngineECS& ecs)
     mSunLight.color = tg::vec3(0.985, 1.0, 0.876);
 
     mSunTheta = 0.f; // 70.0f;
-    mSunPhi = 0.f; //-64.0f;
+    mSunPhi = 0.f;   //-64.0f;
     mSunRadius = 1.f;
     mSunIntensity = 0.5;
     mAmbientLight = tg::vec3(0.75, 1.0, 0.9) * 0.15f;
@@ -75,13 +75,10 @@ void gamedev::EnvironmentSystem::Update(float dt)
     mSunPhi = tg::mix(oldTime.position.y, newTime.position.y, currTime);
 
     if (!mLocked)
-      CalculateSun();
+        CalculateSun();
 }
 
-void gamedev::EnvironmentSystem::SetMinutesPerDay(float minutes)
-{
-    mSecondToGameSecond = secondsPerDay / (minutes * 60.f);
-}
+void gamedev::EnvironmentSystem::SetMinutesPerDay(float minutes) { mSecondToGameSecond = secondsPerDay / (minutes * 60.f); }
 
 float gamedev::EnvironmentSystem::getGameTime() { return mGameTime; }
 
@@ -105,14 +102,14 @@ void gamedev::EnvironmentSystem::CalculateSun()
 {
     // Calculation in spherical coordinate system
     const auto theta = tg::radians(mSunTheta * tg::pi_scalar<float> / 180.f); // forward
-    const auto phi = tg::radians(mSunPhi * tg::pi_scalar<float> / 180.f);   // rotation
+    const auto phi = tg::radians(mSunPhi * tg::pi_scalar<float> / 180.f);     // rotation
 
     tg::pos3 sunPosition;
 
-    sunPosition.x = mSunRadius * tg::sin(theta) * tg::cos(phi)+0.01; // avoid crash
+    sunPosition.x = mSunRadius * tg::sin(theta) * tg::cos(phi) + 0.01; // avoid crash
     sunPosition.y = mSunRadius * tg::cos(theta);
     sunPosition.z = mSunRadius * tg::sin(theta) * tg::sin(phi);
-    
+
     mSunPos = sunPosition;
     mSunLight.direction = sunPosition - tg::pos3::zero;
 }

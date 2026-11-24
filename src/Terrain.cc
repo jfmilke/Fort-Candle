@@ -31,7 +31,7 @@ void gamedev::Terrain::setWaterTexture(glow::SharedTexture2D& tex) { mTexWater =
 gamedev::InstanceHandle gamedev::Terrain::CreateGround(tg::pos3 pos, tg::size3 scale)
 {
     if (!mVaoGround)
-        return { unsigned(-1) };
+        return {unsigned(-1)};
 
 
     mGroundHandle = mECS->CreateInstance(mVaoGround, mTexGround, nullptr, nullptr);
@@ -45,7 +45,7 @@ gamedev::InstanceHandle gamedev::Terrain::CreateGround(tg::pos3 pos, tg::size3 s
     tg::aabb3 mapSize = tg::aabb3(mMapExtents.min, mMapExtents.max);
     tg::size3 cells = tg::size_of(mapSize);
     mECS->GetHashMap().Init({cells.width, cells.depth}, mapSize);
-    
+
     auto& instance = mECS->GetInstance(mGroundHandle);
     instance.max_bounds = {mMapExtents.min, mMapExtents.max};
 
@@ -57,7 +57,7 @@ gamedev::InstanceHandle gamedev::Terrain::CreateGround(tg::pos3 pos, tg::size3 s
 gamedev::InstanceHandle gamedev::Terrain::CreateWater(tg::pos3 pos, tg::size3 scale)
 {
     if (!mVaoWater)
-        return { unsigned(-1) };
+        return {unsigned(-1)};
 
     mWaterHandle = mECS->CreateInstance(mVaoWater, mTexWater, nullptr, nullptr);
     auto& waterTransform = mECS->GetInstance(mWaterHandle).xform;
@@ -115,7 +115,8 @@ void gamedev::Terrain::createHeightmap(const Mesh3D& mesh, const transform& xfor
         triangle_XZ.pos2.y = triangle_XYZ.pos2.z;
 
         // ..create function which fills the heightmap according to the resultant barycentric coordinates..
-        auto func = [&triangle_XYZ, &height, &mesh_minmax](tg::ipos2 p, float a, float b) {
+        auto func = [&triangle_XYZ, &height, &mesh_minmax](tg::ipos2 p, float a, float b)
+        {
             auto interpolated = tg::interpolate(triangle_XYZ, a, b);
             int id_z = p[1] - mesh_minmax.min.z;
             int id_x = p[0] - mesh_minmax.min.x;
@@ -129,7 +130,6 @@ void gamedev::Terrain::createHeightmap(const Mesh3D& mesh, const transform& xfor
     mHeightMap = std::move(height);
     mMapExtents = mesh_minmax;
 }
-
 
 
 float gamedev::Terrain::heightAt(const tg::pos2& p)
@@ -151,9 +151,9 @@ float gamedev::Terrain::heightAt(const tg::pos2& p)
         return 0.f;
 
     // Bilinear interpolation
-    float h_y0 = tg::interpolate(mHeightMap[p0.y    ][p0.x], mHeightMap[p0.y][p0.x + 1], s);
+    float h_y0 = tg::interpolate(mHeightMap[p0.y][p0.x], mHeightMap[p0.y][p0.x + 1], s);
     float h_y1 = tg::interpolate(mHeightMap[p0.y + 1][p0.x], mHeightMap[p0.y][p0.x + 1], s);
-    
+
     float h = tg::interpolate(h_y0, h_y1, t);
     return h;
 }

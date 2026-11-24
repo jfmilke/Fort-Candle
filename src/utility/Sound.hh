@@ -4,15 +4,15 @@
 #include <iostream>
 #include <map>
 #include <string>
-#include "glow/common/log.hh"
 #include <vector>
+#include "glow/common/log.hh"
 
 #include "AL/al.h"
 #include "AL/alc.h"
 #include "dr_wav.hh"
 
-#include <limits>
 #include <cstring>
+#include <limits>
 
 using namespace std;
 

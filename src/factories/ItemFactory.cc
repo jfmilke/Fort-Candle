@@ -2,10 +2,7 @@
 #include <glow/common/log.hh>
 
 // All items can be rendered
-void gamedev::ItemFactory::PostProcessRegistration(InstanceHandle presetHandle)
-{
-    auto renderable = mECS->CreateComponent<Render>(presetHandle);
-}
+void gamedev::ItemFactory::PostProcessRegistration(InstanceHandle presetHandle) { auto renderable = mECS->CreateComponent<Render>(presetHandle); }
 
 void gamedev::ItemFactory::InitResources()
 {

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <glow/fwd.hh>
-#include <string>
 #include <polymesh/Mesh.hh>
+#include <string>
 
 #include <typed-geometry/tg-lean.hh> // leans means only types, no functions
 

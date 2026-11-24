@@ -1,7 +1,7 @@
 #pragma once
-#include "typed-geometry/types/vec.hh"
-#include "typed-geometry/types/pos.hh"
 #include "typed-geometry/types/color.hh"
+#include "typed-geometry/types/pos.hh"
+#include "typed-geometry/types/vec.hh"
 
 namespace gamedev
 {

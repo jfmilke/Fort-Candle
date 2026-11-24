@@ -148,7 +148,7 @@ public:
     void ComputeParticles();
     void RenderParticles(glow::UsedProgram& shader);
 
-    void Update(float elapsed_time);    
+    void Update(float elapsed_time);
 
 private:
     EngineECS* mECS = nullptr;
@@ -172,7 +172,7 @@ private:
     long unsigned int mMaxGenParticles = 100000;
     long unsigned int mParticleBufferSize = 0;
 
-    int PARTICLE_DATA_LENGTH = 
+    int PARTICLE_DATA_LENGTH =
     int INSTANCE_DATA_LENGTH = 17; // 4 * 4 + 1
 };
 */
