@@ -1,4 +1,5 @@
 #pragma once
+#include <typed-geometry/tg-lean.hh>
 #include "components/Component.hh"
 
 namespace gamedev

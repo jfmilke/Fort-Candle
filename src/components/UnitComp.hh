@@ -1,4 +1,8 @@
 #pragma once
+#include <string>
+#include <typed-geometry/tg-lean.hh>
+#include <vector>
+#include "advanced/World.hh"
 #include "components/Component.hh"
 #include "types/Properties.hh"
 
