@@ -130,7 +130,7 @@ gamedev::InstanceHandle gamedev::Factory::Register(std::string asset_identifier,
     auto max_bounds = mObj->getAABB(a_name);
     max_bounds.min *= instance.xform.scaling * 1.15f;
     max_bounds.max *= instance.xform.scaling * 1.15f;
-    instance.max_bounds = MaxBoundingBox(max_bounds);
+    instance.max_bounds = max_bounds;
 
     PostProcessRegistration(handle);
 
@@ -160,7 +160,7 @@ gamedev::InstanceHandle gamedev::Factory::Register(std::string asset_identifier,
     auto max_bounds = mObj->getAABB(a_name);
     max_bounds.min *= instance.xform.scaling * 1.25f;
     max_bounds.max *= instance.xform.scaling * 1.25f;
-    instance.max_bounds = MaxBoundingBox(max_bounds);
+    instance.max_bounds = max_bounds;
 
     PostProcessRegistration(handle);
 
@@ -191,7 +191,7 @@ gamedev::InstanceHandle gamedev::Factory::Register(std::string asset_identifier,
     auto max_bounds = mObj->getAABB(a_name);
     max_bounds.min *= instance.xform.scaling * 1.25f;
     max_bounds.max *= instance.xform.scaling * 1.25f;
-    instance.max_bounds = MaxBoundingBox(max_bounds);
+    instance.max_bounds = max_bounds;
 
 
     PostProcessRegistration(handle);
@@ -234,6 +234,7 @@ gamedev::InstanceHandle gamedev::Factory::Clone(InstanceHandle source_handle, tg
     auto clone_handle = Clone(source_handle, position);
     auto& clone = mECS->GetInstance(clone_handle);
     clone.xform.rotation = rotation;
+    AnnounceTransform(clone_handle);
 
     return clone_handle;
 }
@@ -244,6 +245,7 @@ gamedev::InstanceHandle gamedev::Factory::Clone(InstanceHandle source_handle, tg
     auto& clone = mECS->GetInstance(clone_handle);
     clone.xform.rotation = rotation;
     clone.xform.scaling = scaling;
+    AnnounceTransform(clone_handle);
 
     return clone_handle;
 }
@@ -253,6 +255,7 @@ gamedev::InstanceHandle gamedev::Factory::Clone(InstanceHandle source_handle, tg
     auto clone_handle = Clone(source_handle, position);
     auto& clone = mECS->GetInstance(clone_handle);
     clone.xform.scaling = scaling;
+    AnnounceTransform(clone_handle);
 
     return clone_handle;
 }
@@ -317,6 +320,7 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::po
 
     auto& transform = mECS->GetInstance(fresh_handle).xform;
     transform.rotation = rotation;
+    AnnounceTransform(fresh_handle);
 
     return fresh_handle;
 }
@@ -330,6 +334,7 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::po
     auto& transform = mECS->GetInstance(fresh_handle).xform;
     transform.rotation = rotation;
     transform.scaling = scaling;
+    AnnounceTransform(fresh_handle);
 
     return fresh_handle;
 }
@@ -342,6 +347,7 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::po
 
     auto& transform = mECS->GetInstance(fresh_handle).xform;
     transform.scaling = scaling;
+    AnnounceTransform(fresh_handle);
 
     return fresh_handle;
 }
@@ -427,13 +433,10 @@ std::vector<std::pair<gamedev::InstanceHandle, std::string>> gamedev::Factory::G
     return identifiers;
 }
 
-tg::aabb3 gamedev::Factory::MaxBoundingBox(tg::aabb3& boundingBox)
+void gamedev::Factory::AnnounceTransform(InstanceHandle handle)
 {
-    return boundingBox;
-
-    auto min_scalar = tg::min(boundingBox.min.x, boundingBox.min.z);
-    auto max_scalar = tg::min(boundingBox.max.x, boundingBox.max.z);
-    return {tg::pos3(min_scalar), tg::pos3(max_scalar)};
+    auto e = Event(EventType::NewPosition, handle, handle);
+    mECS->SendFunctionalEvent(e);
 }
 
 bool gamedev::Factory::SaveObjectsTo(std::filesystem::path filepath)

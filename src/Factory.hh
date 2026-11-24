@@ -301,12 +301,12 @@ private:
     std::vector<InstanceHandle> LoadObjectsFrom(std::filesystem::path filepath, bool marked = false);
 
     /**
-     * Returns `boundingBox` unchanged (the code after the `return` is dead).
+     * Sends `EventType::NewPosition` for an instance whose rotation or scale changed after it was placed,
+     * so that the `CollisionSystem` recomputes its collision shape.
      *
-     * @param boundingBox Bounds.
-     * @return `boundingBox`.
+     * @param handle Live instance.
      */
-    tg::aabb3 MaxBoundingBox(tg::aabb3& boundingBox);
+    void AnnounceTransform(InstanceHandle handle);
 
 protected:
     /**

@@ -3,24 +3,23 @@
 
 void gamedev::CollisionSystem::AddEntity(InstanceHandle handle, Signature entitySignature)
 {
+    auto const& translation = mECS->GetInstanceTransform(handle).translation;
+    auto const bounds = BroadPhaseBounds(ComputeWorldShape(handle), translation);
+
     if (mECS->GetComponent<Collider>(handle)->dynamic)
     {
         mDynamicEntities.insert(handle);
-
         mStaticEntities.erase(handle);
 
-        auto const& instance = mECS->GetInstance(handle);
-        mDynamicColliderHashMap.AddInstance(handle, instance.xform.translation, instance.max_bounds);
+        mDynamicColliderHashMap.AddInstance(handle, translation, bounds);
         mStaticColliderHashMap.RemoveInstance(handle);
     }
     else
     {
         mStaticEntities.insert(handle);
-
         mDynamicEntities.erase(handle);
 
-        auto const& instance = mECS->GetInstance(handle);
-        mStaticColliderHashMap.AddInstance(handle, instance.xform.translation, instance.max_bounds);
+        mStaticColliderHashMap.AddInstance(handle, translation, bounds);
         mDynamicColliderHashMap.RemoveInstance(handle);
     }
 }
@@ -101,11 +100,9 @@ void gamedev::CollisionSystem::ResolveStaticCollisions()
         auto circleShape_s = mECS->TryGetComponent<CircleShape>(handle_static);
         auto& instance_s = mECS->GetInstance(handle_static);
 
-        auto bounds = instance_s.max_bounds;
-        bounds.max *= instance_s.xform.scaling;
-        bounds.min *= instance_s.xform.scaling;
+        auto const bounds = BroadPhaseBounds(ComputeWorldShape(handle_static), instance_s.xform.translation);
 
-        for (const auto& handle_dynamic : mDynamicColliderHashMap.FindNear(instance_s.xform.translation, instance_s.max_bounds))
+        for (const auto& handle_dynamic : mDynamicColliderHashMap.FindNear(instance_s.xform.translation, bounds))
         {
             if (mECS->TestSignature<InTower>(handle_dynamic))
                 continue;
@@ -575,12 +572,62 @@ void gamedev::CollisionSystem::resolve(Instance& instance_dynamic, Instance& ins
 void gamedev::CollisionSystem::PositionListener(Event& e)
 {
     auto collider = mECS->TryGetComponent<Collider>(e.mSubject);
+    if (!collider)
+        return;
 
-    if (collider)
+    // Rotation and scale may have changed too, so the bounds are recomputed
+    auto const& translation = mECS->GetInstanceTransform(e.mSubject).translation;
+    auto const bounds = BroadPhaseBounds(ComputeWorldShape(e.mSubject), translation);
+
+    if (collider->dynamic)
+        mDynamicColliderHashMap.UpdateInstance(e.mSubject, translation, bounds);
+    else
+        mStaticColliderHashMap.UpdateInstance(e.mSubject, translation, bounds);
+}
+
+gamedev::CollisionSystem::WorldShape gamedev::CollisionSystem::ComputeWorldShape(InstanceHandle handle)
+{
+    auto const& xform = mECS->GetInstanceTransform(handle);
+    auto const m = xform.transform_mat2D();
+
+    WorldShape shape;
+
+    if (auto const box = mECS->TryGetComponent<BoxShape>(handle))
     {
-        if (collider->dynamic)
-            mDynamicColliderHashMap.UpdateInstance(e.mSender, mECS->GetInstanceTransform(e.mSender).translation);
-        else
-            mStaticColliderHashMap.UpdateInstance(e.mSender, mECS->GetInstanceTransform(e.mSender).translation);
+        auto const center = m * box->box.center;
+        auto const axis0 = m * box->box.half_extents[0];
+        auto const axis1 = m * box->box.half_extents[2];
+
+        shape.box = true;
+        shape.center = {center.x, center.z};
+        shape.halfAxes[0] = {axis0.x, axis0.z};
+        shape.halfAxes[1] = {axis1.x, axis1.z};
+        shape.radius = tg::length(shape.halfAxes[0] + shape.halfAxes[1]);
     }
+    else if (auto const circle = mECS->TryGetComponent<CircleShape>(handle))
+    {
+        auto const center = m * circle->circle.center;
+
+        shape.center = {center.x, center.z};
+        shape.radius = circle->circle.radius * tg::max(xform.scaling.width, xform.scaling.depth);
+    }
+    else
+    {
+        shape.center = {xform.translation.x, xform.translation.z};
+    }
+
+    return shape;
+}
+
+tg::aabb3 gamedev::CollisionSystem::BroadPhaseBounds(WorldShape const& shape, tg::vec3 const& translation)
+{
+    auto extent = tg::vec2(shape.radius, shape.radius);
+    if (shape.box)
+    {
+        extent.x = tg::abs(shape.halfAxes[0].x) + tg::abs(shape.halfAxes[1].x);
+        extent.y = tg::abs(shape.halfAxes[0].y) + tg::abs(shape.halfAxes[1].y);
+    }
+
+    auto const offset = shape.center - tg::pos2(translation.x, translation.z);
+    return {tg::pos3(offset.x - extent.x, 0, offset.y - extent.y), tg::pos3(offset.x + extent.x, 0, offset.y + extent.y)};
 }

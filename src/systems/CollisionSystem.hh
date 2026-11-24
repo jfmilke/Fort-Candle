@@ -184,8 +184,36 @@ private:
     // 4. Calculate friction using parallel component
 
 private:
+    /// Collision shape in world space on the ground plane; 2D vectors hold world (x, z).
+    struct WorldShape
+    {
+        bool box = false;     ///< Oriented box (`halfAxes`) if true, else a circle (`radius`).
+        tg::pos2 center;      ///< Center of the shape.
+        tg::vec2 halfAxes[2]; ///< Box only: half extents along the box's two axes.
+        float radius = 0.f;   ///< Circle radius, or the box's bounding radius (half diagonal).
+    };
+
     /**
-     * `EventType::NewPosition` listener: moves the sender in the static or dynamic hash map.
+     * Transforms an instance's `BoxShape` or `CircleShape` to world space (rotation about y, translation and scale).
+     *
+     * @param handle Live instance; without a shape the result is a point at its position.
+     * @return The world-space shape.
+     */
+    WorldShape ComputeWorldShape(InstanceHandle handle);
+
+    /**
+     * Computes the rectangle a shape covers in the spatial hash maps, relative to the instance's position.
+     *
+     * Unlike `Instance::max_bounds`, it follows the instance's rotation and scale.
+     *
+     * @param shape World-space shape.
+     * @param translation Instance position the result is relative to.
+     * @return Bounds relative to `translation` (only x/z are set).
+     */
+    static tg::aabb3 BroadPhaseBounds(WorldShape const& shape, tg::vec3 const& translation);
+
+    /**
+     * `EventType::NewPosition` listener: moves the subject in the static or dynamic hash map and recomputes its bounds.
      *
      * @param e Position event; sender and subject are the moved instance.
      */
