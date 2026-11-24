@@ -1,6 +1,6 @@
 #include "Editor.hh"
-#include <typed-geometry/tg.hh>
 #include "components/PhysicsComp.hh"
+#include <typed-geometry/tg.hh>
 #include "components/ShapeComp.hh"
 #include "transform.hh"
 
@@ -67,7 +67,7 @@ void gamedev::manipulatePhysics(EditorState& state, Physics* body)
             float vel[3];
             vel[0] = body->velocity.x;
             vel[1] = body->velocity.y;
-            vel[2] = body->velocity.z;
+            vel[2] = body->velocity.z; 
 
             bool changes = false;
 

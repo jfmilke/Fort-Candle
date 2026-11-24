@@ -4,7 +4,7 @@
 # see http://google-styleguide.googlecode.com/svn/trunk/cppguide.xml
 BasedOnStyle: Google
 #Language: Cpp
-Standard: Latest
+Standard: Cpp11
 
 
 # 80 columns guideline
@@ -41,6 +41,7 @@ SpaceBeforeAssignmentOperators: true
 SpaceInEmptyParentheses: false
 SpacesBeforeTrailingComments: 1
 SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
 SpacesInCStyleCastParentheses: false
 SpacesInParentheses: false
 #SpacesInSquareBrackets: false

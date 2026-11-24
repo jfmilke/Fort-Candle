@@ -1,12 +1,12 @@
 #pragma once
-#include <queue>
 #include "components/Component.hh"
 #include "types/Light.hh"
+#include <queue>
 
 namespace gamedev
 {
 /// Point light that moves with its instance; collected each update by the `LightSystem`.
-struct PointLightEmitter : Component
+struct PointLightEmitter: Component
 {
     using Component::Component;
 

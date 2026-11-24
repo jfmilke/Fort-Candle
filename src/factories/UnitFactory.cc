@@ -1,6 +1,6 @@
 #include "factories/UnitFactory.hh"
-#include <glow/common/log.hh>
 #include "utility/misc.hh"
+#include <glow/common/log.hh>
 
 // All units can be rendered
 void gamedev::UnitFactory::PostProcessRegistration(InstanceHandle presetHandle)
@@ -13,7 +13,7 @@ void gamedev::UnitFactory::PostProcessRegistration(InstanceHandle presetHandle)
 }
 
 void gamedev::UnitFactory::InitResources()
-{
+{ 
     Init_Monster();
     Init_Person();
     Init_Artisan();
@@ -167,7 +167,7 @@ void gamedev::UnitFactory::Init_Monster()
 
     // Evil
     lifeform->name = "Algaz";
-    lifeform->idle = 0.0;
+    lifeform->idle= 0.0;
     lifeform->friendly = false;
 
     // Attacker
@@ -273,7 +273,7 @@ void gamedev::UnitFactory::Init_Artisan()
     physics->velocity = tg::vec3::zero;
 }
 
-void gamedev::UnitFactory::Init_Soldier()
+void gamedev::UnitFactory::Init_Soldier() 
 {
     auto handle = mIDToPreset[mObjectNameToID["person_soldier"]];
     auto& instance = mECS->GetInstance(handle);

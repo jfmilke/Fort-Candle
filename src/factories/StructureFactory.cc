@@ -92,8 +92,7 @@ gamedev::InstanceHandle gamedev::StructureFactory::Register(std::string asset_id
     return handle;
 }
 
-gamedev::InstanceHandle gamedev::StructureFactory::Register(
-    std::string asset_identifier, std::string structure_identifier, std::filesystem::path structure_path, bool boxshape, float scaling)
+gamedev::InstanceHandle gamedev::StructureFactory::Register(std::string asset_identifier, std::string structure_identifier, std::filesystem::path structure_path, bool boxshape, float scaling)
 {
     std::string a_name = lowerString(asset_identifier);
     std::string s_name = lowerString(structure_identifier);
@@ -321,7 +320,7 @@ void gamedev::StructureFactory::Init_Tower()
     collider->dynamic = false;
 }
 
-void gamedev::StructureFactory::Init_Forge()
+void gamedev::StructureFactory::Init_Forge() 
 {
     auto handle = mIDToPreset[mObjectNameToID["forge"]];
     auto& instance = mECS->GetInstance(handle);
@@ -409,30 +408,30 @@ void gamedev::StructureFactory::Init_aFences()
 
 void gamedev::StructureFactory::Init_aStonewall()
 {
-    auto handle = mIDToPreset[mObjectNameToID["astonewall"]];
-    auto& instance = mECS->GetInstance(handle);
+  auto handle = mIDToPreset[mObjectNameToID["astonewall"]];
+  auto& instance = mECS->GetInstance(handle);
+  
+  mECS->RemoveAllComponents(handle);
+  
+  auto prototype = mECS->CreateComponent<gamedev::Prototype>(handle);
+  auto renderable = mECS->CreateComponent<gamedev::Render>(handle);
+  auto shape = mECS->CreateComponent<gamedev::BoxShape>(handle);
+  auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
+  auto destructible = mECS->CreateComponent<Destructible>(handle);
 
-    mECS->RemoveAllComponents(handle);
-
-    auto prototype = mECS->CreateComponent<gamedev::Prototype>(handle);
-    auto renderable = mECS->CreateComponent<gamedev::Render>(handle);
-    auto shape = mECS->CreateComponent<gamedev::BoxShape>(handle);
-    auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
-    auto destructible = mECS->CreateComponent<Destructible>(handle);
-
-
-    instance.xform.translation = {0, 0, 0};
-    instance.xform.scaling = tg::size3(1.5);
-
-    // Destructible
-    destructible->health.max = 20.0;
-    destructible->health.current = destructible->health.max;
-
-    // Shape
-    shape->box = mObj->aabb3_as_box(mObj->getAABB("astonewall"));
-
-    // Collider
-    collider->dynamic = false;
+  
+  instance.xform.translation = {0, 0, 0};
+  instance.xform.scaling = tg::size3(1.5);
+  
+  // Destructible
+  destructible->health.max = 20.0;
+  destructible->health.current = destructible->health.max;
+  
+  // Shape
+  shape->box = mObj->aabb3_as_box(mObj->getAABB("astonewall"));
+  
+  // Collider
+  collider->dynamic = false;
 }
 
 

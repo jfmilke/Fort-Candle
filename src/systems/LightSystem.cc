@@ -1,7 +1,10 @@
 #include "systems/LightSystem.hh"
 #include "utility/Random.hh"
 
-void gamedev::LightSystem::Init(EngineECS& ecs) { mECS = &ecs; }
+void gamedev::LightSystem::Init(EngineECS& ecs)
+{
+    mECS = &ecs;
+}
 
 int gamedev::LightSystem::AddFreeLight(PointLight& pl)
 {
@@ -28,7 +31,10 @@ void gamedev::LightSystem::RemoveFreeLight(int light_id)
     mInternToExternID.erase(mFreeLights.size() - 1);            // Remove intern ID of last element (because of pop_back)
 }
 
-void gamedev::LightSystem::Update(float dt) { BuildLights(dt); }
+void gamedev::LightSystem::Update(float dt)
+{
+    BuildLights(dt);
+}
 
 const std::vector<gamedev::PointLight>& gamedev::LightSystem::GetLights() { return mLights; }
 int gamedev::LightSystem::GetLightCount() { return mLights.size(); }
@@ -95,3 +101,5 @@ void gamedev::LightSystem::BuildLights(float dt)
         }
     }
 }
+
+

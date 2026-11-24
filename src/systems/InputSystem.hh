@@ -2,8 +2,8 @@
 
 #include <glow/fwd.hh>
 #include "advanced/World.hh"
-#include "ecs/Engine.hh"
 #include "ecs/System.hh"
+#include "ecs/Engine.hh"
 
 namespace gamedev
 {
@@ -56,6 +56,7 @@ public:
 
     /// Stops following/looking at the focus instance and sets the move target to the current position.
     void InstructStopFocus(InstanceHandle handle);
+
 
 
 private:

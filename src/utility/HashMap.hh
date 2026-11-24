@@ -1,19 +1,19 @@
 #pragma once
-#include <map>
-#include <set>
-#include <unordered_map>
-#include <vector>
 #include "advanced/World.hh"
-#include "typed-geometry/tg.hh"
 #include "utility/HashData.hh"
+#include "typed-geometry/tg.hh"
+#include <unordered_map>
+#include <set>
+#include <map>
+#include <vector>
 
 namespace std
 {
 /// Orders grid cells row by row (y first, then x), so `tg::ipos2` can be used as `std::map`/`std::set` key.
-template <>
+template<>
 struct less<tg::ipos2>
 {
-    bool operator()(const tg::ipos2& lhs, const tg::ipos2& rhs) const { return (lhs.y < rhs.y) || ((lhs.y == rhs.y) && (lhs.x < rhs.x)); }
+    bool operator()(const tg::ipos2& lhs, const tg::ipos2& rhs) const {return (lhs.y < rhs.y) || ((lhs.y == rhs.y) && (lhs.x < rhs.x)); }
 };
 }
 

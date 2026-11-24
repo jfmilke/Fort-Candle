@@ -1,12 +1,12 @@
 #pragma once
-#include <filesystem>
 #include <glow/fwd.hh>
-#include <typed-geometry/tg-lean.hh>
+#include <filesystem>
+#include "ecs/Engine.hh"
 #include "Components.hh"
 #include "Factory.hh"
-#include "GameObjects.hh"
 #include "Types.hh"
-#include "ecs/Engine.hh"
+#include "GameObjects.hh"
+#include <typed-geometry/tg-lean.hh>
 
 
 namespace gamedev

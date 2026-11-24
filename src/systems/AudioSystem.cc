@@ -1,10 +1,10 @@
-#include "systems/AudioSystem.hh"
 #include "advanced/transform.hh"
 #include "glow/common/log.hh"
+#include "systems/AudioSystem.hh"
 
-void gamedev::AudioSystem::Init(EngineECS& ecs)
-{
-    mECS = &ecs;
+void gamedev::AudioSystem::Init(EngineECS& ecs) 
+{ 
+    mECS = &ecs; 
 
     channels = 32;
     masterVolume = 1.0f;
@@ -66,8 +66,8 @@ void gamedev::AudioSystem::Update(float dt)
 
         // TODO: Off by one: the emitter at index sources.size() is neither detached nor attached.
         DetachSources(emitters.begin() + (sources.size() + 1), emitters.end()); // Detach sources from emitters that won't be covered this frame
-
-        AttachSources(emitters.begin(), emitters.begin() + (sources.size())); // And attach sources to emitters that WILL be covered this frame
+        
+        AttachSources(emitters.begin(), emitters.begin() + (sources.size()));   // And attach sources to emitters that WILL be covered this frame
     }
     else
     {
@@ -83,7 +83,7 @@ void gamedev::AudioSystem::UpdateListener(tg::pos3 position, tg::vec3 forward, t
     alListener3f(AL_VELOCITY, velocity.x, velocity.y, velocity.z);
     ALfloat forwardAndUp[] = {forward.x, forward.y, forward.z, 0.f, 1.f, 0.f};
     alListenerfv(AL_ORIENTATION, forwardAndUp);
-
+    
     mListenerPosition = position;
 }
 
@@ -131,7 +131,7 @@ void gamedev::AudioSystem::UpdateSoundState(InstanceHandle handle, float dt)
     }
 }
 
-void gamedev::AudioSystem::CullEmitters(InstanceHandle handle)
+void gamedev::AudioSystem::CullEmitters(InstanceHandle handle) 
 {
     auto emitter = mECS->GetComponent<SoundEmitter>(handle);
     auto instance = mECS->GetInstance(handle);
@@ -160,7 +160,7 @@ void gamedev::AudioSystem::CullEmitters(InstanceHandle handle)
 void gamedev::AudioSystem::AttachSource(InstanceHandle handle, OALSource* s)
 {
     auto emitter = mECS->GetComponent<SoundEmitter>(handle);
-
+    
     emitter->oalSource = s;
 
     if (!emitter->oalSource)
@@ -183,7 +183,7 @@ void gamedev::AudioSystem::AttachSource(InstanceHandle handle, OALSource* s)
     alSourcePlay(emitter->oalSource->source);
 }
 
-void gamedev::AudioSystem::DetachSource(InstanceHandle handle)
+void gamedev::AudioSystem::DetachSource(InstanceHandle handle) 
 {
     auto emitter = mECS->GetComponent<SoundEmitter>(handle);
 
@@ -200,6 +200,7 @@ void gamedev::AudioSystem::DetachSource(InstanceHandle handle)
 
     emitter->oalSource = NULL;
     glow::info() << "Source detached!";
+    
 }
 
 void gamedev::AudioSystem::DetachSources(vector<InstanceHandle>::iterator from, vector<InstanceHandle>::iterator to)
@@ -217,7 +218,7 @@ void gamedev::AudioSystem::AttachSources(vector<InstanceHandle>::iterator from, 
         auto emitter = mECS->GetComponent<SoundEmitter>(*i);
 
         if (!emitter->oalSource) // Don't attach a new source if we already have one!
-        {
+        { 
             AttachSource(*i, GetSource());
         }
     }
@@ -251,8 +252,8 @@ void gamedev::AudioSystem::SetMasterVolume(float value)
     alListenerf(AL_GAIN, masterVolume);
 }
 
-void gamedev::AudioSystem::SetVolume(int type, float value)
-{
+void gamedev::AudioSystem::SetVolume(int type, float value) 
+{ 
     value = tg::clamp(value, 0.0f, 1.0f);
     volumes[type] = value;
 }

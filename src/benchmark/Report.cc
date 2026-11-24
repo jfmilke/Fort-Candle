@@ -20,18 +20,10 @@ std::string JsonString(std::string_view text)
     {
         switch (c)
         {
-        case '"':
-            out += "\\\"";
-            break;
-        case '\\':
-            out += "\\\\";
-            break;
-        case '\n':
-            out += "\\n";
-            break;
-        case '\t':
-            out += "\\t";
-            break;
+        case '"': out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\n': out += "\\n"; break;
+        case '\t': out += "\\t"; break;
         default:
             if (static_cast<unsigned char>(c) < 0x20)
                 out += std::format("\\u{:04x}", int(c));
@@ -46,12 +38,9 @@ constexpr std::string_view OutcomeName(GameOutcome outcome)
 {
     switch (outcome)
     {
-    case GameOutcome::Won:
-        return "won";
-    case GameOutcome::Lost:
-        return "lost";
-    case GameOutcome::Running:
-        break;
+    case GameOutcome::Won: return "won";
+    case GameOutcome::Lost: return "lost";
+    case GameOutcome::Running: break;
     }
     return "running";
 }

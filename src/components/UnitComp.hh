@@ -17,10 +17,10 @@ struct Living : public Component
     // Common stuff
     std::string name; ///< Display name (set by the factory, not shown).
 
-    bool moveOrder = false;                 ///< Moving towards `movePosition`.
-    tg::pos3 movePosition = tg::pos3::zero; ///< Move target in world space.
-    float moveSpeed = 1.5;                  ///< Speed in world units per second.
-    bool forceMove = false;                 ///< Re-apply heading and velocity on the next update (set with each new order).
+    bool moveOrder = false;                ///< Moving towards `movePosition`.
+    tg::pos3 movePosition= tg::pos3::zero; ///< Move target in world space.
+    float moveSpeed = 1.5;                 ///< Speed in world units per second.
+    bool forceMove = false;                ///< Re-apply heading and velocity on the next update (set with each new order).
 
     InstanceHandle focusHandle = {std::uint32_t(-1)}; ///< Instance to face (e.g. the attack target).
     bool inFocus = false;                             ///< Unused.

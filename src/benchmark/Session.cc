@@ -21,9 +21,9 @@ GameSettings Session::Settings() const
 {
     GameSettings settings;
     settings.seed = mOptions.seed;
-    settings.vsync = false;        // measure the frame rate the game reaches
-    settings.inputEnabled = false; // the mouse over the window must not change what is measured
-    settings.startPlaying = true;  // the intro dialog would pause the game
+    settings.vsync = false;         // measure the frame rate the game reaches
+    settings.inputEnabled = false;  // the mouse over the window must not change what is measured
+    settings.startPlaying = true;   // the intro dialog would pause the game
     settings.dailyWaves = mOptions.scenario->dailyWaves;
     settings.title = std::format("Fort Candle - benchmark {}", mOptions.scenario->name);
     return settings;

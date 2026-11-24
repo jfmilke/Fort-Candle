@@ -1,8 +1,8 @@
 #pragma once
 
 #include "advanced/World.hh"
-#include "ecs/Engine.hh"
 #include "ecs/System.hh"
+#include "ecs/Engine.hh"
 #include "types/Light.hh"
 
 namespace gamedev
@@ -219,7 +219,7 @@ public:
      *
      * @param shader Bound program; receives `uModel` per instance.
      */
-    void RenderDepth(glow::UsedProgram& shader);
+	  void RenderDepth(glow::UsedProgram& shader);
 
 
 private:
@@ -249,10 +249,10 @@ private:
      */
     void SetupSceneShader(glow::UsedProgram& program);
 
-    // ECS Specifics
+// ECS Specifics
 private:
-    EngineECS* mECS = nullptr; ///< ECS (not owned).
-    long int mDrawCalls = 0;   ///< Draw calls of the current frame.
+    EngineECS* mECS = nullptr;       ///< ECS (not owned).
+    long int mDrawCalls = 0;         ///< Draw calls of the current frame.
 
 private:
     // Debug
@@ -337,7 +337,7 @@ private:
 private:
     std::string texPath = "../data/textures/"; ///< Texture folder (skybox).
 
-    // Shaders
+// Shaders
 private:
     // shaders
     glow::SharedProgram mShaderOutput;         ///< Post-processing to the screen.
@@ -353,7 +353,7 @@ private:
     glow::SharedProgram mShaderBlur;       ///< Bloom blur.
     glow::SharedProgram mShaderDepth;      ///< Point shadow cube map.
 
-    // Render Targets
+// Render Targets
 private:
     // intermediate framebuffer with color and depth texture
     glow::SharedFramebuffer mFramebufferScene;       ///< HDR scene: color, bright, picking, depth.
@@ -381,7 +381,7 @@ private:
 
     std::vector<glow::SharedTextureRectangle> mTargets; ///< All screen-sized targets (resized together).
 
-    // Render Resources
+// Render Resources
 private:
     glow::SharedTextureCubeMap mTexSkybox; ///< Skybox.
     glow::SharedVertexArray mMeshQuad;     ///< Quad for the skybox.

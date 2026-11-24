@@ -1,7 +1,7 @@
 #pragma once
-#include "Types.hh"
 #include "components/Component.hh"
 #include "utility/Sound.hh"
+#include "Types.hh"
 
 namespace gamedev
 {

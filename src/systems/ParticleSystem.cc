@@ -1,10 +1,10 @@
 #include "systems/ParticleSystem.hh"
 #include <glow/objects.hh>
-#include "Mesh3D.hh"
-#include "typed-geometry/types/mat.hh"
-#include "typed-geometry/types/pos.hh"
 #include "typed-geometry/types/vec.hh"
+#include "typed-geometry/types/pos.hh"
+#include "typed-geometry/types/mat.hh"
 #include "utility/Random.hh"
+#include "Mesh3D.hh"
 
 void gamedev::ParticleSystem::AddEntity(InstanceHandle handle, Signature entitySignature)
 {
@@ -308,7 +308,7 @@ void gamedev::GPUParticleSystem::UpdateParticleBuffer()
 {
     auto vbo = mVboParticles->bind();
     glBufferSubData(GL_SHADER_STORAGE_BUFFER);
-
+    
     vbo.setData(particles * PARTICLE_DATA_LENGTH, nullptr, GL_STREAM_DRAW);
 
     mParticleBufferSize = particles;

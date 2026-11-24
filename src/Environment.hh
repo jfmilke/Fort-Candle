@@ -12,5 +12,6 @@ namespace gamedev
  */
 class Environment
 {
+
 };
 }

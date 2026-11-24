@@ -5,30 +5,30 @@
 #include <glow-extras/glfw/GlfwApp.hh>
 
 #include "FreeflyCam.hh"
-#include "GameObjects.hh" // custom game assets
 #include "Mesh3D.hh"
+#include "GameObjects.hh" // custom game assets
 #include "advanced/Advanced.hh"
 
 #include "Terrain.hh"
 
 // ECS
 #include "ecs/Engine.hh"
-#include "systems/AdvancedRenderSystem.hh"
-#include "systems/AnimationSystem.hh"
-#include "systems/AudioSystem.hh"
-#include "systems/CleanupSystem.hh"
 #include "systems/CollisionSystem.hh"
+#include "systems/AdvancedRenderSystem.hh"
+#include "systems/PhysicsSystem.hh"
 #include "systems/EnvironmentSystem.hh"
-#include "systems/GamelogicSystem.hh"
 #include "systems/LightSystem.hh"
 #include "systems/ParticleSystem.hh"
-#include "systems/PhysicsSystem.hh"
+#include "systems/GamelogicSystem.hh"
+#include "systems/AnimationSystem.hh"
+#include "systems/CleanupSystem.hh"
+#include "systems/AudioSystem.hh"
 
 // Factories
-#include "factories/ItemFactory.hh"
-#include "factories/NatureFactory.hh"
-#include "factories/StructureFactory.hh"
 #include "factories/UnitFactory.hh"
+#include "factories/StructureFactory.hh"
+#include "factories/NatureFactory.hh"
+#include "factories/ItemFactory.hh"
 
 #include "GameHooks.hh"
 #include "GameSettings.hh"
@@ -66,6 +66,7 @@ enum GameState
 class Game : public glow::glfw::GlfwApp
 {
 private:
+
     GameState state = MENU; ///< Current game state.
 
     // Camera
@@ -77,7 +78,7 @@ private:
 
     gamedev::AudioSystem mAudioSystem; ///< Unused: the ECS-registered `mAudioSys` plays the sounds.
 
-    // UI
+    //UI
     ImFont* font1; ///< Default UI font (Source Sans 3, 25 px): added first, so ImGui uses it for all other text.
     ImFont* font2; ///< Title font of the main menu (Sheila Crayon, 45 px).
 

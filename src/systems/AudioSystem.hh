@@ -2,11 +2,11 @@
 
 #include <algorithm>
 #include <glow/fwd.hh>
-#include "AL/al.h"
-#include "AL/alc.h"
+#include "glow/common/log.hh"
 #include "ecs/Engine.hh"
 #include "ecs/System.hh"
-#include "glow/common/log.hh"
+#include "AL/al.h"
+#include "AL/alc.h"
 #include "typed-geometry/tg.hh"
 #include "utility/Sound.hh"
 
@@ -120,6 +120,7 @@ public:
     void destroy();
 
 private:
+
     /**
      * Advances the emitter's remaining time (looping or stopping it) and pushes its gain, pitch, range and position to its source, if it has one.
      *

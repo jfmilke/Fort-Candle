@@ -1,10 +1,10 @@
 #pragma once
+#include "ecs/Event.hh"
+#include "advanced/World.hh"
 #include <array>
 #include <functional>
 #include <utility>
 #include <vector>
-#include "advanced/World.hh"
-#include "ecs/Event.hh"
 
 /**
  * Expands to the `(type, listener)` arguments of `AddFunctionalListener` for a member function of the calling object.

@@ -1,12 +1,12 @@
 #pragma once
-#include <filesystem>
 #include <glow/fwd.hh>
-#include <list>
-#include <typed-geometry/tg-lean.hh>
-#include "Components.hh"
-#include "GameObjects.hh"
-#include "Terrain.hh"
+#include <filesystem>
 #include "ecs/Engine.hh"
+#include "GameObjects.hh"
+#include "Components.hh"
+#include "Terrain.hh"
+#include <typed-geometry/tg-lean.hh>
+#include <list>
 
 namespace gamedev
 {
@@ -313,14 +313,13 @@ private:
      * @return `boundingBox`.
      */
     tg::aabb3 MaxBoundingBox(tg::aabb3& boundingBox);
-
 protected:
     /**
      * Hook for subclasses, called by `Register` after the `Prototype` component is added and before the preset is added, e.g. to attach components.
      *
      * @param presetHandle The new preset instance.
      */
-    virtual void PostProcessRegistration(InstanceHandle presetHandle) {};
+    virtual void PostProcessRegistration(InstanceHandle presetHandle){};
 
 protected:
     EngineECS* mECS = nullptr;                                                       ///< ECS (not owned).

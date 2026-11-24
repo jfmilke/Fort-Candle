@@ -327,4 +327,4 @@ void gamedev::AdvancedFeatures::updateAnimationsInWorld(float dt, float currentT
     }
 }
 
-void gamedev::AdvancedFeatures::updateStatDraws(float draws) { *mStatNumDraws += draws; }
+void gamedev::AdvancedFeatures::updateStatDraws(float draws) {*mStatNumDraws += draws; }

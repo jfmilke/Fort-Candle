@@ -1,7 +1,7 @@
 #pragma once
-#include <set>
 #include "advanced/World.hh"
 #include "typed-geometry/tg-lean.hh"
+#include <set>
 
 /// Range of grid cells (min cell, max cell; both inclusive) covered by a 2D client.
 typedef std::pair<tg::ipos2, tg::ipos2> Hash2Indices;

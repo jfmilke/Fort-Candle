@@ -3,7 +3,9 @@
 #include "advanced/transform.hh"
 #include "glow/common/log.hh"
 
-void gamedev::CleanupSystem::Init(EngineECS& ecs) { mECS = &ecs; }
+void gamedev::CleanupSystem::Init(EngineECS& ecs) {
+    mECS = &ecs;
+}
 
 void gamedev::CleanupSystem::Update()
 {

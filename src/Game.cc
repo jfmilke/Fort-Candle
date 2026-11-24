@@ -6,12 +6,12 @@
 #include <glow/common/log.hh>
 #include <glow/common/scoped_gl.hh>
 #include <glow/objects/ArrayBuffer.hh>
+#include <glow/objects/UniformBuffer.hh>
 #include <glow/objects/Framebuffer.hh>
+#include <glow/objects/TextureCubeMap.hh>
 #include <glow/objects/Program.hh>
 #include <glow/objects/Texture2D.hh>
-#include <glow/objects/TextureCubeMap.hh>
 #include <glow/objects/TextureRectangle.hh>
-#include <glow/objects/UniformBuffer.hh>
 #include <glow/objects/VertexArray.hh>
 
 // extra functionality of glow
@@ -74,8 +74,7 @@ void Game::init()
 {
     // startup phases: each one lasts until the next endPhase
     auto phaseStart = gamedev::profiling::Clock::now();
-    auto const endPhase = [&](gamedev::profiling::ZoneId zone)
-    {
+    auto const endPhase = [&](gamedev::profiling::ZoneId zone) {
         auto const now = gamedev::profiling::Clock::now();
         mProfiler.Record(zone, now - phaseStart);
         phaseStart = now;
@@ -144,7 +143,7 @@ void Game::init()
     mECS->RegisterComponent<gamedev::Attacker>();
     mECS->RegisterComponent<gamedev::Arrow>();
     mECS->RegisterComponent<gamedev::SoundEmitter>();
-    mECS->RegisterComponent<gamedev::Animated>();
+    mECS->RegisterComponent<gamedev::Animated>(); 
     mECS->RegisterComponent<gamedev::Dweller>();
     mECS->RegisterComponent<gamedev::InTower>();
     mECS->RegisterComponent<gamedev::Tower>();
@@ -162,7 +161,7 @@ void Game::init()
     mCleanSys = mECS->RegisterSystem<gamedev::CleanupSystem>(); // every entity
 
     // Create autonomous systems not managed by ECS before use
-    mEnvironmentSys = std::make_shared<gamedev::EnvironmentSystem>();
+    mEnvironmentSys = std::make_shared<gamedev::EnvironmentSystem>(); 
 
     // Initialize systems
     mRenderSys->Init(*mECS);
@@ -178,7 +177,7 @@ void Game::init()
     mUnitFac = std::make_shared<gamedev::UnitFactory>();
     mStructFac = std::make_shared<gamedev::StructureFactory>();
     mNatureFac = std::make_shared<gamedev::NatureFactory>();
-    mItemFac = std::make_shared<gamedev::ItemFactory>();
+    mItemFac= std::make_shared<gamedev::ItemFactory>();
 
     mGamelogicSys->Init(*mECS, mAudioSys, mUnitFac, mStructFac, mItemFac, mGameAssets, 3.0);
 
@@ -791,7 +790,7 @@ void Game::onGui()
     else
     {
         menuUI();
-    }
+    } 
 }
 
 void Game::onClose()
@@ -1079,7 +1078,7 @@ void Game::structureSpawnMenu()
         {
             if (ImGui::Button(mStructureObjects[i].data(), ImVec2(-FLT_MIN, 0.0f)))
             {
-                mSelectedObject = mStructureObjects[i];
+                mSelectedObject =mStructureObjects[i];
                 mSelectedFac = mStructFac.get();
             }
 
@@ -1146,7 +1145,7 @@ void Game::unitSpawnMenu()
     }
 }
 
-void Game::newGame()
+void Game::newGame() 
 {
     toggleMenu();
     togglePause();
@@ -1316,7 +1315,7 @@ void Game::gameUI()
                 if (ImGui::Button("Man Towers", {menuWidth - 20, 50}))
                     mGamelogicSys->UpgradeSupply();
             }
-
+            
 
             ImGui::NewLine();
             ImGui::Separator();
@@ -1341,6 +1340,7 @@ void Game::gameUI()
                 if (ImGui::Button("Crazy Cheat", {menuWidth - 20, 50}))
                     mGamelogicSys->CRAZY_CHEAT_YOU_WONT_BELIEVE();
             }
+
         }
         ImGui::PopStyleVar();
         ImGui::End();
@@ -1582,7 +1582,7 @@ void Game::toggleMenu()
     }
 }
 
-void Game::applyCustomImguiTheme()
+void Game::applyCustomImguiTheme() 
 {
     ImGuiIO& io = ImGui::GetIO();
     font1 = io.Fonts->AddFontFromFileTTF("../data/fonts/SourceSans3.ttf", 25);

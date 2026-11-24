@@ -1,7 +1,7 @@
 #pragma once
+#include "components/Component.hh"
 #include <typed-geometry/types/objects/box.hh>
 #include <typed-geometry/types/objects/sphere.hh>
-#include "components/Component.hh"
 
 namespace gamedev
 {

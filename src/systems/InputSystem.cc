@@ -1,13 +1,19 @@
 #include "systems/InputSystem.hh"
 #include "advanced/transform.hh"
 
-void gamedev::InputSystem::AddEntity(InstanceHandle handle, Signature entitySignature) { mEntities.insert(handle); }
+void gamedev::InputSystem::AddEntity(InstanceHandle handle, Signature entitySignature) {
+    mEntities.insert(handle);
+}
 
-void gamedev::InputSystem::RemoveEntity(InstanceHandle handle) { mEntities.erase(handle); }
+void gamedev::InputSystem::RemoveEntity(InstanceHandle handle) {
+    mEntities.erase(handle);
+}
 
 void gamedev::InputSystem::RemoveAllEntities() { mEntities.clear(); }
 
-void gamedev::InputSystem::Init(EngineECS& ecs) { mECS = &ecs; }
+void gamedev::InputSystem::Init(EngineECS& ecs) {
+    mECS = &ecs;
+}
 
 void gamedev::InputSystem::Update(float dt)
 {
@@ -19,7 +25,7 @@ void gamedev::InputSystem::Update(float dt)
         auto physics = mECS->TryGetComponent<gamedev::Physics>(handle);
 
         auto move = input->targetMove - tg::pos3(instance.xform.translation);
-
+        
         // Update focus
         if (input->focusInstance.is_valid())
         {
@@ -28,6 +34,7 @@ void gamedev::InputSystem::Update(float dt)
 
         if (physics && (tg::length_sqr(move) < 0.1))
         {
+            
         }
 
         // Update velocity if angle between move-vector and current velocity-vector is above some epsilon
@@ -62,7 +69,7 @@ void gamedev::InputSystem::InstructFocus(InstanceHandle active_handle, InstanceH
 
     input->focusMove = focusMove;
     input->focusLook = focusLook;
-
+    
     if (focusMove && input->targetMove != passivePosition)
     {
         input->targetMove = passivePosition;

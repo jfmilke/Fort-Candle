@@ -8,7 +8,9 @@ void gamedev::PhysicsSystem::Init(EngineECS& ecs)
     mECS->AddFunctionalListener(FUNCTIONAL_LISTENER(EventType::StaticCollision, PhysicsSystem::CollisionListener));
 }
 
-void gamedev::PhysicsSystem::SetTerrain(std::shared_ptr<Terrain>& t) { mTerrain = t; }
+void gamedev::PhysicsSystem::SetTerrain(std::shared_ptr<Terrain>& t) {
+    mTerrain = t;
+}
 
 void gamedev::PhysicsSystem::Update(float dt)
 {
@@ -24,6 +26,7 @@ void gamedev::PhysicsSystem::Update(float dt)
         // Move
         if (InstanceBody->velocity != tg::vec3::zero)
         {
+
             auto move = dt * InstanceBody->velocity;
             Instance.xform.move_absolute(move);
             Instance.new_position = true;

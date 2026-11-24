@@ -260,7 +260,10 @@ public:
     }
 
     /// Rotation about the y axis only, as 3x3 matrix.
-    tg::mat3 rotation_mat2D() const { return tg::mat3(yRotation(rotation)); }
+    tg::mat3 rotation_mat2D() const
+    {
+        return tg::mat3(yRotation(rotation));
+    }
 
     /// Twist of the rotation about the x axis.
     tg::quat rotation_quat_x() const { return xRotation(rotation); }

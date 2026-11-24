@@ -1,7 +1,7 @@
 #pragma once
+#include <glow/fwd.hh>
 #include <concepts>
 #include <cstdint>
-#include <glow/fwd.hh>
 
 namespace gamedev
 {

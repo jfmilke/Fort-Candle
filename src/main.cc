@@ -23,13 +23,10 @@ ExitCode ToExitCode(gamedev::benchmark::Session::Status status)
     using Status = gamedev::benchmark::Session::Status;
     switch (status)
     {
-    case Status::Completed:
-        return ExitCode::Success;
-    case Status::WriteFailed:
-        return ExitCode::ResultsNotWritten;
+    case Status::Completed: return ExitCode::Success;
+    case Status::WriteFailed: return ExitCode::ResultsNotWritten;
     case Status::Running:
-    case Status::Aborted:
-        break;
+    case Status::Aborted: break;
     }
     return ExitCode::BenchmarkAborted;
 }

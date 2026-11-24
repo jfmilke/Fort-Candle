@@ -121,7 +121,7 @@ private:
      * TODO: Not set by `Init`; it only starts at 0 because `Game` value-initializes the system with `make_shared`.
      */
     float mGameTime;
-    int mDayCount; ///< Current day, starting at 1.
+    int mDayCount;                       ///< Current day, starting at 1.
 
     // in seconds
     // todo: implement day/night cycle

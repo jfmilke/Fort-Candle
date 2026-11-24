@@ -35,7 +35,7 @@ void gamedev::CollisionSystem::RemoveEntity(InstanceHandle handle)
 }
 
 void gamedev::CollisionSystem::RemoveAllEntities()
-{
+{ 
     mDynamicEntities.clear();
     mStaticEntities.clear();
 
@@ -284,7 +284,7 @@ bool gamedev::CollisionSystem::Collide(Instance& instance_dynamic, Instance& ins
     tg::sphere3 tCircle;
     tCircle.center = transform2 * circle_static->circle.center;
     tCircle.radius = scale2 * circle_static->circle.radius;
-
+    
     // Interpret as circles to do fast collision check
     auto distance = tg::distance_sqr(tBox.center, tCircle.center);
     auto radius1 = tg::length(tBox.half_extents[0] + tBox.half_extents[2]);
@@ -569,8 +569,8 @@ void gamedev::CollisionSystem::resolve(Instance& instance_dynamic, Instance& ins
             return;
         }
     }
-
-    instance_dynamic.xform.move_absolute(push);
+    
+    instance_dynamic.xform.move_absolute(push); 
 }
 
 void gamedev::CollisionSystem::PositionListener(Event& e)

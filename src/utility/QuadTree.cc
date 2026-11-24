@@ -58,7 +58,7 @@ void gamedev::QuadTree::add(InstanceHandle handle)
 }
 
 int gamedev::QuadTree::getQuadrant(Shape& shape, SharedNode& node)
-{
+{ 
   auto quadrantSize = (node->mRegion.max - node->mRegion.min) / 2.0;
 
   auto verticalAxis = tg::line(tg::pos2(node->mRegion.min + quadrantSize), tg::dir2::pos_x);
@@ -160,7 +160,7 @@ void gamedev::QuadTree::search(Shape& collision_area, SharedNode& node, std::vec
         {
             for (int i = 0; i < 4; i++)
             {
-
+              
             }
         }
     }

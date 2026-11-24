@@ -1,10 +1,10 @@
 #pragma once
+#include "advanced/World.hh"
+#include "ecs/System.hh"
 #include <clean-core/assert.hh>
 #include <memory>
 #include <typeindex>
 #include <vector>
-#include "advanced/World.hh"
-#include "ecs/System.hh"
 
 namespace gamedev
 {

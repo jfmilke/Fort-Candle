@@ -1,14 +1,14 @@
 #pragma once
 #include <glow/fwd.hh>
 
-#include <memory>
-#include "Components.hh"
-#include "advanced/World.hh"
 #include "ecs/ComponentManager.hh"
-#include "ecs/EventManager.hh"
 #include "ecs/SystemManager.hh"
-#include "glow/common/log.hh"
+#include "ecs/EventManager.hh"
+#include "advanced/World.hh"
+#include "Components.hh"
 #include "utility/HashMap.hh"
+#include "glow/common/log.hh"
+#include <memory>
 
 namespace gamedev
 {

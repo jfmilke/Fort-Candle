@@ -39,8 +39,7 @@ std::expected<LaunchOptions, std::string> ParseCommandLine(std::span<char const*
         std::string_view const arg = args[i];
 
         // "--name value"
-        auto const value = [&]() -> std::expected<std::string_view, std::string>
-        {
+        auto const value = [&]() -> std::expected<std::string_view, std::string> {
             if (i + 1 < args.size())
                 return std::string_view(args[++i]);
             return std::unexpected(std::format("{} needs a value", arg));
