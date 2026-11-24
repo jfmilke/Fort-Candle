@@ -1,7 +1,7 @@
 #include "GameObjects.hh"
-#include <glow/objects/Texture2D.hh>
 #include <algorithm>
 #include <functional>
+#include <glow/objects/Texture2D.hh>
 
 void gamedev::GameObjects::initialize()
 {
@@ -49,11 +49,11 @@ void gamedev::GameObjects::scanMeshes()
         {
             continue;
         }
-        
+
         // Correct path to forward slash
         auto path = obj.path().string();
         std::replace(path.begin(), path.end(), '\\', '/');
-        
+
         registerObject(path);
     }
 }
@@ -102,7 +102,7 @@ bool gamedev::GameObjects::registerObject(std::filesystem::path mesh_path)
 {
     Mesh3D mesh;
 
-    if(!mesh.loadFromFile(mesh_path.string()))
+    if (!mesh.loadFromFile(mesh_path.string()))
     {
         glow::error() << "Registering empty mesh: " << mesh_path.string();
         return false;
@@ -183,7 +183,7 @@ tg::aabb3 gamedev::GameObjects::getAABB(std::filesystem::path identifier)
     {
         return mMapObjectPathToAABB[mMapNameToID[id]];
     }
-    
+
     return {};
 }
 

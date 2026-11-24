@@ -1,6 +1,6 @@
 #include "systems/GamelogicSystem.hh"
-#include "advanced/transform.hh"
 #include <typed-geometry/tg.hh>
+#include "advanced/transform.hh"
 #include "glow/common/log.hh"
 #include "utility/Random.hh"
 #include "utility/misc.hh"
@@ -80,12 +80,9 @@ void gamedev::GamelogicSystem::Init(EngineECS& ecs,
     mAS->PlayLocalSound(tg::pos3(40, 0, -60), "crickets.wav", ambient, 0.5f, true, 20, 100);
 
     mAS->PlayGlobalSound("music.wav", music, 0.4, true);
-} 
-
-void gamedev::GamelogicSystem::AttachTerrain(std::shared_ptr<Terrain>& terrain)
-{
-    mTerrain = terrain;
 }
+
+void gamedev::GamelogicSystem::AttachTerrain(std::shared_ptr<Terrain>& terrain) { mTerrain = terrain; }
 
 void gamedev::GamelogicSystem::Update(float dt)
 {
@@ -144,7 +141,7 @@ void gamedev::GamelogicSystem::Update(float dt)
             UpdateHomefire();
     }
 
-    
+
     mUpdateControl++;
 }
 
@@ -207,7 +204,6 @@ void gamedev::GamelogicSystem::LookForEnemy(const Instance& instance, Living* li
             }
         }
     }
-    
 }
 
 void gamedev::GamelogicSystem::SetMoveOrder(Living* subject, tg::vec3 moveTo)
@@ -220,7 +216,7 @@ void gamedev::GamelogicSystem::SetMoveOrder(Living* subject, tg::vec3 moveTo)
 void gamedev::GamelogicSystem::UpdateMoveOrder(const Instance& instance, Living* subject, float dt)
 {
     if (!subject->moveOrder)
-      return;
+        return;
 
     if (mECS->TestSignature<InTower>(instance.mHandle))
     {
@@ -279,10 +275,7 @@ void gamedev::GamelogicSystem::UpdateMoveOrder(const Instance& instance, Living*
         subject->forceMove = false;
 }
 
-void gamedev::GamelogicSystem::SetFocus(Living* subject, InstanceHandle focusHandle)
-{
-    subject->focusHandle = focusHandle;
-}
+void gamedev::GamelogicSystem::SetFocus(Living* subject, InstanceHandle focusHandle) { subject->focusHandle = focusHandle; }
 
 void gamedev::GamelogicSystem::UpdateFocus(const Instance& instance, Living* subject)
 {
@@ -339,16 +332,15 @@ void gamedev::GamelogicSystem::UpdateAttackOrder(const Instance& instance, Livin
 
         if (attacker->idle >= 5 * updatesPerSecond)
         {
-            //SheathWeapon(attacker);
+            // SheathWeapon(attacker);
         }
 
         MoveWeapon(instance, attacker);
-        
+
         return;
     }
 
     attacker->idle = 0;
-
 
 
     // Business as usual:
@@ -376,7 +368,7 @@ void gamedev::GamelogicSystem::UpdateAttackOrder(const Instance& instance, Livin
             return;
 
         if (attacker->weapon.type == WeaponType::Bow)
-            ShootArrow(attacker, dt);  
+            ShootArrow(attacker, dt);
         else if (attacker->weapon.type == WeaponType::Claws)
             AttackClaw(attacker, dt);
 
@@ -667,7 +659,7 @@ void gamedev::GamelogicSystem::SpawnPlayer()
 {
     mBonfire = mSF->Create("starting_bonfire", mGlobalScale * mPlayerStart);
     mAS->PlayLocalSound(mBonfire, "fire.wav", ambient, 1.0, true, 3, 50);
-    
+
     {
         auto handle = mUF->Create("person_soldier", mGlobalScale * mPlayerStart - mGlobalScale * tg::vec3(1.0, 0.0, 0.0));
         mUnits.push_back(handle);
@@ -692,7 +684,7 @@ void gamedev::GamelogicSystem::SpawnPlayer()
         auto handle = mUF->Create("person", mGlobalScale * mPlayerStart - mGlobalScale * tg::vec3(-1.0, 0.0, 0.0) + varyPos);
         mUnits.push_back(handle);
     }
-    
+
     mHome.center = mGlobalScale * mPlayerStart;
     mHome.radius = 10;
     CalculateFreeSlots();
@@ -705,9 +697,9 @@ void gamedev::GamelogicSystem::SpawnPlayer()
 
     SetReinforcementWay();
     SetEnemySpawns();
-    
-    //TestReinforcementWay();
-    //TestFreeSlots();
+
+    // TestReinforcementWay();
+    // TestFreeSlots();
 }
 
 void gamedev::GamelogicSystem::SpawnForge()
@@ -746,7 +738,7 @@ void gamedev::GamelogicSystem::SpawnHouse(bool highlighted)
         mOutlinedHandles.push_back(tent);
         mOutlinedColors.push_back(tg::vec4(0.0, 153.0 / 255.0, 1.0, 1.0));
     }
-    
+
 
     mHomes++;
 }
@@ -764,12 +756,11 @@ void gamedev::GamelogicSystem::SetEnemySpawns()
 
 void gamedev::GamelogicSystem::Produce(Producer* producer, float dt)
 {
-
     mGold += producer->income * 3.f * dt + mForges * 3.f * 2.f * producer->income * dt;
 }
 
-void gamedev::GamelogicSystem::SpawnEnemyWave(int number) 
-{ 
+void gamedev::GamelogicSystem::SpawnEnemyWave(int number)
+{
     for (int i = 0; i < number; i++)
     {
         auto location = mEnemySpawns[int(RandomFloat(0.0, mEnemySpawns.size() - 0.1))];
@@ -786,7 +777,7 @@ void gamedev::GamelogicSystem::SpawnEnemyWave(int number)
     mAS->PlayGlobalSound("waveDrum1.wav", effect, 1.2f);
 }
 
-void gamedev::GamelogicSystem::SpawnReinforcements(int number) 
+void gamedev::GamelogicSystem::SpawnReinforcements(int number)
 {
     if (GetPioneerCount() >= GetMaxPioneers())
         return;
@@ -867,7 +858,6 @@ void gamedev::GamelogicSystem::Rightclick(InstanceHandle handle)
 
 void gamedev::GamelogicSystem::Kill(InstanceHandle killedHandle, bool killedPioneer, InstanceHandle killerHandle)
 {
-
     if (killedPioneer)
     {
         Event e(EventType::PioneerDeath, killerHandle, killedHandle);
@@ -886,7 +876,6 @@ void gamedev::GamelogicSystem::Kill(InstanceHandle killedHandle, bool killedPion
         mECS->SendFunctionalEvent(e);
 
         mAS->PlayLocalSound(tg::pos3(mECS->GetInstanceTransform(killedHandle).translation), "monsterDeath.wav", effect, 0.2, false, 3.0, 50.0);
-
     }
 
     mECS->MarkDestruction(killedHandle);
@@ -897,7 +886,7 @@ void gamedev::GamelogicSystem::Destroy(InstanceHandle destroyedHandle, InstanceH
     Event e(EventType::BuildingDestroyed, destroyerHandle, destroyedHandle);
     mECS->SendFunctionalEvent(e);
 
-    
+
     auto position = mECS->GetInstanceTransform(destroyedHandle).translation;
     mAS->PlayLocalSound(tg::pos3(position), "explosion1.wav", effect, 1.f, false, 3, 50);
 
@@ -996,8 +985,8 @@ void gamedev::GamelogicSystem::SpawnStoneWalls()
 
     // Get the scalings of the used presets
     auto wScale = mECS->GetInstanceTransform(mSF->GetPreset("astonewall")).scaling;
-    auto pScale = mECS->GetInstanceTransform(mSF->GetPreset("astonepillar")).scaling; 
-    auto gScale = mECS->GetInstanceTransform(mSF->GetPreset("astonegate")).scaling; 
+    auto pScale = mECS->GetInstanceTransform(mSF->GetPreset("astonepillar")).scaling;
+    auto gScale = mECS->GetInstanceTransform(mSF->GetPreset("astonegate")).scaling;
 
     // Get the original (unmodified) AABBs and scale them according to the presets
     auto wSize = wScale * tg::size_of(mGO->getAABB("astonewall"));
@@ -1006,12 +995,12 @@ void gamedev::GamelogicSystem::SpawnStoneWalls()
 
     // Calculate all parameters (https://mathworld.wolfram.com/CircularSegment.html)
     // Walls
-    float wLength = wSize.width;                                          // segment length
-    auto wTheta = 2.f * tg::asin(wLength / (2.f * mHome.radius));         // angle spanned by segment
-    auto wOffs = mHome.radius - (mHome.radius * tg::cos(wTheta / 2.f));   // offset from the circles boundary, all segments will reside completely within the circle
+    float wLength = wSize.width;                                  // segment length
+    auto wTheta = 2.f * tg::asin(wLength / (2.f * mHome.radius)); // angle spanned by segment
+    auto wOffs = mHome.radius - (mHome.radius * tg::cos(wTheta / 2.f)); // offset from the circles boundary, all segments will reside completely within the circle
 
     // Pillars
-    float pLength = pSize.width * 0.6;                                    // pretend they are slimmer so they will nicely overlap with the walls
+    float pLength = pSize.width * 0.6; // pretend they are slimmer so they will nicely overlap with the walls
     auto pTheta = 2.f * tg::asin(pLength / (2.f * mHome.radius));
     auto pOffs = mHome.radius - (mHome.radius * tg::cos(pTheta / 2.f));
 
@@ -1019,13 +1008,13 @@ void gamedev::GamelogicSystem::SpawnStoneWalls()
     float gLength = gSize.width;
     auto gTheta = 2.f * tg::asin(gLength / (2.f * mHome.radius));
     auto gOffs = mHome.radius - (mHome.radius * tg::cos(gTheta / 2.f));
-    tg::size3 gScaleFix(1.0);                                                // prepare the fixing of the gates scale if a fractional result of wSegments remains
+    tg::size3 gScaleFix(1.0); // prepare the fixing of the gates scale if a fractional result of wSegments remains
 
     // Start with the circles 360 degrees and subtract all elements angles which are not covered by the following for-loop
     auto circumcircle = 360_deg;
-    circumcircle -= gTheta;                             // Gate
-    circumcircle -= 2 * wTheta;                         // Usually: Walls without a successive pillar. BUT: It looks better if set to 2 instead of 1, idk
-    auto wSegments = circumcircle / (wTheta + pTheta);  // Count how many wall segments (including a pillar) can be spawned
+    circumcircle -= gTheta;     // Gate
+    circumcircle -= 2 * wTheta; // Usually: Walls without a successive pillar. BUT: It looks better if set to 2 instead of 1, idk
+    auto wSegments = circumcircle / (wTheta + pTheta); // Count how many wall segments (including a pillar) can be spawned
 
     // If it does not fit quite well, scale the gate
     if (tg::fract(wSegments) > 0.001)
@@ -1041,7 +1030,7 @@ void gamedev::GamelogicSystem::SpawnStoneWalls()
         gLength = gScaleFix.width * gLength;
         gScaleFix.height = 1.0f + (gScaleFix.width - 1.0f) * 0.6f;
         gScaleFix.depth = 1.0f + (gScaleFix.width - 1.0f) * 0.6f;
-        
+
         // Subtract (fixed) gate angle again
         circumcircle -= gTheta;
 
@@ -1053,7 +1042,7 @@ void gamedev::GamelogicSystem::SpawnStoneWalls()
     wSegments += 2;
 
     // Spawn gate
-    tg::vec3 translation =  mHome.radius * tg::vec3::unit_z * -1;
+    tg::vec3 translation = mHome.radius * tg::vec3::unit_z * -1;
     auto gHandle = mSF->Create("astonegate", mHome.center + translation - gOffs);
     mECS->GetInstanceTransform(gHandle).scale(gScaleFix);
 
@@ -1064,9 +1053,9 @@ void gamedev::GamelogicSystem::SpawnStoneWalls()
     tg::mat4 pRot = tg::rotation_y(pTheta);
     tg::mat4 gRot = tg::rotation_y(gTheta);
 
-    tg::mat4 wRotHalf = tg::rotation_y(wTheta/2.f);
-    tg::mat4 pRotHalf = tg::rotation_y(pTheta/2.f);
-    tg::mat4 gRotHalf = tg::rotation_y(gTheta/2.f);
+    tg::mat4 wRotHalf = tg::rotation_y(wTheta / 2.f);
+    tg::mat4 pRotHalf = tg::rotation_y(pTheta / 2.f);
+    tg::mat4 gRotHalf = tg::rotation_y(gTheta / 2.f);
 
     // Apply Rotation for the first wall segment
     translation = wRotHalf * gRotHalf * translation;
@@ -1075,7 +1064,9 @@ void gamedev::GamelogicSystem::SpawnStoneWalls()
     int w = 0;
     for (int i = 0; i < int(wSegments) - 1; i++)
     {
-        mWalls.push_back(mSF->Create("astonewall", mHome.center + translation - wOffs, tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta/2.f + wTheta/2.f) + w * (wTheta/2.f + pTheta/2.f) + p * (pTheta/2.f + wTheta/2.f))));
+        mWalls.push_back(mSF->Create("astonewall", mHome.center + translation - wOffs,
+                                     tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta / 2.f + wTheta / 2.f) + w * (wTheta / 2.f + pTheta / 2.f)
+                                                                                    + p * (pTheta / 2.f + wTheta / 2.f))));
         translation = pRotHalf * wRotHalf * translation;
 
         mOutlinedHandles.push_back(mWalls.back());
@@ -1083,16 +1074,20 @@ void gamedev::GamelogicSystem::SpawnStoneWalls()
 
         w++;
 
-        mWalls.push_back(mSF->Create("astonepillar", mHome.center + translation - pOffs, tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta/2.f + wTheta/2.f) + w * (wTheta/2.f + pTheta/2.f) + p * (pTheta/2.f + wTheta/2.f))));
+        mWalls.push_back(mSF->Create("astonepillar", mHome.center + translation - pOffs,
+                                     tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta / 2.f + wTheta / 2.f) + w * (wTheta / 2.f + pTheta / 2.f)
+                                                                                    + p * (pTheta / 2.f + wTheta / 2.f))));
         translation = wRotHalf * pRotHalf * translation;
 
         mOutlinedHandles.push_back(mWalls.back());
         mOutlinedColors.push_back(tg::vec4(0.0, 153.0 / 255.0, 1.0, 1.0));
-        
+
         p++;
     }
     // Last wall segment, without a consecutive pillar
-    mWalls.push_back(mSF->Create("astonewall", mHome.center + translation, tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta/2.f + wTheta/2.f) + w * (wTheta/2.f + pTheta/2.f) + p * (pTheta/2.f + wTheta/2.f))));
+    mWalls.push_back(mSF->Create(
+        "astonewall", mHome.center + translation,
+        tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta / 2.f + wTheta / 2.f) + w * (wTheta / 2.f + pTheta / 2.f) + p * (pTheta / 2.f + wTheta / 2.f))));
 
     mOutlinedHandles.push_back(mWalls.back());
     mOutlinedColors.push_back(tg::vec4(0.0, 153.0 / 255.0, 1.0, 1.0));
@@ -1109,7 +1104,7 @@ void gamedev::GamelogicSystem::SpawnWoodWalls()
 
     // Get the scalings of the used presets
     auto wScale = mECS->GetInstanceTransform(mSF->GetPreset("aFence0")).scaling;
-    auto gScale = mECS->GetInstanceTransform(mSF->GetPreset("astonegate")).scaling;   // Placeholder
+    auto gScale = mECS->GetInstanceTransform(mSF->GetPreset("astonegate")).scaling; // Placeholder
 
     // Get the original (unmodified) AABBs and scale them according to the presets
     auto wSize = wScale * tg::size_of(mGO->getAABB("aFence0"));
@@ -1168,8 +1163,7 @@ void gamedev::GamelogicSystem::SpawnWoodWalls()
     for (int i = 0; i < int(wSegments) - 1; i++)
     {
         mWalls.push_back(mSF->Create("aFence0", mHome.center + translation - wOffs,
-                    tg::quat::from_axis_angle(tg::dir3::pos_y,
-                                              (gTheta / 2.f + wTheta / 2.f) + w * wTheta)));
+                                     tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta / 2.f + wTheta / 2.f) + w * wTheta)));
 
         mOutlinedHandles.push_back(mWalls.back());
         mOutlinedColors.push_back(tg::vec4(0.0, 153.0 / 255.0, 1.0, 1.0));
@@ -1178,8 +1172,7 @@ void gamedev::GamelogicSystem::SpawnWoodWalls()
         w++;
     }
     // Last wall segment, without a consecutive pillar
-    mWalls.push_back(mSF->Create("aFence0", mHome.center + translation,
-                tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta / 2.f + wTheta / 2.f) + w * wTheta)));
+    mWalls.push_back(mSF->Create("aFence0", mHome.center + translation, tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta / 2.f + wTheta / 2.f) + w * wTheta)));
 
     mOutlinedHandles.push_back(mWalls.back());
     mOutlinedColors.push_back(tg::vec4(0.0, 153.0 / 255.0, 1.0, 1.0));
@@ -1262,7 +1255,8 @@ void gamedev::GamelogicSystem::SpawnSpikes()
     int w = 0;
     for (int i = 0; i < int(wSegments) - 1; i++)
     {
-        auto spikes = mSF->Create("aspikebarriers", mHome.center + translation - wOffs, tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta / 2.f + wTheta / 2.f) + w * wTheta + 180_deg));
+        auto spikes = mSF->Create("aspikebarriers", mHome.center + translation - wOffs,
+                                  tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta / 2.f + wTheta / 2.f) + w * wTheta + 180_deg));
         mECS->GetInstanceTransform(spikes).move_absolute(tg::vec3::unit_y * (-0.2 * wSize.height));
         mWalls.push_back(spikes);
 
@@ -1317,12 +1311,12 @@ void gamedev::GamelogicSystem::StartProduction(InstanceHandle handle)
     pp.varyPosition = tg::vec3{0.2, 0.2, 0.2};
     pp.varySize = 0.4;
     pp.varyVelocity = tg::vec3{0.3, 0.2, 0.3};
-    
+
     pp.particlesPerSecond = 20;
 
     if (!particles)
         particles = mECS->CreateComponent<ParticleEmitter>(handle);
-    
+
     particles->pp.push_back(pp);
 }
 
@@ -1334,7 +1328,7 @@ void gamedev::GamelogicSystem::StopProduction(InstanceHandle handle)
 
 gamedev::InstanceHandle gamedev::GamelogicSystem::SpawnObjectRandomly(tg::pos3 position, std::string object_id)
 {
-    auto randomSize= tg::size3(RandomFloat(1.0, 1.4));
+    auto randomSize = tg::size3(RandomFloat(1.0, 1.4));
     auto randomAngle = RandomFloat() * 360_deg;
 
     auto handle = mSF->Create(object_id, position, tg::quat::from_axis_angle(tg::dir3::pos_y, randomAngle));
@@ -1349,11 +1343,10 @@ gamedev::InstanceHandle gamedev::GamelogicSystem::TryConstructObject(std::string
     // You have 20 tries to find a free spot, good luck
     for (int i = 0; i < 20; i++)
     {
-        tg::pos3 randomPosition
-            = mHome.center + RandomFloat(1.0, mHome.radius - 1.0) * tg::vec3::unit_x + RandomFloat(1.0, mHome.radius - 1.0) * tg::vec3::unit_z;
+        tg::pos3 randomPosition = mHome.center + RandomFloat(1.0, mHome.radius - 1.0) * tg::vec3::unit_x + RandomFloat(1.0, mHome.radius - 1.0) * tg::vec3::unit_z;
 
         auto potential_colliders = mECS->GetHashMap().FindNear(tg::vec3(randomPosition), instance.max_bounds);
-        
+
         bool freeSpot = true;
         for (const auto& pc : potential_colliders)
         {
@@ -1381,7 +1374,7 @@ gamedev::InstanceHandle gamedev::GamelogicSystem::TryConstructRandomObject(std::
                                   + RandomFloat(-mHome.radius + 1, mHome.radius - 1.0) * tg::vec3::unit_z;
 
         auto potential_colliders = mECS->GetHashMap().FindNear(tg::vec3(randomPosition), instance.max_bounds);
-        
+
         bool freeSpot = true;
         for (const auto& pc : potential_colliders)
         {
@@ -1486,7 +1479,8 @@ void gamedev::GamelogicSystem::SpawnWoodStartingFences()
     {
         auto randomness = RandomFloat() * 10_deg;
 
-        mWalls.push_back(mSF->Create("aFence1", mHome.center + translation - wOffs, tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta / 2.f + wTheta / 2.f) + w * wTheta * 6.f + randomness)));
+        mWalls.push_back(mSF->Create("aFence1", mHome.center + translation - wOffs,
+                                     tg::quat::from_axis_angle(tg::dir3::pos_y, (gTheta / 2.f + wTheta / 2.f) + w * wTheta * 6.f + randomness)));
 
         randomness = RandomFloat() * 2_deg;
 
@@ -1504,34 +1498,34 @@ int gamedev::GamelogicSystem::GetArtisanCount() { return mArtisans.size(); }
 int gamedev::GamelogicSystem::GetSoldierCount() { return mSoldiers.size(); }
 std::string gamedev::GamelogicSystem::GetFortificationUpgrade()
 {
-  switch (mFortificationLevel)
-  {
-  case 0:
-      return "Fences";
+    switch (mFortificationLevel)
+    {
+    case 0:
+        return "Fences";
 
-  case 1:
-      return "Wooden Barricades";
+    case 1:
+        return "Wooden Barricades";
 
-  case 2:
-      return "Stonewalls";
-    
-  case 3:
-      return "Add Spikes";
+    case 2:
+        return "Stonewalls";
 
-  default:
-      return "None left!";
-  }
+    case 3:
+        return "Add Spikes";
+
+    default:
+        return "None left!";
+    }
 }
 
 void gamedev::GamelogicSystem::DeleteFortifications()
 {
-  for (const auto& handle : mWalls)
-  {
-      if (mECS->IsLiveHandle(handle))
-          mECS->DestroyInstance(handle);
-  }
+    for (const auto& handle : mWalls)
+    {
+        if (mECS->IsLiveHandle(handle))
+            mECS->DestroyInstance(handle);
+    }
 
-  mWalls.clear();
+    mWalls.clear();
 }
 
 void gamedev::GamelogicSystem::UpgradeFortifications()
@@ -1578,7 +1572,7 @@ void gamedev::GamelogicSystem::AssignArtisan()
         return;
     }
 
-    if(!Pay(GetArtisanPrice()))
+    if (!Pay(GetArtisanPrice()))
     {
         mAS->PlayGlobalSound("interfaceNegative.wav", ui);
         return;
@@ -1594,7 +1588,7 @@ void gamedev::GamelogicSystem::AssignArtisan()
         {
             continue;
         }
-        
+
         const auto& filthyPeasant = mECS->GetInstance(h);
         auto artisan = mUF->Create("person_artisan", tg::pos3(filthyPeasant.xform.translation), filthyPeasant.xform.rotation, filthyPeasant.xform.scaling);
         mECS->MarkDestruction(filthyPeasant.mHandle);
@@ -1689,7 +1683,7 @@ bool gamedev::GamelogicSystem::Pay(int gold)
     {
         return false;
     }
-    
+
     mGold -= gold;
     return true;
 }
@@ -1745,7 +1739,6 @@ void gamedev::GamelogicSystem::UpdateHomefire()
 
         mDesaturationIntensityTarget = 0.0;
         mVignetteRadiusTarget = 0.9;
-
     }
     else if (mFireWood > 60.f)
     {
@@ -1772,7 +1765,6 @@ void gamedev::GamelogicSystem::UpdateHomefire()
 
         mDesaturationIntensityTarget = 0.2;
         mVignetteRadiusTarget = 0.85;
-
     }
     else if (mFireWood > 20.f)
     {
@@ -1949,10 +1941,7 @@ void gamedev::GamelogicSystem::RepairFortifications()
     mAS->PlayGlobalSound("construction1.wav", effect, 0.5f);
 }
 
-int gamedev::GamelogicSystem::GetRepairFortificationsPrice()
-{
-    return mDestroyedWalls * 1;
-}
+int gamedev::GamelogicSystem::GetRepairFortificationsPrice() { return mDestroyedWalls * 1; }
 
 void gamedev::GamelogicSystem::CalculateFreeSlots()
 {
@@ -2000,7 +1989,6 @@ void gamedev::GamelogicSystem::CalculateFreeSlots()
     }
 
 
-
     int i = 0;
 }
 
@@ -2031,7 +2019,7 @@ void gamedev::GamelogicSystem::UpgradeProduction()
     }
 
     SpawnForge();
-    
+
     mAS->PlayGlobalSound("construction1.wav", effect, 0.5f);
 }
 void gamedev::GamelogicSystem::ConstructHome()
@@ -2055,7 +2043,7 @@ void gamedev::GamelogicSystem::UpdateOutlines(float dt)
     for (int i = 0; i < mOutlinedColors.size(); i++)
     {
         auto& c = mOutlinedColors[i];
-        
+
         // Don't update current selections
         if (c.w <= -1.f)
         {
@@ -2095,7 +2083,7 @@ void gamedev::GamelogicSystem::UpdateMonster(const Instance& instance, Living* s
         subject->moveOrder = false;
         subject->forceMove = false;
         if (subject->focusHandle._value != mBonfire._value)
-                SetFocus(subject, mBonfire);
+            SetFocus(subject, mBonfire);
         StealFirewood(instance, dt);
     }
 
@@ -2109,10 +2097,7 @@ void gamedev::GamelogicSystem::UpdateMonster(const Instance& instance, Living* s
     }
 }
 
-void gamedev::GamelogicSystem::StealFirewood(const Instance& instance, float dt)
-{
-    mFireWood -= dt/2.f;
-}
+void gamedev::GamelogicSystem::StealFirewood(const Instance& instance, float dt) { mFireWood -= dt / 2.f; }
 
 int gamedev::GamelogicSystem::GetSupplyLevel() { return mSupplyLevel; }
 int gamedev::GamelogicSystem::GetSupplyPrice()
@@ -2316,7 +2301,4 @@ void gamedev::GamelogicSystem::Heal()
     mAS->PlayGlobalSound("heal.wav", ui);
 }
 
-int gamedev::GamelogicSystem::GetInjured()
-{
-    return mInjuredPioneers.size();
-}
+int gamedev::GamelogicSystem::GetInjured() { return mInjuredPioneers.size(); }

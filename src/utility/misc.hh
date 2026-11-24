@@ -1,10 +1,10 @@
 #pragma once
-#include <string>
 #include <algorithm>
-#include <vector>
 #include <cctype>
-#include <iostream>
 #include <cmath>
+#include <iostream>
+#include <string>
+#include <vector>
 
 namespace gamedev
 {
@@ -24,7 +24,7 @@ std::string lowerString(std::string string);
  * @param c Constant term.
  * @return Both real solutions (s1 >= s2 for a > 0), or (0, 0) if there is none.
  */
-template<typename T>
+template <typename T>
 std::pair<float, float> solveQuadratic(T a, T b, T c)
 {
     auto inner_sqrt = b * b - 4.0f * a * c;

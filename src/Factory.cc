@@ -1,7 +1,7 @@
 #include "Factory.hh"
-#include "utility/misc.hh"
-#include <glow/common/log.hh>
 #include <fstream>
+#include <glow/common/log.hh>
+#include "utility/misc.hh"
 
 void gamedev::Factory::Init(EngineECS& ecs, SharedGameObjects& obj)
 {
@@ -9,10 +9,7 @@ void gamedev::Factory::Init(EngineECS& ecs, SharedGameObjects& obj)
     mObj = obj;
 }
 
-void gamedev::Factory::AttachTerrain(std::shared_ptr<Terrain>& terrain)
-{
-    mT = terrain;
-}
+void gamedev::Factory::AttachTerrain(std::shared_ptr<Terrain>& terrain) { mT = terrain; }
 
 void gamedev::Factory::AddPreset(std::string identifier, InstanceHandle presetHandle)
 {
@@ -97,7 +94,7 @@ void gamedev::Factory::OverwritePreset(int presetID, InstanceHandle templateHand
 gamedev::InstanceHandle gamedev::Factory::GetPreset(std::string identifier)
 {
     std::string name = lowerString(identifier);
-    
+
     if (mObjectNameToID.find(name) != mObjectNameToID.end())
     {
         return mIDToPreset[mObjectNameToID[name]];
@@ -118,7 +115,7 @@ gamedev::InstanceHandle gamedev::Factory::Register(std::string asset_identifier,
     if (!mObj->hasObject(a_name))
     {
         glow::error() << "Asset manager has no " << a_name << ".";
-        return { std::uint32_t(-1) };
+        return {std::uint32_t(-1)};
     }
 
     auto handle = mECS->CreateInstance(mObj->getVAO(a_name), mObj->mTexAlbedoPolyPalette, nullptr, nullptr);
@@ -267,7 +264,7 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string identifier)
     if (!exists(name))
     {
         glow::error() << "Creating unregistered unit.";
-        return { std::uint32_t(-1)};
+        return {std::uint32_t(-1)};
     }
 
     auto preset_handle = GetPreset(name);
@@ -447,9 +444,9 @@ bool gamedev::Factory::SaveObjectsTo(std::filesystem::path filepath)
         file.write((char*)object.second.c_str(), object.second.size()); // write string identifier
         file.write("\0", sizeof(char));                                 // write null end for easy reading of string
 
-        file.write((char*)&xform.translation, sizeof(tg::vec3));        // write position
-        file.write((char*)&xform.rotation, sizeof(tg::quat));           // write rotation
-        file.write((char*)&xform.scaling, sizeof(tg::size3));           // write scaling
+        file.write((char*)&xform.translation, sizeof(tg::vec3)); // write position
+        file.write((char*)&xform.rotation, sizeof(tg::quat));    // write rotation
+        file.write((char*)&xform.scaling, sizeof(tg::size3));    // write scaling
     }
 
     file.close();
@@ -520,12 +517,12 @@ std::vector<gamedev::InstanceHandle> gamedev::Factory::LoadObjectsFrom(std::file
         tg::quat rotation;
         tg::size3 scaling;
 
-        std::getline(file, identifier, '\0');                 // read null ended string
-        file.read((char*)&translation, sizeof(tg::vec3));     // read position
-        file.read((char*)&rotation, sizeof(tg::quat));        // read rotation
-        file.read((char*)&scaling, sizeof(tg::size3));        // read scaling
+        std::getline(file, identifier, '\0');             // read null ended string
+        file.read((char*)&translation, sizeof(tg::vec3)); // read position
+        file.read((char*)&rotation, sizeof(tg::quat));    // read rotation
+        file.read((char*)&scaling, sizeof(tg::size3));    // read scaling
 
-        auto handle = Create(identifier, tg::pos3(translation), rotation, scaling);   // create instance upon this
+        auto handle = Create(identifier, tg::pos3(translation), rotation, scaling); // create instance upon this
         mECS->GetInstanceTransform(handle).translation = translation;
 
         handles.push_back(handle);
@@ -536,7 +533,6 @@ std::vector<gamedev::InstanceHandle> gamedev::Factory::LoadObjectsFrom(std::file
         }
 
         // ToDo: Maybe catch some errors in this process instead of producing a runtime error
-
     }
 
     return handles;

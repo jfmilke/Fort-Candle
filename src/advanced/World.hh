@@ -1,12 +1,12 @@
 #pragma once
 
-#include <glow/fwd.hh>
 #include <compare>
 #include <functional>
+#include <glow/fwd.hh>
+#include "Constants.hh"
 #include "container/compact_pool.hh"
 #include "transform.hh"
 #include "types/AuxiliaryModel.hh"
-#include "Constants.hh"
 
 namespace gamedev
 {

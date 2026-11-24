@@ -1,8 +1,8 @@
 #pragma once
 #include <glow/fwd.hh>
+#include <string>
 #include "typed-geometry/types/pos.hh"
 #include "types/Properties.hh"
-#include <string>
 
 namespace gamedev
 {

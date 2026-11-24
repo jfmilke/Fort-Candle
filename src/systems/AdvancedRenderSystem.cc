@@ -7,15 +7,15 @@
 
 #include <glow/common/log.hh>
 #include <glow/common/scoped_gl.hh>
+#include <glow/data/TextureData.hh>
 #include <glow/objects/ArrayBuffer.hh>
-#include <glow/objects/UniformBuffer.hh>
 #include <glow/objects/Framebuffer.hh>
-#include <glow/objects/TextureCubeMap.hh>
 #include <glow/objects/Program.hh>
 #include <glow/objects/Texture2D.hh>
+#include <glow/objects/TextureCubeMap.hh>
 #include <glow/objects/TextureRectangle.hh>
+#include <glow/objects/UniformBuffer.hh>
 #include <glow/objects/VertexArray.hh>
-#include <glow/data/TextureData.hh>
 
 #include <glow-extras/geometry/FullscreenTriangle.hh>
 #include <glow-extras/geometry/Quad.hh>
@@ -32,17 +32,12 @@
 void gamedev::RenderSystem::Init(EngineECS& ecs)
 {
     mECS = &ecs;
-    
+
     mMeshQuad = glow::geometry::Quad<>().generate();
 
     mTexSkybox = glow::TextureCubeMap::createFromData(glow::TextureData::createFromFileCube(
-        texPath + "skybox/Left_fhd.png",
-        texPath + "skybox/Right_fhd.png",
-        texPath + "skybox/Up_fhd.png",
-        texPath + "skybox/Down_fhd.png",
-        texPath + "skybox/Front_fhd.png",
-        texPath + "skybox/Back_fhd.png",
-        glow::ColorSpace::sRGB));
+        texPath + "skybox/Left_fhd.png", texPath + "skybox/Right_fhd.png", texPath + "skybox/Up_fhd.png", texPath + "skybox/Down_fhd.png",
+        texPath + "skybox/Front_fhd.png", texPath + "skybox/Back_fhd.png", glow::ColorSpace::sRGB));
 }
 
 void gamedev::RenderSystem::InitResources()
@@ -51,10 +46,7 @@ void gamedev::RenderSystem::InitResources()
     LoadGFXResources();
 }
 
-void gamedev::RenderSystem::InitParticles(glow::SharedVertexArray& vao)
-{
-    mVaoParticle = vao;
-}
+void gamedev::RenderSystem::InitParticles(glow::SharedVertexArray& vao) { mVaoParticle = vao; }
 
 void gamedev::RenderSystem::Update(float dt)
 {
@@ -129,10 +121,7 @@ void gamedev::RenderSystem::UpdateOutlined(const std::vector<InstanceHandle>& ha
     mOutlineColors = colors;
 }
 
-void gamedev::RenderSystem::UpdateSelected(InstanceHandle handle)
-{
-    mSelected = handle;
-}
+void gamedev::RenderSystem::UpdateSelected(InstanceHandle handle) { mSelected = handle; }
 
 void gamedev::RenderSystem::UpdateParticleCount(long int particleCount) { mParticleCount = particleCount; }
 
@@ -145,10 +134,7 @@ void gamedev::RenderSystem::UpdateDirectionalLight(const DirectionalLight& dirLi
 void gamedev::RenderSystem::UpdateRegularPointLights(const std::vector<PointLight>& pointLights) { mPointLights = pointLights; };
 void gamedev::RenderSystem::UpdateShadowingPointLight(const PointLight& pointLight) { mShadowingPointLight = pointLight; };
 
-void gamedev::RenderSystem::UpdateSepia(float sepiaStrength)
-{
-    mSepiaIntensity = sepiaStrength;
-}
+void gamedev::RenderSystem::UpdateSepia(float sepiaStrength) { mSepiaIntensity = sepiaStrength; }
 
 void gamedev::RenderSystem::UpdateVignette(const tg::vec3& color, float radius, float softness, float strength)
 {
@@ -158,10 +144,7 @@ void gamedev::RenderSystem::UpdateVignette(const tg::vec3& color, float radius, 
     mVignetteIntensity = strength;
 }
 
-void gamedev::RenderSystem::UpdateDesaturation(float desaturationStrength)
-{
-    mDesaturationIntensity = desaturationStrength;
-}
+void gamedev::RenderSystem::UpdateDesaturation(float desaturationStrength) { mDesaturationIntensity = desaturationStrength; }
 
 void gamedev::RenderSystem::UpdateDistFadeoff(const tg::vec3& color, float strength)
 {
@@ -307,7 +290,7 @@ void gamedev::RenderSystem::RenderInstances(glow::UsedProgram& shader)
 
         // do the same for auxiliary meshes if existent
         if (!instance.auxModels.empty())
-          RenderAuxiliary(shader, instance, modelMatrix);
+            RenderAuxiliary(shader, instance, modelMatrix);
     }
 
     mDrawCalls += mEntities.size();
@@ -398,7 +381,7 @@ void gamedev::RenderSystem::RenderBloom()
                     shader["uTexImage"] = mTargetPongColor;
 
                 glow::geometry::FullscreenTriangle::draw();
-                
+
                 mDrawCalls++;
             }
 
@@ -447,8 +430,6 @@ void gamedev::RenderSystem::RenderPostProcessing()
         shader["uVignetteStrength"] = mVignetteIntensity;
         shader["uDistFadeColor"] = mDistFadeoffColor;
         shader["uDistFadeStrength"] = mDistFadeoffIntensity;
-
-
 
 
         glow::geometry::FullscreenTriangle::draw();
@@ -562,7 +543,7 @@ void gamedev::RenderSystem::RenderDepthMap()
 
         // set up shadow camera
         auto shadowCamDis = 12 * mCameraPos.y; // render far enough
-        auto shadowSize = 6 * mCameraPos.y; // render wide enough
+        auto shadowSize = 6 * mCameraPos.y;    // render wide enough
 
         // calculate center of camera rotation
         auto angle = tg::angle_between(mCameraForward, tg::vec3(0, -1, 0));

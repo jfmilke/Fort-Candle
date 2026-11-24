@@ -1,9 +1,9 @@
 #pragma once
-#include "ecs/ComponentArray.hh"
-#include "advanced/World.hh"
-#include <clean-core/assert.hh>
 #include <array>
+#include <clean-core/assert.hh>
 #include <memory>
+#include "advanced/World.hh"
+#include "ecs/ComponentArray.hh"
 
 namespace gamedev
 {
@@ -189,7 +189,8 @@ private:
     template <EcsComponent CompT>
     static ComponentType TypeId()
     {
-        static ComponentType const id = [] {
+        static ComponentType const id = []
+        {
             CC_ASSERT_MSG(sNextTypeId < MAX_COMPONENTS, "More component types than MAX_COMPONENTS.");
             return sNextTypeId++;
         }();

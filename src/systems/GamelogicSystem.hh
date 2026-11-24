@@ -1,13 +1,13 @@
 #pragma once
 
 #include <glow/fwd.hh>
-#include "advanced/World.hh"
-#include "ecs/System.hh"
-#include "ecs/Engine.hh"
 #include "AudioSystem.hh"
+#include "advanced/World.hh"
+#include "ecs/Engine.hh"
+#include "ecs/System.hh"
+#include "factories/ItemFactory.hh"
 #include "factories/StructureFactory.hh"
 #include "factories/UnitFactory.hh"
-#include "factories/ItemFactory.hh"
 
 #include <array>
 
@@ -652,7 +652,6 @@ private:
     float mDesaturationIntensityTarget = 0.3; ///< Target of `mDesaturationIntensity` (set by the fire level).
 
 private:
-
     EngineECS* mECS = nullptr;             ///< ECS (not owned).
     std::shared_ptr<AudioSystem> mAS;      ///< Audio.
     std::shared_ptr<UnitFactory> mUF;      ///< Unit factory.

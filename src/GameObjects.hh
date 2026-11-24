@@ -1,11 +1,11 @@
 #pragma once
-#include <glow/fwd.hh>
-#include "Mesh3D.hh"
-#include <unordered_map>
 #include <filesystem>
-#include <string>
+#include <glow/fwd.hh>
 #include <glow/objects/VertexArray.hh>
+#include <string>
 #include <typed-geometry/tg.hh>
+#include <unordered_map>
+#include "Mesh3D.hh"
 
 
 namespace gamedev
