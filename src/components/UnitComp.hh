@@ -117,7 +117,10 @@ struct Arrow : public Component
     float velocity = 0.0;                        ///< Unused: `Physics::velocity` moves the arrow.
     tg::angle32 angle = 0_deg;                   ///< Unused.
     InstanceHandle shotBy = {std::uint32_t(-1)}; ///< Shooter (credited for kills).
-    InstanceHandle target = {std::uint32_t(-1)}; ///< Target; the arrow hits when it gets close to it.
+    InstanceHandle target = {std::uint32_t(-1)}; ///< Target; the arrow hits when it passes within `hitRadius` of its aim point.
+
+    static constexpr float aimHeight = 0.25f; ///< Aim point above the target's position: about the body center of the 0.25-scaled units.
+    static constexpr float hitRadius = 0.32f; ///< Hit when the path of the arrow in one update passes this close to the aim point.
 };
 
 /// Marks a soldier stationed in a watch tower: it does not move and is ignored by physics and collision.

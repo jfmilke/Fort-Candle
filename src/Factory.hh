@@ -308,6 +308,14 @@ private:
      */
     void AnnounceTransform(InstanceHandle handle);
 
+    /**
+     * Sets `Physics::lastPosition` to the current position of a freshly placed instance,
+     * so that it does not appear to have moved from the preset position (arrow lead).
+     *
+     * @param handle Live instance; nothing happens without a `Physics` component.
+     */
+    void SettlePhysics(InstanceHandle handle);
+
 protected:
     /**
      * Hook for subclasses, called by `Register` after the `Prototype` component is added and before the preset is added, e.g. to attach components.

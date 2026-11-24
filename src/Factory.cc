@@ -221,6 +221,7 @@ gamedev::InstanceHandle gamedev::Factory::Clone(InstanceHandle source_handle, tg
     {
         clone.xform.translation.y = mT->heightAt(position);
     }
+    SettlePhysics(clone_handle);
 
     mECS->GetHashMap().UpdateInstance(clone_handle, clone.xform.translation, clone.max_bounds);
     auto e = Event(EventType::NewPosition, clone_handle, clone_handle);
@@ -304,6 +305,7 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::po
     {
         transform.translation.y = mT->heightAt(position);
     }
+    SettlePhysics(fresh_handle);
 
     mECS->GetHashMap().UpdateInstance(fresh_handle, instance.xform.translation, instance.max_bounds);
     auto e = Event(EventType::NewPosition, fresh_handle, fresh_handle);
@@ -437,6 +439,12 @@ void gamedev::Factory::AnnounceTransform(InstanceHandle handle)
 {
     auto e = Event(EventType::NewPosition, handle, handle);
     mECS->SendFunctionalEvent(e);
+}
+
+void gamedev::Factory::SettlePhysics(InstanceHandle handle)
+{
+    if (auto physics = mECS->TryGetComponent<Physics>(handle))
+        physics->lastPosition = mECS->GetInstance(handle).xform.translation;
 }
 
 bool gamedev::Factory::SaveObjectsTo(std::filesystem::path filepath)

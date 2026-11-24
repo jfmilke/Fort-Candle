@@ -389,15 +389,17 @@ private:
      * Computes the arrow trajectory to hit the (moving) target: horizontal intercept and fake arc height.
      *
      * The target speed is estimated from its `Physics::lastPosition`.
+     * The arc ends `Arrow::aimHeight` above the target's current position.
      *
      * @param attacker `Attacker` component of the soldier, with a bow and an attack target.
+     * @param start Spawn position of the arrow (world space); the arc starts at its height.
      * @param dt Time step in seconds (for the target speed).
      * @return The trajectory; `xMax` is 0 if there is no intercept.
      */
-    arcEq GetArrowArc(Attacker* attacker, float dt);
+    arcEq GetArrowArc(Attacker* attacker, tg::pos3 start, float dt);
 
     /**
-     * Creates an arrow with a smoke trail flying along `GetArrowArc`.
+     * Creates an arrow with a smoke trail flying along `GetArrowArc`, starting 0.2 in front of and 0.3 above the bow.
      *
      * @param attacker `Attacker` component of the soldier, with a bow and an attack target.
      * @param dt Time step in seconds (for `GetArrowArc`).

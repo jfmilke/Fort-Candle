@@ -32,21 +32,19 @@ void gamedev::PhysicsSystem::Update(float dt)
             Instance.xform.move_absolute(move);
             Instance.new_position = true;
 
-            // Arrow parabola (fake gravity)
+            // Arrow arc (fake gravity): straight line from start to end height plus a parabolic bulge
             if (InstanceBody->arrowArc)
             {
                 auto move_flat = move;
                 move_flat.y = 0;
-
                 InstanceBody->arc_x += tg::length(move_flat);
-                auto a = (-4.f * InstanceBody->arc_yMax) / tg::pow2(InstanceBody->arc_xMax);
-                auto b = (4 * InstanceBody->arc_yMax) / InstanceBody->arc_xMax;
-                auto c = InstanceBody->arc_yBase;
 
-                auto slope = 2.f * a * InstanceBody->arc_x + b;
+                auto const u = InstanceBody->arc_x / InstanceBody->arc_xMax;
+                auto const rise = InstanceBody->arc_yEnd - InstanceBody->arc_yStart;
+                auto const bulge = 4.f * InstanceBody->arc_height;
 
-                Instance.xform.translation.y = a * tg::pow2(InstanceBody->arc_x) + b * InstanceBody->arc_x + c;
-                InstanceBody->arc_ySlope = slope;
+                Instance.xform.translation.y = InstanceBody->arc_yStart + rise * u + bulge * u * (1.f - u);
+                InstanceBody->arc_ySlope = (rise + bulge * (1.f - 2.f * u)) / InstanceBody->arc_xMax;
             }
         }
 
