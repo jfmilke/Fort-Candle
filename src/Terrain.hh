@@ -84,8 +84,6 @@ public:
     /**
      * Ground height, bilinearly interpolated from the height map.
      *
-     * TODO: The second row of the interpolation reuses a sample of the first row (`[p0.y][p0.x + 1]`).
-     *
      * @param p World position (x, z).
      * @return Height in world units; 0 outside the map and in its last row and column.
      */

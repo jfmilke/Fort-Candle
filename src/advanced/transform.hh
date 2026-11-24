@@ -176,12 +176,10 @@ public:
     /**
      * Unrotated transform with uniform scale.
      *
-     * TODO: `scaling` is truncated to an integer (it goes through `tg::isize3`).
-     *
      * @param translation World position.
      * @param scaling Scale for all three axes.
      */
-    transform(tg::vec3 const& translation, float scaling) : translation(translation), scaling(tg::isize3(scaling, scaling, scaling)) {}
+    transform(tg::vec3 const& translation, float scaling) : translation(translation), scaling(scaling, scaling, scaling) {}
 
     /**
      * Unrotated transform with integer per-axis scale.
@@ -334,9 +332,11 @@ public:
 };
 
 /**
- * Combines a child transform, given relative to its parent, into a world transform.
+ * Combines a child transform, given relative to its parent, into a world transform. Unused.
  *
- * TODO: The parent scale is applied after the parent rotation, so this is only exact for a uniform parent scale.
+ * The child position is exact for any parent scale.
+ * The rotation and scale are only exact for a uniform parent scale (or an unrotated child):
+ * a non-uniform scale applied after a rotation shears, which a `transform` cannot represent.
  *
  * @param parent World transform of the parent.
  * @param child Transform relative to `parent`.
@@ -345,7 +345,7 @@ public:
 inline transform compute_global_transform(transform const& parent, transform const& child)
 {
     transform res;
-    res.translation = parent.translation + (parent.rotation * child.translation) * parent.scaling;
+    res.translation = parent.translation + parent.rotation * (child.translation * parent.scaling);
     res.rotation = tg::normalize(parent.rotation * child.rotation);
     res.scaling = parent.scaling * child.scaling;
     return res;

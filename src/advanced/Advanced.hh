@@ -114,9 +114,7 @@ struct AdvancedFeatures
      *
      * The "Objects" window edits the selection's color bias and demo animation, destroys the selection, or destroys all instances.
      * Instances are destroyed immediately and removed from the ECS.
-     *
-     * TODO: `Game::onGui` ignores both output flags, so "Focus on Selection" and "Spawn Instance" do nothing
-     * (the **F** key still flies to the selection).
+     * `Game::onGui` acts on the output flags (flies to the selection, spawns the selected preset).
      *
      * @param[out] outFlyToSelection Set to true when "Focus on Selection" was pressed; left unchanged otherwise.
      * @param[out] outCreateNewInstance Set to true when "Spawn Instance" was pressed; left unchanged otherwise.

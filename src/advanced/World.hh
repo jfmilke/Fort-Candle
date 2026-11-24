@@ -56,9 +56,10 @@ struct Instance
     tg::dir3 facing; ///< Direction the unrotated mesh faces (`+z` by default); rotate with `xform` for the heading.
 
     /**
-     * Position changed; `PhysicsSystem` then sends `EventType::NewPosition` and updates the spatial hash map.
+     * Position changed since it was last published.
      *
-     * TODO: `World::createInstance` sets it and nothing resets it, so it is always true.
+     * `PhysicsSystem` then sends `EventType::NewPosition`, updates the spatial hash map and resets it.
+     * Set at creation, by `PhysicsSystem` moves and by `CollisionSystem` pushes.
      */
     bool new_position;
 

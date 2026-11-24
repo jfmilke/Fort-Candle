@@ -17,6 +17,7 @@ uniform bool uEnableSepia;
 uniform bool uEnableVignette;
 uniform bool uEnableDesaturate;
 uniform bool uEnableBloom;
+uniform bool uEnableDistFade;
 uniform float uDesaturationStrength;
 uniform float uSepiaStrength;
 uniform vec3 uVignetteColor;
@@ -222,7 +223,8 @@ void main()
 
     color = dither(color, gl_FragCoord.xy, 100); // Divisor is originally 255, but this looks much better (on an 8bit screen)
     
-    color = distfade(color, depth, uDistFadeColor, uDistFadeStrength);
+    if (uEnableDistFade)
+        color = distfade(color, depth, uDistFadeColor, uDistFadeStrength);
 
         // simple sobel edge detection
     vec2 p = gl_FragCoord.xy;

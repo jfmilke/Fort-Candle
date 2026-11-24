@@ -83,9 +83,7 @@ public:
     static Sound* GetSound(string name);
 
     /**
-     * Deletes all registered sounds and their buffers. Unused.
-     *
-     * TODO: The registry keeps the dangling pointers.
+     * Deletes all registered sounds and their buffers and empties the registry. Unused.
      */
     static void DeleteSounds();
 

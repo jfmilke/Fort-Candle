@@ -25,12 +25,10 @@ public:
     /**
      * Registers a structure preset: `Factory::Register` plus a shape from the mesh bounds and a static `Collider`.
      *
-     * TODO: Does not check for an invalid handle (unknown asset) before adding the components.
-     *
      * @param asset_identifier Mesh name or path known to the asset manager; also the preset name.
      * @param boxshape Use a `BoxShape` if true, else a `CircleShape`.
      * @param scaling Uniform scale of the preset.
-     * @return The preset.
+     * @return The preset, or an invalid handle if the asset is unknown.
      */
     InstanceHandle Register(std::string asset_identifier, bool boxshape, float scaling = 1.0);
 
@@ -41,7 +39,7 @@ public:
      * @param structure_identifier Preset name.
      * @param boxshape Use a `BoxShape` if true, else a `CircleShape`.
      * @param scaling Uniform scale of the preset.
-     * @return The preset.
+     * @return The preset, or an invalid handle if the asset is unknown.
      */
     InstanceHandle Register(std::string asset_identifier, std::string structure_identifier, bool boxshape, float scaling = 1.0);
 
@@ -53,7 +51,7 @@ public:
      * @param structure_path Preset path.
      * @param boxshape Use a `BoxShape` if true, else a `CircleShape`.
      * @param scaling Uniform scale of the preset.
-     * @return The preset.
+     * @return The preset, or an invalid handle if the asset is unknown.
      */
     InstanceHandle Register(std::string asset_identifier, std::string structure_identifier, std::filesystem::path structure_path, bool boxshape, float scaling = 1.0);
 

@@ -52,12 +52,7 @@ struct Attacker : public Component
 
     bool forceAttack = false; ///< Set when the player orders an attack (not read).
 
-    /**
-     * Weapon properties; the unit presets overwrite them.
-     *
-     * TODO: The initializer skips `missileSpeed`, so `WeaponType(-1)` sets `missileSpeed` to -1 (`type` keeps `Undefined`).
-     */
-    Weapon weapon = {1, 0.5, 1, WeaponType(-1)};
+    Weapon weapon = {1, 0.5, 1, 0, WeaponType::Undefined}; ///< Weapon properties; the unit presets overwrite them.
 
     float currentCooldown = 0;                         ///< Seconds until the next attack.
     InstanceHandle weaponHandle = {std::uint32_t(-1)}; ///< Visible weapon instance (bow), created when first needed.

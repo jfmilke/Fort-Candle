@@ -56,26 +56,11 @@ public:
      */
     void Update(float dt);
 
-    /**
-     * Static pass: removes destroyed static colliders and resolves dynamic-vs-static overlaps.
-     *
-     * TODO: The second run loops `i < queue.size()` while popping the queue, so it only handles the first half of the colliding pairs (rounded up).
-     */
+    /// Static pass: removes destroyed static colliders and resolves dynamic-vs-static overlaps.
     void ResolveStaticCollisions();
 
     /// Dynamic pass: resolves overlaps between dynamic colliders.
     void ResolveDynamicCollisions();
-
-    // TODO: The intersects() overloads are declared but not implemented (and unused). Remove them.
-    bool intersects(const BoxShape* boxA, const BoxShape* boxB);
-    bool intersects(const BoxShape* box, const CircleShape* circle);
-    bool intersects(const CircleShape* circle, const BoxShape* box) { return intersects(box, circle); }
-    bool intersects(const CircleShape* circleA, const CircleShape* circleB);
-
-    bool intersects(const tg::box3& boxA, const tg::box3& boxB);
-    bool intersects(const tg::box3& box, const tg::sphere3& circle);
-    bool intersects(const tg::sphere3& circle, const tg::box3& box) { return intersects(box, circle); }
-    bool intersects(const tg::sphere3& circleA, const tg::sphere3& circleB);
 
     // // ToDo: Give a position of intersection
     // tg::pos2 intersection(const BoxShape& boxA, const BoxShape& boxB);
@@ -166,9 +151,6 @@ private:
     /**
      * Like the box overload, with the circle approximated by a square aligned to the box.
      *
-     * TODO: An axis only counts as overlapping if its push has a positive x or z component (the box overload checks `!= 0`).
-     * Box axes pointing towards negative x and z are taken as separating, so collisions are missed for some box orientations.
-     *
      * @param box World-space box to push out.
      * @param circle World-space circle it overlaps.
      * @return Push for `box`, or zero if the shapes do not overlap.
@@ -176,7 +158,7 @@ private:
     tg::vec3 minimalPush(const tg::box3& box, const tg::sphere3& circle);
 
     /**
-     * Negated box-vs-circle push (with its TODO).
+     * Negated box-vs-circle push.
      *
      * @param circle_dynamic World-space circle to push out.
      * @param box_static World-space box it overlaps.

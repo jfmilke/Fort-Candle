@@ -19,9 +19,7 @@ namespace gamedev
  *
  *  - `Init` opens the default device, creates up to 32 OpenAL sources ("channels") and loads all sounds.
  *  - Every update, the emitters within `maxRadius` of the listener that are still playing get one of the limited sources; the others lose theirs.
- *  - The `Play*Sound` functions create emitters on the fly. Emitters at a position are destroyed when they finish.
- *
- * TODO: Global emitters (and their instances) are never removed, so every `PlayGlobalSound` call uses up one of the `MAX_INSTANCES` slots for good.
+ *  - The `Play*Sound` functions create emitters on the fly. Emitters at a position and global emitters are destroyed when they finish.
  */
 class AudioSystem : public System
 {
@@ -101,14 +99,12 @@ public:
                         SoundPriority priority = low);
 
     /**
-     * Plays a sound without attenuation (it follows the listener) using a new emitter instance.
-     *
-     * TODO: The emitter instance is never destroyed (see class description).
+     * Plays a sound without attenuation (it follows the listener) using a new emitter instance, which is destroyed when the sound ends.
      *
      * @param name File name in `data/audio/`, loaded by `LoadSounds`.
      * @param type Volume group.
      * @param volume Gain in [0, 1].
-     * @param looping Restart when finished.
+     * @param looping Restart when finished; the emitter is then never destroyed.
      * @param priority Unused: only stored in the emitter.
      */
     void PlayGlobalSound(std::string name, SoundType type = effect, float volume = 1.0f, bool looping = false, SoundPriority priority = low);
@@ -135,14 +131,11 @@ private:
      */
     void CullEmitters(InstanceHandle handle);
 
-    /// Destroys finished, non-looping emitters created by `PlayLocalSound(position, ...)`.
+    /// Destroys finished, non-looping emitters created by `PlayLocalSound(position, ...)` and `PlayGlobalSound`.
     void CleanupLocalEmitters();
 
     /**
-     * Binds a source to an emitter and starts playing its sound.
-     *
-     * TODO: The start offset is divided by 1000, so a sound that gets a source again restarts from (almost) the beginning
-     * instead of where it would be.
+     * Binds a source to an emitter and starts playing its sound where it would be by now (`SoundEmitter::timeLeft`).
      *
      * @param handle Instance with a `SoundEmitter`.
      * @param s Free source; nullptr does nothing.
@@ -196,7 +189,7 @@ private:
     tg::pos3 mListenerPosition; ///< Listener position from the last `UpdateListener`.
 
     vector<InstanceHandle> emitters;       ///< Emitters that may play this update (rebuilt every update).
-    vector<InstanceHandle> mLocalEmitters; ///< Emitters created by `PlayLocalSound(position, ...)`.
+    vector<InstanceHandle> mLocalEmitters; ///< Emitter instances owned by this system (`PlayLocalSound(position, ...)`, `PlayGlobalSound`).
 
     ALCcontext* context; ///< OpenAL context.
     ALCdevice* device;   ///< OpenAL device.

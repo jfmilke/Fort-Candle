@@ -97,6 +97,8 @@ void gamedev::Sound::DeleteSounds()
     {
         delete i->second;
     }
+
+    sounds.clear();
 }
 
 ALenum gamedev::Sound::GetOALFormat()

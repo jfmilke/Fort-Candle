@@ -25,6 +25,8 @@ gamedev::InstanceHandle gamedev::UnitFactory::Register(std::string asset_identif
     std::string a_name = lowerString(asset_identifier);
 
     auto handle = Factory::Register(a_name, scaling);
+    if (!handle.is_valid())
+        return handle;
 
     if (boxshape)
     {
@@ -55,9 +57,8 @@ gamedev::InstanceHandle gamedev::UnitFactory::Register(std::string asset_identif
     std::string u_name = lowerString(unit_identifier);
 
     auto handle = Factory::Register(a_name, u_name, scaling);
-    auto& instance = mECS->GetInstance(handle);
-
-    auto renderable = mECS->CreateComponent<Render>(handle);
+    if (!handle.is_valid())
+        return handle;
 
     if (boxshape)
     {
@@ -72,12 +73,6 @@ gamedev::InstanceHandle gamedev::UnitFactory::Register(std::string asset_identif
 
     auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
     auto physics = mECS->CreateComponent<gamedev::Physics>(handle);
-
-    instance.xform.translation = {0, 0, 0};
-    instance.xform.scale(scaling);
-
-    // Render
-
 
     // Collider
     collider->dynamic = true;
@@ -94,9 +89,8 @@ gamedev::InstanceHandle gamedev::UnitFactory::Register(std::string asset_identif
     std::string u_name = lowerString(unit_identifier);
 
     auto handle = Factory::Register(a_name, u_name, unit_path, scaling);
-    auto& instance = mECS->GetInstance(handle);
-
-    auto renderable = mECS->CreateComponent<Render>(handle);
+    if (!handle.is_valid())
+        return handle;
 
     if (boxshape)
     {
@@ -111,12 +105,6 @@ gamedev::InstanceHandle gamedev::UnitFactory::Register(std::string asset_identif
 
     auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
     auto physics = mECS->CreateComponent<gamedev::Physics>(handle);
-
-    instance.xform.translation = {0, 0, 0};
-    instance.xform.scale(scaling);
-
-    // Render
-
 
     // Collider
     collider->dynamic = true;

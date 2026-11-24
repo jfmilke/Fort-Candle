@@ -8,10 +8,11 @@
 
 void gamedev::ParticleSystem::AddEntity(InstanceHandle handle, Signature entitySignature)
 {
-    // Meant to only include rendered entities, but the handle is inserted in any case
+    // Only rendered entities emit particles
     if (!mECS->TestSignature<Render>(handle))
     {
         mEntities.erase(handle);
+        return;
     }
 
     mEntities.insert(handle);
@@ -95,6 +96,7 @@ void gamedev::ParticleSystem::Update(float elapsed_time)
         if (p.lifeRemaining <= 0.0f)
         {
             KillParticle(id);
+            id--; // the last living particle was swapped into this slot
             continue;
         }
 

@@ -32,9 +32,7 @@ public:
     void Init(EngineECS& ecs);
 
     /**
-     * Adds the entity to the system.
-     *
-     * TODO: Meant to accept only entities with a `Render` component, but the filter has no effect.
+     * Adds the entity to the system if it has a `Render` component (removes it otherwise).
      *
      * @param handle Entity with a `ParticleEmitter`.
      * @param entitySignature Its signature.
@@ -56,8 +54,6 @@ public:
 
     /**
      * Emits new particles for all emitters, ages and moves the living ones and rebuilds the instance data.
-     *
-     * TODO: When a particle dies, the one swapped into its slot is skipped (not moved, not drawn) for this update.
      *
      * @param elapsed_time Time step in seconds.
      */

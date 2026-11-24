@@ -283,9 +283,7 @@ private:
     void UpdateMoveOrder(const Instance& instance, Living* subject, float dt);
 
     /**
-     * Turns the unit towards its focus instance.
-     *
-     * TODO: A dead focus is replaced by handle 1 instead of the invalid handle.
+     * Turns the unit towards its focus instance; a dead focus is cleared.
      *
      * @param instance Data of the unit.
      * @param subject Its `Living` component.
@@ -450,9 +448,7 @@ private:
     void StartProduction(InstanceHandle handle);
 
     /**
-     * Stops the artisan's production. Unused.
-     *
-     * TODO: Reads the `Producer` right after removing it (asserts).
+     * Stops the artisan's production: clears `Producer::producing` and the work particles. Unused.
      *
      * @param handle Artisan.
      */
@@ -496,9 +492,7 @@ private:
     void DeleteFortifications();
 
     /**
-     * Moves the vignette and desaturation towards their targets.
-     *
-     * TODO: `Update` calls it once per entity, so the effects change faster the more units there are.
+     * Moves the vignette and desaturation towards their targets (by half the remaining difference per second).
      *
      * @param dt Time step in seconds.
      */
@@ -542,9 +536,7 @@ private:
     InstanceHandle SpawnObjectRandomly(tg::pos3 position, std::string object_id);
 
     /**
-     * Tries 20 random spots in the camp for a structure. Unused.
-     *
-     * TODO: The overlap test compares the bounds relative to each instance's position, ignoring the positions.
+     * Tries 20 random spots in the camp for a structure, until its bounds overlap no other instance's. Unused.
      *
      * @param object_id Structure preset name.
      * @return The new instance, or an invalid handle if no spot was free.
@@ -553,8 +545,6 @@ private:
 
     /**
      * Like `TryConstructObject` with a random preset. Unused: only the unused `TryConstructHome` calls it.
-     *
-     * TODO: Same overlap test, and it uses the bounds of the first preset for all of them.
      *
      * @param object_ids Structure preset names to choose from.
      * @return The new instance, or an invalid handle if no spot was free.
@@ -590,7 +580,7 @@ public:
     tg::pos3 mReinforcementsStart;           ///< Where reinforcements appear (a waypoint of the path).
     InstanceHandle mSelected;                ///< Unit receiving right-click orders.
 
-    /// Update counter (TODO: from 30 on, `Update` refreshes the home fire on every update and for every entity).
+    /// Update counter; `Update` refreshes the home fire every 30 updates.
     unsigned int mUpdateControl = 0;
 
     tg::circle3 mHome;       ///< Camp circle (center = bonfire, radius 10).

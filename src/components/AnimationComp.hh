@@ -7,17 +7,14 @@ namespace gamedev
 /**
  * Pending rotation and scale animations, played by the `AnimationSystem`.
  *
- * Each animation runs while its flag is set; `scaleAnim` resets itself when the target is reached.
- *
- * TODO: The remaining angles `rot_x`/`rot_y`/`rot_z` only decay exponentially and never reach zero, so their flags stay set
- * (harmless: the game sets a new `rot_y` with every turn).
+ * Each animation runs while its flag is set; the x/y/z rotations and `scaleAnim` reset themselves when the target is reached.
  */
 struct Animated : Component
 {
     using Component::Component; // Use constructor of component
 
     bool rotXAnim = false;                  ///< Rotate by the remaining `rot_x` about the local x axis.
-    tg::angle rot_x = 0_deg;                ///< Remaining rotation about x; each update applies the fraction 7 * dt of it.
+    tg::angle rot_x = 0_deg;                ///< Remaining rotation about x; each update applies the fraction 7 * dt of it (the rest below 0.1°).
     bool rotYAnim = false;                  ///< Rotate by the remaining `rot_y` about the local y axis.
     tg::angle rot_y = 0_deg;                ///< Remaining rotation about y, see `rot_x`.
     bool rotZAnim = false;                  ///< Rotate by the remaining `rot_z` about the local z axis.

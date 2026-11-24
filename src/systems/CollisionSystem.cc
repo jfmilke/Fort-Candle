@@ -91,9 +91,8 @@ void gamedev::CollisionSystem::ResolveStaticCollisions()
         {
             if (hp->health.current <= 0.0f)
             {
+                // No event: `GamelogicSystem::Destroy` already sent `EventType::BuildingDestroyed`
                 mECS->MarkDestruction(handle_static);
-                // TODO: This event is never sent.
-                Event e(EventType::BuildingDestroyed, handle_static, handle_static);
             }
         }
 
@@ -147,7 +146,7 @@ void gamedev::CollisionSystem::ResolveStaticCollisions()
 
     mSecondRun = true;
 
-    for (int i = 0; i < staticDynamic_2nd.size(); i++)
+    while (!staticDynamic_2nd.empty())
     {
         auto handle_static = staticDynamic_2nd.front().first;
         auto handle_dynamic = staticDynamic_2nd.front().second;
@@ -220,16 +219,14 @@ void gamedev::CollisionSystem::ResolveDynamicCollisions()
 
             bool collision = false;
 
-            // TODO: The two mixed cases pass a null shape of the wrong kind. All dynamic colliders (units) use box
-            // shapes, so only the box-box case is reached.
             if (boxShape_1 && boxShape_2)
                 collision = Collide(instance_1, instance_2, boxShape_1, boxShape_2);
 
             else if (boxShape_1 && circleShape_2)
-                collision = Collide(instance_1, instance_2, circleShape_1, boxShape_2);
+                collision = Collide(instance_1, instance_2, boxShape_1, circleShape_2);
 
             else if (circleShape_1 && boxShape_2)
-                collision = Collide(instance_1, instance_2, boxShape_1, circleShape_2);
+                collision = Collide(instance_1, instance_2, circleShape_1, boxShape_2);
 
             else if (circleShape_1 && circleShape_2)
                 collision = Collide(instance_1, instance_2, circleShape_1, circleShape_2);
@@ -494,7 +491,7 @@ tg::vec3 gamedev::CollisionSystem::minimalPush(const tg::box3& box_dynamic, cons
     for (const auto& axis : axes)
     {
         auto push = SAT_AxisTest(axis, points1, points2);
-        if (push.x > 0 || push.z > 0)
+        if (push.x != 0 || push.z != 0)
             push_vectors.push_back(push);
         else
             return tg::vec3::zero;
@@ -565,12 +562,14 @@ void gamedev::CollisionSystem::resolve(Instance& instance_dynamic, Instance& ins
             tg::vec3 friction = vec_collision - bounce;
 
             instance_dynamic.xform.move_absolute((friction_damping * friction) * mDT);
+            instance_dynamic.new_position = true;
 
             return;
         }
     }
 
     instance_dynamic.xform.move_absolute(push);
+    instance_dynamic.new_position = true;
 }
 
 void gamedev::CollisionSystem::PositionListener(Event& e)

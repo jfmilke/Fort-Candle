@@ -37,9 +37,9 @@ public:
     /**
      * Removes a free light by ID. Unused.
      *
-     * TODO: Indexes the light list with the ID directly and updates the ID maps inconsistently, so IDs are only correct while no light was removed.
+     * The IDs of the other free lights stay valid.
      *
-     * @param light_id ID from `AddFreeLight`.
+     * @param light_id ID from `AddFreeLight`; unknown IDs are ignored.
      */
     void RemoveFreeLight(int light_id);
 

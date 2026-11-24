@@ -31,7 +31,7 @@ void gamedev::PhysicsSystem::Update(float dt)
             // Gravity
             if (InstanceBody->gravity)
             {
-                InstanceBody->velocity += dt * mGravity; // TODO: adds to all three components, not only y
+                InstanceBody->velocity.y += dt * mGravity;
             }
 
             // Arrow parabola (fake gravity)
@@ -59,16 +59,15 @@ void gamedev::PhysicsSystem::Update(float dt)
             Instance.xform.translation.y = h;
         }
 
-        // TODO: true on 9 of 10 updates (probably meant 1 of 10), and new_position is never reset
-        if (Instance.new_position && (mUpdateControl % 10))
+        // Publish moves (by this system or by collision pushes) once
+        if (Instance.new_position)
         {
+            Instance.new_position = false;
             auto e = Event(EventType::NewPosition, handle, handle);
             mECS->SendFunctionalEvent(e);
             UpdateHashmap(handle, Instance.xform.translation);
         }
     }
-
-    mUpdateControl++;
 }
 
 void gamedev::PhysicsSystem::UpdateHashmap(InstanceHandle handle, tg::vec3& translation) { mECS->GetHashMap().UpdateInstance(handle, translation); }

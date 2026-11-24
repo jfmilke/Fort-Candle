@@ -64,8 +64,7 @@ gamedev::InstanceHandle gamedev::Terrain::CreateWater(tg::pos3 pos, tg::size3 sc
     waterTransform.translation = pos - tg::pos3::zero;
     waterTransform.scale(scale);
     // todo: maybe fix this and have the water have its real extents
-    // TODO: `instance` is a copy, so this does not change the water instance
-    auto instance = mECS->GetInstance(mWaterHandle);
+    auto& instance = mECS->GetInstance(mWaterHandle);
     instance.max_bounds = {mMapExtents.min, mMapExtents.max};
 
     auto render = mECS->CreateComponent<Render>(mWaterHandle);
@@ -152,7 +151,7 @@ float gamedev::Terrain::heightAt(const tg::pos2& p)
 
     // Bilinear interpolation
     float h_y0 = tg::interpolate(mHeightMap[p0.y][p0.x], mHeightMap[p0.y][p0.x + 1], s);
-    float h_y1 = tg::interpolate(mHeightMap[p0.y + 1][p0.x], mHeightMap[p0.y][p0.x + 1], s);
+    float h_y1 = tg::interpolate(mHeightMap[p0.y + 1][p0.x], mHeightMap[p0.y + 1][p0.x + 1], s);
 
     float h = tg::interpolate(h_y0, h_y1, t);
     return h;

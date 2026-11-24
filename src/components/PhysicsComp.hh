@@ -22,7 +22,7 @@ struct Physics : Component
     tg::vec3 lastPosition = tg::vec3::zero; ///< Position before the last physics update; used to undo moves into colliders and to aim arrows ahead.
 
     bool forceGround = true; ///< Snap the height to the terrain every update.
-    bool gravity = false;    ///< Accelerate by -9.81 per second squared (TODO: applied to all three axes, not only y).
+    bool gravity = false;    ///< Accelerate downwards (-y) by 9.81 per second squared.
 
     bool arrowArc = false; ///< Follow a parabola in y instead of `velocity.y` (arrows).
     float arc_x = 0;       ///< Horizontal distance travelled along the arc.

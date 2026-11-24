@@ -53,7 +53,7 @@ enum GameState
  *  - `init()` wires everything up (component and system registration, asset scan, preset setup, start layout).
  *  - `update()` runs the systems at a fixed 60 Hz: audio always, particles and lights except while paused, all other systems only while playing.
  *  - `render()` handles mouse/keyboard input, passes the per-frame state to the `RenderSystem` and renders.
- *  - `onGui()` builds the menus, the in-game HUD and, in editor mode (key E), the debug, editor and spawn windows.
+ *  - `onGui()` builds the menus, the in-game HUD and, in editor mode (key F1), the debug, editor and spawn windows.
  *
  * Every run measures its startup phases, system updates, render, GPU time and frame interval with a `profiling::Profiler`;
  * the debug UI shows the latest values.
@@ -119,7 +119,7 @@ private:
     bool mEnableParticleSpawn = true; ///< Simulate and draw particles.
 
     // Editor
-    bool mEditorMode = false; ///< Editor mode (key E): debug/editor windows, spawning with the right mouse button.
+    bool mEditorMode = false; ///< Editor mode (key F1): debug/editor windows, spawning with the right mouse button.
 
     // Camera
     bool mCaptureMouseOnMouselook = true; ///< Hide and capture the cursor while looking around in free-fly mode.
@@ -171,18 +171,17 @@ private:
 
     // Editor
     std::string mSelectedObject = "";                           ///< Preset to spawn with the right mouse button.
-    gamedev::Factory* mSelectedFac;                             ///< Factory of `mSelectedObject` (TODO: not initialized, see `spawn`).
+    gamedev::Factory* mSelectedFac = nullptr;                   ///< Factory of `mSelectedObject`; null until a preset is selected.
     std::vector<std::string> mNatureObjects;                    ///< Nature presets for the spawn menu.
     std::vector<std::string> mStructureObjects;                 ///< Structure presets for the spawn menu.
     std::vector<std::string> mItemObjects;                      ///< Item presets for the spawn menu.
     std::vector<std::string> mUnitObjects;                      ///< Unit presets for the spawn menu.
     gamedev::InstanceHandle mCreatedLast = {std::uint32_t(-1)}; ///< Last spawned instance; new spawns copy its rotation.
 
-    // TODO: The file name buffers are not initialized, so the editor's text fields start with indeterminate content.
-    char mFnUnits[256];   ///< File name (without extension) for saving spawned units.
-    char mFnStructs[256]; ///< File name (without extension) for saving spawned structures.
-    char mFnNature[256];  ///< File name (without extension) for saving spawned nature.
-    char mFnItems[256];   ///< File name (without extension) for saving spawned items.
+    char mFnUnits[256] = {};   ///< File name (without extension) for saving spawned units.
+    char mFnStructs[256] = {}; ///< File name (without extension) for saving spawned structures.
+    char mFnNature[256] = {};  ///< File name (without extension) for saving spawned nature.
+    char mFnItems[256] = {};   ///< File name (without extension) for saving spawned items.
 
 private:
     // Custom Low-Poly Assets
@@ -340,11 +339,9 @@ public:
      * Zooms the strategy camera along the view direction, unless in the menu or free-fly mode.
      *
      * Only zooms while the camera height minus `sy` stays between 1 and 25.
+     * ImGui gets the scroll first (`GlfwApp::onMouseScroll`), so scrolling over a UI window does not zoom.
      *
-     * TODO: Does not call `GlfwApp::onMouseScroll`, so ImGui never sees the scroll wheel
-     * (UI windows cannot be scrolled with it) and scrolling over the UI zooms the camera.
-     *
-     * @param sx Horizontal scroll offset (ignored).
+     * @param sx Horizontal scroll offset (ignored by the zoom).
      * @param sy Vertical scroll offset; positive zooms in.
      * @return Always true (event consumed).
      */
@@ -362,8 +359,6 @@ public:
      *  - Free-fly camera: WASD moves, Q/E down/up, right mouse button looks around (capturing the cursor if `mCaptureMouseOnMouselook`).
      *  - Strategy camera: WASD or the cursor at the window border (2 px) moves parallel to the ground, Q/E zooms along the view direction,
      *    and the middle mouse button rotates the camera about the point it looks at on the ground (applied directly, without interpolation).
-     *
-     * TODO: E also toggles the editor mode (in `render`), so moving up or zooming in with E switches the editor on/off.
      *
      * @param elapsedSeconds Frame time in seconds.
      */
@@ -454,9 +449,7 @@ public:
      * Editor: creates the selected preset (`mSelectedObject`) and marks it for "Save created ...".
      *
      * Copies the rotation of the previous spawn (`mCreatedLast`), so a rotation set with the gizmo carries over.
-     *
-     * TODO: `MarkLastCreated` is called even if nothing was created:
-     * it marks the previous instance again, or, if no preset was selected yet, is called through the uninitialized `mSelectedFac` (crash).
+     * Does nothing if no preset is selected.
      *
      * @param position World position; the height is taken from the terrain.
      */
@@ -465,13 +458,18 @@ public:
     /**
      * Editor: like `spawn`, but with a random rotation about y and a random uniform scale (0.8 to 1.2); used for nature.
      *
-     * Does not update `mCreatedLast`.
-     *
-     * TODO: Same unconditional `MarkLastCreated` as in `spawn`.
+     * Does not update `mCreatedLast`. Does nothing if no preset is selected.
      *
      * @param position World position; the height is taken from the terrain.
      */
     void spawnRandomly(tg::pos3 position);
+
+    /**
+     * Editor: spawns the selected preset with `spawnRandomly` for nature presets, else with `spawn`.
+     *
+     * @param position World position; the height is taken from the terrain.
+     */
+    void spawnSelected(tg::pos3 position);
 
     /**
      * Focuses the camera on the selected instance (while F is held).

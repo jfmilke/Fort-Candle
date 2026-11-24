@@ -16,7 +16,7 @@ namespace gamedev
  * Entities: all instances with a `Physics` component; units inside a tower (`InTower`) are skipped.
  *
  *  - It publishes the positions of instances with `Instance::new_position`: it sends `EventType::NewPosition`
- *    (so the `CollisionSystem` updates its hash maps) and updates the ECS spatial hash map (see the TODO on `Update`).
+ *    (so the `CollisionSystem` updates its hash maps) and updates the ECS spatial hash map.
  *  - On `EventType::StaticCollision` it resets the subject's `Physics::lastPosition`.
  */
 class PhysicsSystem : public System
@@ -34,10 +34,7 @@ public:
 
 
     /**
-     * Moves all entities and publishes their positions.
-     *
-     * TODO: Position updates are published on 9 of every 10 calls (`mUpdateControl % 10` is non-zero); probably meant to be 1 of 10.
-     * `Instance::new_position` is also set at creation and never reset, so every entity publishes, moving or not.
+     * Moves all entities and publishes the positions that changed (`Instance::new_position`), then resets the flag.
      *
      * @param dt Time step in seconds.
      */
@@ -58,9 +55,6 @@ private:
      * @param e Collision event; the subject is the dynamic collider.
      */
     void CollisionListener(Event& e);
-
-private:
-    int mUpdateControl = 0; ///< Update counter used to throttle position updates.
 
 private:
     const float mGravity = -9.81f; ///< Gravity in world units per second squared.

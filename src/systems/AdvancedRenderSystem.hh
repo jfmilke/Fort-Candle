@@ -155,11 +155,7 @@ public:
     /// Enables the fog of war in the scene shader.
     void SwitchGameShading(bool fogOfWar);
 
-    /**
-     * Enables the post-processing effects.
-     *
-     * TODO: `fadeoff` has no effect; the `output` shader always applies the distance fade (only its strength matters).
-     */
+    /// Enables the post-processing effects.
     void SwitchPostProcessing(bool sRGB, bool tonemap, bool sepia, bool vignette, bool desaturate, bool bloom, bool fadeoff);
 
     /// Enables drawing particles.
@@ -280,7 +276,7 @@ private:
     bool mEnableVignette;    ///< Vignette on.
     bool mEnableDesaturate;  ///< Desaturation on.
     bool mEnableBloom;       ///< Bloom on.
-    bool mEnableDistFadeoff; ///< Distance fade switch (TODO: has no effect, see `SwitchPostProcessing`).
+    bool mEnableDistFadeoff; ///< Distance fade on.
 
     // Particles
     bool mEnableParticles; ///< Particles on.

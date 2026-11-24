@@ -421,7 +421,7 @@ void gamedev::RenderSystem::RenderPostProcessing()
         shader["uEnableSepia"] = mEnableSepia;
         shader["uEnableVignette"] = mEnableVignette;
         shader["uEnableDesaturate"] = mEnableDesaturate;
-        shader["uEnableDistFade"] = mVignetteIntensity; // TODO: output.fsh has no such uniform; the fade is always applied
+        shader["uEnableDistFade"] = mEnableDistFadeoff;
         shader["uDesaturationStrength"] = mDesaturationIntensity;
         shader["uSepiaStrength"] = mSepiaIntensity;
         shader["uVignetteColor"] = mVignetteColor;

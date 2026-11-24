@@ -64,8 +64,7 @@ void gamedev::AudioSystem::Update(float dt)
     {
         // std::sort(emitters.begin(), emitters.end(), gamedev::AudioSystem::CompareNodesByPriority); // Then sort by priority
 
-        // TODO: Off by one: the emitter at index sources.size() is neither detached nor attached.
-        DetachSources(emitters.begin() + (sources.size() + 1), emitters.end()); // Detach sources from emitters that won't be covered this frame
+        DetachSources(emitters.begin() + sources.size(), emitters.end()); // Detach sources from emitters that won't be covered this frame
 
         AttachSources(emitters.begin(), emitters.begin() + (sources.size())); // And attach sources to emitters that WILL be covered this frame
     }
@@ -175,10 +174,11 @@ void gamedev::AudioSystem::AttachSource(InstanceHandle handle, OALSource* s)
     alSourcef(emitter->oalSource->source, AL_REFERENCE_DISTANCE, emitter->minRadius);
 
     alSourcei(emitter->oalSource->source, AL_BUFFER, emitter->sound->GetBuffer());
-    // TODO: GetLength() and timeLeft are in seconds, so dividing by 1000 makes the offset (almost) zero.
-    alSourcef(emitter->oalSource->source, AL_SEC_OFFSET, (emitter->sound->GetLength() / 1000.0) - (emitter->timeLeft / 1000.0));
+    // Continue where the sound would be by now (both in seconds)
+    auto const offset = tg::clamp(emitter->sound->GetLength() - emitter->timeLeft, 0.0, emitter->sound->GetLength());
+    alSourcef(emitter->oalSource->source, AL_SEC_OFFSET, float(offset));
 
-    glow::info() << "Attaching Audio Source! Timeleft: " << (emitter->sound->GetLength() / 1000.0) - (emitter->timeLeft / 1000.0);
+    glow::info() << "Attaching Audio Source! Offset: " << offset;
     alSourcePlay(emitter->oalSource->source);
     alSourcePlay(emitter->oalSource->source);
 }
@@ -311,6 +311,8 @@ void gamedev::AudioSystem::PlayGlobalSound(std::string name, SoundType type, flo
     sound->priority = priority;
     sound->volume = volume;
     sound->type = type;
+
+    mLocalEmitters.push_back(emitter);
 }
 
 void gamedev::AudioSystem::CleanupLocalEmitters()

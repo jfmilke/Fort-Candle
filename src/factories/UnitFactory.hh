@@ -29,39 +29,33 @@ public:
     /**
      * Registers a unit preset: `Factory::Register` plus a shape from the mesh bounds, a dynamic `Collider` and `Physics`.
      *
-     * TODO: Does not check for an invalid handle (unknown asset) before adding the components.
-     *
      * @param asset_identifier Mesh name or path known to the asset manager; also the preset name.
      * @param boxshape Use a `BoxShape` if true, else a `CircleShape`.
      * @param scaling Uniform scale of the preset.
-     * @return The preset.
+     * @return The preset, or an invalid handle if the asset is unknown.
      */
     InstanceHandle Register(std::string asset_identifier, bool boxshape, float scaling = 1.0);
 
     /**
      * Like above, but registers the preset under another name. Unused.
      *
-     * TODO: Adds a second `Render` component (`PostProcessRegistration` already adds one), which asserts, and applies `scaling` twice.
-     *
      * @param asset_identifier Mesh name or path known to the asset manager.
      * @param unit_identifier Preset name.
      * @param boxshape Use a `BoxShape` if true, else a `CircleShape`.
      * @param scaling Uniform scale of the preset.
-     * @return The preset.
+     * @return The preset, or an invalid handle if the asset is unknown.
      */
     InstanceHandle Register(std::string asset_identifier, std::string unit_identifier, bool boxshape, float scaling = 1.0);
 
     /**
      * Like above, but registers the preset under a name and a path. Unused.
      *
-     * TODO: Same issues as above.
-     *
      * @param asset_identifier Mesh name or path known to the asset manager.
      * @param unit_identifier Preset name.
      * @param unit_path Preset path.
      * @param boxshape Use a `BoxShape` if true, else a `CircleShape`.
      * @param scaling Uniform scale of the preset.
-     * @return The preset.
+     * @return The preset, or an invalid handle if the asset is unknown.
      */
     InstanceHandle Register(std::string asset_identifier, std::string unit_identifier, std::filesystem::path unit_path, bool boxshape, float scaling = 1.0);
 

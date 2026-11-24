@@ -2,6 +2,25 @@
 #include "advanced/transform.hh"
 #include "glow/common/log.hh"
 
+namespace
+{
+// Eases a remaining angle: returns the part to apply in this update (the fraction 7 * dt, or all of it once less than 0.1° would be left)
+// and clears `active` when the angle is used up.
+tg::angle StepRemainingAngle(tg::angle& remaining, bool& active, float dt)
+{
+    auto step = remaining * tg::min(7.f * dt, 1.f);
+
+    if (tg::abs(remaining - step).degree() < 0.1)
+    {
+        step = remaining;
+        active = false;
+    }
+
+    remaining -= step;
+    return step;
+}
+}
+
 void gamedev::AnimationSystem::AddEntity(InstanceHandle handle, Signature entitySignature)
 {
     if (entitySignature.test(mECS->GetComponentType<Arrow>()))
@@ -87,8 +106,6 @@ void gamedev::AnimationSystem::AlignTrajectory(Instance& instance, Physics* phys
 
 void gamedev::AnimationSystem::Rotate(Instance& instance, Animated* subject, float dt)
 {
-    auto rotate = 0_deg;
-
     if (subject->rotQuatAnim)
     {
         auto alpha = tg::saturate(subject->rot_speed * dt);
@@ -96,70 +113,13 @@ void gamedev::AnimationSystem::Rotate(Instance& instance, Animated* subject, flo
     }
 
     if (subject->rotXAnim)
-    {
-        if (subject->rot_x < 0_deg)
-        {
-            rotate = tg::max(subject->rot_x, subject->rot_x * 7.f * dt);
-            subject->rot_x -= rotate;
-
-            if (subject->rot_x >= 0_deg)
-                subject->rotXAnim = false;
-        }
-        else
-        {
-            rotate = tg::min(subject->rot_x, subject->rot_x * 7.f * dt);
-            subject->rot_x -= rotate;
-
-            if (subject->rot_x <= 0_deg)
-                subject->rotXAnim = false;
-        }
-
-        instance.xform.rotate(tg::quat::from_axis_angle(tg::dir3::pos_x, rotate));
-    }
+        instance.xform.rotate(tg::quat::from_axis_angle(tg::dir3::pos_x, StepRemainingAngle(subject->rot_x, subject->rotXAnim, dt)));
 
     if (subject->rotYAnim)
-    {
-        if (subject->rot_y < 0_deg)
-        {
-            rotate = tg::max(subject->rot_y, subject->rot_y * 7.f * dt);
-            subject->rot_y -= rotate;
-
-            if (subject->rot_y >= 0_deg)
-                subject->rotYAnim = false;
-        }
-        else
-        {
-            rotate = tg::min(subject->rot_y, subject->rot_y * 7.f * dt);
-            subject->rot_y -= rotate;
-
-            if (subject->rot_y <= 0_deg)
-                subject->rotYAnim = false;
-        }
-
-        instance.xform.rotate(tg::quat::from_axis_angle(tg::dir3::pos_y, rotate));
-    }
+        instance.xform.rotate(tg::quat::from_axis_angle(tg::dir3::pos_y, StepRemainingAngle(subject->rot_y, subject->rotYAnim, dt)));
 
     if (subject->rotZAnim)
-    {
-        if (subject->rot_z < 0_deg)
-        {
-            rotate = tg::max(subject->rot_z, subject->rot_z * 7.f * dt);
-            subject->rot_z -= rotate;
-
-            if (subject->rot_z >= 0_deg)
-                subject->rotZAnim = false;
-        }
-        else
-        {
-            rotate = tg::min(subject->rot_z, subject->rot_z * 7.f * dt);
-            subject->rot_z -= rotate;
-
-            if (subject->rot_z <= 0_deg)
-                subject->rotZAnim = false;
-        }
-
-        instance.xform.rotate(tg::quat::from_axis_angle(tg::dir3::pos_z, rotate));
-    }
+        instance.xform.rotate(tg::quat::from_axis_angle(tg::dir3::pos_z, StepRemainingAngle(subject->rot_z, subject->rotZAnim, dt)));
 }
 
 void gamedev::AnimationSystem::Scale(Instance& instance, Animated* subject, float dt)

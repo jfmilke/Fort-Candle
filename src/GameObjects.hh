@@ -59,11 +59,7 @@ public:
     void scanMeshes();
 
     /**
-     * Lists the registered meshes in a folder.
-     *
-     * TODO: Iterates the name map, so a mesh is left out if a file with the same name was scanned before it.
-     * Five meshes in `data/meshes/` share their names with meshes in `nature/` (e.g. `bush.obj`);
-     * which one is listed depends on the scan order of the file system.
+     * Lists the registered meshes in a folder, including meshes whose name is shared with a mesh in another folder.
      *
      * @param parent_folder Name of the direct parent folder (e.g. "units"); case-sensitive, paths are lower-case.
      * @return Lower-case paths of the meshes.
@@ -100,10 +96,8 @@ public:
     /**
      * Converts a box into a circle on the ground plane.
      *
-     * TODO: The radius is computed as max(x extent, max.z, min.z) / 2, probably meant to be max(x extent, z extent) / 2.
-     *
      * @param aabb Box to convert.
-     * @return Sphere centered below the center of `aabb` at y = 0.
+     * @return Sphere centered below the center of `aabb` at y = 0, with half the larger of the x and z extents as radius.
      */
     tg::sphere3 aabb3_as_circle(const tg::aabb3& aabb);
 

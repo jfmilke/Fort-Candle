@@ -38,6 +38,8 @@ gamedev::InstanceHandle gamedev::StructureFactory::Register(std::string asset_id
     std::string a_name = lowerString(asset_identifier);
 
     auto handle = Factory::Register(a_name, scaling);
+    if (!handle.is_valid())
+        return handle;
 
     if (boxshape)
     {
@@ -68,6 +70,8 @@ gamedev::InstanceHandle gamedev::StructureFactory::Register(std::string asset_id
     std::string s_name = lowerString(structure_identifier);
 
     auto handle = Factory::Register(a_name, s_name, scaling);
+    if (!handle.is_valid())
+        return handle;
 
     if (boxshape)
     {
@@ -99,6 +103,8 @@ gamedev::InstanceHandle gamedev::StructureFactory::Register(
     std::string s_name = lowerString(structure_identifier);
 
     auto handle = Factory::Register(a_name, s_name, structure_path, scaling);
+    if (!handle.is_valid())
+        return handle;
 
     if (boxshape)
     {

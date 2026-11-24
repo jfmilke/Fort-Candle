@@ -469,8 +469,8 @@ void Game::processInput()
     if (input().isKeyPressed(GLFW_KEY_F11))
         mFullscreen ? mFullscreen = false : mFullscreen = true;
 
-    // Editor mode
-    if (input().isKeyPressed(GLFW_KEY_E))
+    // Editor mode (not E: it moves the camera)
+    if (input().isKeyPressed(GLFW_KEY_F1))
         toggleEditorMode();
 
     // Show menu
@@ -478,9 +478,7 @@ void Game::processInput()
         toggleMenu();
 
     // Capture mouse clicks in worldspace
-    // TODO: Unlike the selection above, not limited to state != MENU: right clicks next to the main menu still give
-    // orders (or spawn in editor mode).
-    if (!ImGui::GetIO().WantCaptureMouse && input().isMouseButtonReleased(GLFW_MOUSE_BUTTON_2))
+    if (state != MENU && !ImGui::GetIO().WantCaptureMouse && input().isMouseButtonReleased(GLFW_MOUSE_BUTTON_2))
     {
         auto const mousePos = input().getMousePosition();
         auto target = mRenderSys->ReadPickingBuffer(int(mousePos.x), getWindowHeight() - int(mousePos.y));
@@ -502,14 +500,7 @@ void Game::processInput()
         }
         else
         {
-            if (mSelectedFac == mNatureFac.get())
-            {
-                spawnRandomly(w_position);
-            }
-            else
-            {
-                spawn(w_position);
-            }
+            spawnSelected(w_position);
         }
     }
 }
@@ -536,6 +527,7 @@ void Game::onGui()
                     ImGui::TextUnformatted("RMB   - Mouselook");
                     ImGui::TextUnformatted("LMB   - Select objects");
                     ImGui::TextUnformatted("F     - Fly to selected object");
+                    ImGui::TextUnformatted("F1    - Toggle editor mode");
                     ImGui::NewLine();
                     ImGui::Text("Cam pos: %.2f %.2f %.2f", mCamera.physical.position.x, mCamera.physical.position.y, mCamera.physical.position.z);
                     ImGui::Text("Cam fwd: %.2f %.2f %.2f", mCamera.physical.forward.x, mCamera.physical.forward.y, mCamera.physical.forward.z);
@@ -730,6 +722,18 @@ void Game::onGui()
         {
             mAdvancedFeatures.runImgui(requestedFlyToSelection, requestedCreateNewInstance);
 
+            if (requestedFlyToSelection)
+                flyToSelectedinstance();
+
+            // Spawn the selected preset on the ground in the middle of the view
+            if (requestedCreateNewInstance)
+            {
+                auto const size = getWindowSize();
+                auto position = mRenderSys->MouseToWorld(size.width / 2, size.height / 2);
+                position.y = mTerrain->heightAt(position);
+                spawnSelected(position);
+            }
+
             if (ImGui::Begin("Spawn Menu"))
             {
                 unitSpawnMenu();
@@ -754,6 +758,8 @@ void Game::onGui()
 
                 // run the editor (some Imgui and a gizmo to move it around)
                 gamedev::manipulateTransform(mAdvancedFeatures.mEditorState, view, proj, transformToManipulate);
+                // let the PhysicsSystem publish gizmo moves (hash maps)
+                mAdvancedFeatures.mWorld.getInstance(mAdvancedFeatures.mSelectedInstance).new_position = true;
                 if (mECS->TestSignature<gamedev::Physics>(mAdvancedFeatures.mSelectedInstance))
                 {
                     gamedev::manipulatePhysics(mAdvancedFeatures.mEditorState, mECS->GetComponent<gamedev::Physics>(mAdvancedFeatures.mSelectedInstance));
@@ -958,6 +964,10 @@ void Game::updateCamera(float elapsedSeconds)
 
 bool Game::onMouseScroll(double sx, double sy)
 {
+    // Let ImGui scroll its windows first
+    if (GlfwApp::onMouseScroll(sx, sy))
+        return true;
+
     if (state != MENU)
     {
         auto minScroll = 1;
@@ -1265,9 +1275,8 @@ void Game::gameUI()
                 ImGui::Text("Construct Home: %i g", mGamelogicSys->GetHomePrice());
                 ImGui::Text("Construct Artisans Place: %i g", mGamelogicSys->GetProductionPrice());
                 auto supplyLevel = mGamelogicSys->GetSupplyLevel();
-                // TODO: There are three upgrades, so the last one shows as "3/2".
                 if (supplyLevel < 3)
-                    ImGui::Text("Supply Route (%i/2): %i g", mGamelogicSys->GetSupplyLevel() + 1, mGamelogicSys->GetSupplyPrice());
+                    ImGui::Text("Supply Route (%i/3): %i g", supplyLevel + 1, mGamelogicSys->GetSupplyPrice());
                 ImGui::Text("Upgrade Fortifications: %i g", mGamelogicSys->GetFortificationPrice());
                 ImGui::Text("Repair Fortifications: %i g", mGamelogicSys->GetRepairFortificationsPrice());
                 ImGui::Text("Heal Injured: %i g", mGamelogicSys->GetHealPrice() * mGamelogicSys->GetInjured());
@@ -1533,8 +1542,19 @@ bool Game::spawnUnit(std::string id)
     return true;
 }
 
+void Game::spawnSelected(tg::pos3 position)
+{
+    if (mSelectedFac == mNatureFac.get())
+        spawnRandomly(position);
+    else
+        spawn(position);
+}
+
 void Game::spawn(tg::pos3 position)
 {
+    if (!mSelectedFac || mSelectedObject.empty())
+        return;
+
     tg::quat rotation(tg::quat::identity);
 
     if (mECS->IsLiveHandle(mCreatedLast))
@@ -1542,26 +1562,26 @@ void Game::spawn(tg::pos3 position)
         rotation = mECS->GetInstanceTransform(mCreatedLast).rotation;
     }
 
-    if (mSelectedFac && !mSelectedObject.empty())
-        if (rotation != tg::quat::identity)
-            mCreatedLast = mSelectedFac->Create(mSelectedObject, position, rotation);
-        else
-            mCreatedLast = mSelectedFac->Create(mSelectedObject, position);
+    auto const handle
+        = rotation != tg::quat::identity ? mSelectedFac->Create(mSelectedObject, position, rotation) : mSelectedFac->Create(mSelectedObject, position);
+    if (!handle.is_valid())
+        return;
 
-    // TODO: Outside the check above: crashes if no preset was selected, and re-marks the previous object.
+    mCreatedLast = handle;
     mSelectedFac->MarkLastCreated();
 }
 
 void Game::spawnRandomly(tg::pos3 position)
 {
+    if (!mSelectedFac || mSelectedObject.empty())
+        return;
+
     auto randomScale = tg::size3(gamedev::RandomFloat(0.8, 1.2));
     auto randomRotation = gamedev::RandomFloat() * 360_deg;
 
-    if (mSelectedFac && !mSelectedObject.empty())
-        mSelectedFac->Create(mSelectedObject, position, tg::quat::from_axis_angle(tg::dir3::pos_y, randomRotation), randomScale);
-
-    // TODO: Outside the check above (see spawn).
-    mSelectedFac->MarkLastCreated();
+    auto const handle = mSelectedFac->Create(mSelectedObject, position, tg::quat::from_axis_angle(tg::dir3::pos_y, randomRotation), randomScale);
+    if (handle.is_valid())
+        mSelectedFac->MarkLastCreated();
 }
 
 void Game::toggleMenu()

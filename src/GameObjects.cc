@@ -62,13 +62,13 @@ std::vector<std::string> gamedev::GameObjects::getObjectsByFolder(std::string pa
 {
     std::vector<std::string> objects;
 
-    for (const auto& obj : mMapNameToID)
+    for (const auto& obj : mMapObjectPathToVAO)
     {
-        auto path = std::filesystem::path(obj.second);
+        auto path = std::filesystem::path(obj.first);
 
         if (path.parent_path().filename().compare(parent_folder) == 0)
         {
-            objects.push_back(obj.second);
+            objects.push_back(obj.first);
         }
     }
 
@@ -205,7 +205,7 @@ tg::sphere3 gamedev::GameObjects::aabb3_as_circle(const tg::aabb3& aabb)
     const float b = (aabb.max.z - aabb.min.z);
     s.center = aabb.min + (aabb.max - aabb.min) / 2.0;
     s.center.y = 0.0;
-    s.radius = tg::max(aabb.max.x - aabb.min.x, aabb.max.z, aabb.min.z) / 2.0;
+    s.radius = tg::max(a, b) / 2.f;
 
     return s;
 }

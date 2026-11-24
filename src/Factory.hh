@@ -73,7 +73,7 @@ public:
      *
      * The preset is an instance with the asset's VAO and the palette texture (no normal or ARM texture),
      * the `Prototype` component and a uniform scale.
-     * Its `max_bounds` is the asset's AABB with `max` scaled by `scaling * 1.15` (`min` stays unscaled, see the TODO in the code).
+     * Its `max_bounds` is the asset's AABB scaled by `scaling * 1.15`.
      * `PostProcessRegistration` runs after the `Prototype` component is added and before the preset is added.
      *
      * @param asset_identifier Mesh name or path known to the asset manager.
@@ -83,7 +83,7 @@ public:
     InstanceHandle Register(std::string asset_identifier, float scaling = 1.0);
 
     /**
-     * Like `Register(asset_identifier, scaling)`, but adds the preset under `factory_identifier`, and `max_bounds.max` is scaled by `scaling * 1.25`.
+     * Like `Register(asset_identifier, scaling)`, but adds the preset under `factory_identifier`, and `max_bounds` is scaled by `scaling * 1.25`.
      *
      * @param asset_identifier Mesh name or path known to the asset manager.
      * @param factory_identifier Preset name, or path whose file name becomes the name.
@@ -117,13 +117,9 @@ public:
     /**
      * Like `Create(identifier)`, placed at `position`.
      *
-     * TODO: Does not check the result of `Create(identifier)`, so an unknown preset makes it use an invalid handle
-     * (undefined behavior; asserts in Debug).
-     * The same holds for the overloads below, which call this one.
-     *
      * @param identifier Preset name or path.
      * @param position World position; the height is taken from the terrain, if attached.
-     * @return The new instance.
+     * @return The new instance, or an invalid handle if the preset does not exist.
      */
     InstanceHandle Create(std::string identifier, tg::pos3 position);
 
@@ -133,7 +129,7 @@ public:
      * @param identifier Preset name or path.
      * @param position World position; the height is taken from the terrain, if attached.
      * @param rotation Rotation (replaces the preset rotation).
-     * @return The new instance.
+     * @return The new instance, or an invalid handle if the preset does not exist.
      */
     InstanceHandle Create(std::string identifier, tg::pos3 position, tg::quat rotation);
 
@@ -144,7 +140,7 @@ public:
      * @param position World position; the height is taken from the terrain, if attached.
      * @param rotation Rotation (replaces the preset rotation).
      * @param scaling Scale (replaces the preset scale).
-     * @return The new instance.
+     * @return The new instance, or an invalid handle if the preset does not exist.
      */
     InstanceHandle Create(std::string identifier, tg::pos3 position, tg::quat rotation, tg::size3 scaling);
 
@@ -154,7 +150,7 @@ public:
      * @param identifier Preset name or path.
      * @param position World position; the height is taken from the terrain, if attached.
      * @param scaling Scale (replaces the preset scale).
-     * @return The new instance.
+     * @return The new instance, or an invalid handle if the preset does not exist.
      */
     InstanceHandle Create(std::string identifier, tg::pos3 position, tg::size3 scaling);
 
@@ -223,9 +219,7 @@ public:
     std::vector<std::string> GetNameIdentifiers();
 
     /**
-     * Meant to return all preset paths.
-     *
-     * TODO: Returns the names instead (it iterates the name map).
+     * All preset paths (unordered). Unused.
      */
     std::vector<std::string> GetPathIdentifiers();
 
@@ -298,7 +292,7 @@ private:
     /**
      * Creates one instance per `.fac` record with the saved transform (including the saved height).
      *
-     * TODO: A record with an unknown preset name leads to undefined behavior (see `Create(identifier, position)`).
+     * Records with an unknown preset name are skipped (and logged).
      *
      * @param filepath `.fac` file to read.
      * @param marked Also mark the created instances (see `MarkLastCreated`).

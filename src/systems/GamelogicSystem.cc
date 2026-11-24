@@ -90,6 +90,11 @@ void gamedev::GamelogicSystem::Update(float dt)
 
     ConsumeWood(dt);
     UpdateOutlines(dt);
+    UpdateEffects(dt);
+
+    // Refresh the home fire twice per second (adding wood refreshes it at once)
+    if (mUpdateControl % 30 == 29)
+        UpdateHomefire();
 
     // forget injured pioneers that died (erase via the iterator: erasing inside a range-for is UB)
     for (auto it = mInjuredPioneers.begin(); it != mInjuredPioneers.end();)
@@ -106,9 +111,6 @@ void gamedev::GamelogicSystem::Update(float dt)
 
         auto lifeform = mECS->GetComponent<Living>(handle);
         auto attacker = mECS->TryGetComponent<Attacker>(handle);
-
-        // TODO: Called once per entity, so the effects converge faster with more units.
-        UpdateEffects(dt);
 
         // Do Casual
         UpdateForeignControl(instance, lifeform);
@@ -135,10 +137,6 @@ void gamedev::GamelogicSystem::Update(float dt)
 
         // Do Monster Stuff
         UpdateMonster(instance, lifeform, dt);
-
-        // TODO: True for every update from the 30th on (and evaluated once per entity).
-        if (mUpdateControl / 30)
-            UpdateHomefire();
     }
 
 
@@ -284,7 +282,7 @@ void gamedev::GamelogicSystem::UpdateFocus(const Instance& instance, Living* sub
 
     if (!mECS->IsLiveHandle(subject->focusHandle))
     {
-        subject->focusHandle._value = uint32_t(1); // TODO: should be the invalid handle uint32_t(-1)
+        subject->focusHandle = {std::uint32_t(-1)};
         return;
     }
 
@@ -1322,8 +1320,14 @@ void gamedev::GamelogicSystem::StartProduction(InstanceHandle handle)
 
 void gamedev::GamelogicSystem::StopProduction(InstanceHandle handle)
 {
-    mECS->TryRemoveComponent<Producer>(handle);
-    mECS->GetComponent<Producer>(handle)->producing = false;
+    auto producer = mECS->TryGetComponent<Producer>(handle);
+    if (producer)
+        producer->producing = false;
+
+    // Remove the work particles added by `StartProduction`
+    auto particles = mECS->TryGetComponent<ParticleEmitter>(handle);
+    if (particles)
+        particles->pp.clear();
 }
 
 gamedev::InstanceHandle gamedev::GamelogicSystem::SpawnObjectRandomly(tg::pos3 position, std::string object_id)
@@ -1338,7 +1342,7 @@ gamedev::InstanceHandle gamedev::GamelogicSystem::SpawnObjectRandomly(tg::pos3 p
 
 gamedev::InstanceHandle gamedev::GamelogicSystem::TryConstructObject(std::string object_id)
 {
-    auto instance = mECS->GetInstance(mSF->GetPreset(object_id));
+    auto const& instance = mECS->GetInstance(mSF->GetPreset(object_id));
 
     // You have 20 tries to find a free spot, good luck
     for (int i = 0; i < 20; i++)
@@ -1347,10 +1351,16 @@ gamedev::InstanceHandle gamedev::GamelogicSystem::TryConstructObject(std::string
 
         auto potential_colliders = mECS->GetHashMap().FindNear(tg::vec3(randomPosition), instance.max_bounds);
 
+        // max_bounds are relative to the instance position
+        auto const bounds = tg::aabb3(instance.max_bounds.min + tg::vec3(randomPosition), instance.max_bounds.max + tg::vec3(randomPosition));
+
         bool freeSpot = true;
         for (const auto& pc : potential_colliders)
         {
-            if (tg::intersects(instance.max_bounds, mECS->GetInstance(pc).max_bounds))
+            auto const& other = mECS->GetInstance(pc);
+            auto const otherBounds = tg::aabb3(other.max_bounds.min + other.xform.translation, other.max_bounds.max + other.xform.translation);
+
+            if (tg::intersects(bounds, otherBounds))
             {
                 freeSpot = false;
             }
@@ -1365,7 +1375,8 @@ gamedev::InstanceHandle gamedev::GamelogicSystem::TryConstructObject(std::string
 
 gamedev::InstanceHandle gamedev::GamelogicSystem::TryConstructRandomObject(std::vector<std::string> object_ids)
 {
-    auto instance = mECS->GetInstance(mSF->GetPreset(object_ids[0]));
+    auto const object_id = object_ids[int(RandomFloat(0.f, object_ids.size() - 0.01f))];
+    auto const& instance = mECS->GetInstance(mSF->GetPreset(object_id));
 
     // You have 20 tries to find a free spot, good luck
     for (int i = 0; i < 20; i++)
@@ -1375,17 +1386,23 @@ gamedev::InstanceHandle gamedev::GamelogicSystem::TryConstructRandomObject(std::
 
         auto potential_colliders = mECS->GetHashMap().FindNear(tg::vec3(randomPosition), instance.max_bounds);
 
+        // max_bounds are relative to the instance position
+        auto const bounds = tg::aabb3(instance.max_bounds.min + tg::vec3(randomPosition), instance.max_bounds.max + tg::vec3(randomPosition));
+
         bool freeSpot = true;
         for (const auto& pc : potential_colliders)
         {
-            if (tg::intersects(instance.max_bounds, mECS->GetInstance(pc).max_bounds))
+            auto const& other = mECS->GetInstance(pc);
+            auto const otherBounds = tg::aabb3(other.max_bounds.min + other.xform.translation, other.max_bounds.max + other.xform.translation);
+
+            if (tg::intersects(bounds, otherBounds))
             {
                 freeSpot = false;
             }
         }
 
         if (freeSpot)
-            return SpawnObjectRandomly(randomPosition, object_ids[int(RandomFloat(0, object_ids.size() - 0.01))]);
+            return SpawnObjectRandomly(randomPosition, object_id);
     }
 
     return {std::uint32_t(-1)};
@@ -1649,7 +1666,7 @@ void gamedev::GamelogicSystem::AssignSoldier()
     if (!assigned)
     {
         mAS->PlayGlobalSound("interfaceNegative.wav", ui);
-        mGold += GetArtisanPrice(); // TODO: should refund GetSoldierPrice() (currently the same value)
+        mGold += GetSoldierPrice();
     }
 }
 
@@ -1908,12 +1925,16 @@ void gamedev::GamelogicSystem::UpdateDesaturation()
 
 void gamedev::GamelogicSystem::UpdateEffects(float dt)
 {
-    mVignetteIntensity += (mVignetteIntensityTarget - mVignetteIntensity) * 0.1 * dt;
-    mVignetteRadius += (mVignetteRadiusTarget - mVignetteRadius) * 0.1 * dt;
-    mVignetteSoftness += (mVignetteSoftnessTarget - mVignetteSoftness) * 0.1 * dt;
-    mVignetteColor += (mVignetteColorTarget - mVignetteColor) * 0.1 * dt;
+    // Fraction of the remaining difference per second
+    // (it used to run once per unit at 0.1, which this matches for a camp of about five units)
+    float const alpha = tg::min(0.5f * dt, 1.f);
 
-    mDesaturationIntensity += (mDesaturationIntensityTarget - mDesaturationIntensity) * 0.1 * dt;
+    mVignetteIntensity += (mVignetteIntensityTarget - mVignetteIntensity) * alpha;
+    mVignetteRadius += (mVignetteRadiusTarget - mVignetteRadius) * alpha;
+    mVignetteSoftness += (mVignetteSoftnessTarget - mVignetteSoftness) * alpha;
+    mVignetteColor += (mVignetteColorTarget - mVignetteColor) * alpha;
+
+    mDesaturationIntensity += (mDesaturationIntensityTarget - mDesaturationIntensity) * alpha;
 }
 
 void gamedev::GamelogicSystem::RepairFortifications()

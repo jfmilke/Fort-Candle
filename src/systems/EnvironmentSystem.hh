@@ -115,13 +115,8 @@ private:
 
     const float secondsPerDay = 86400.f; ///< Game seconds per day (60 * 60 * 24).
     float mSecondToGameSecond;           ///< Game seconds per real second.
-    /**
-     * Time of day in game seconds: [0, 86400].
-     *
-     * TODO: Not set by `Init`; it only starts at 0 because `Game` value-initializes the system with `make_shared`.
-     */
-    float mGameTime;
-    int mDayCount; ///< Current day, starting at 1.
+    float mGameTime = 0.f;               ///< Time of day in game seconds: [0, 86400].
+    int mDayCount;                       ///< Current day, starting at 1.
 
     // in seconds
     // todo: implement day/night cycle

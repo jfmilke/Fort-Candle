@@ -18,14 +18,26 @@ int gamedev::LightSystem::AddFreeLight(PointLight& pl)
 
 void gamedev::LightSystem::RemoveFreeLight(int light_id)
 {
-    // Swap'n'Pop
-    std::swap(mFreeLights[light_id], mFreeLights.back());
-    mFreeLights.pop_back();
+    auto const it = mExternToInternID.find(light_id);
+    if (it == mExternToInternID.end())
+        return;
 
-    // Update ID mappings
-    int extern_id = mInternToExternID[mFreeLights.size() - 1];  // Outside ID of last element
-    mExternToInternID[extern_id] = mExternToInternID[light_id]; // Reassign outside ID of last element to removed element (because of swap)
-    mInternToExternID.erase(mFreeLights.size() - 1);            // Remove intern ID of last element (because of pop_back)
+    int const index = it->second;
+    int const last = int(mFreeLights.size()) - 1;
+
+    // Swap'n'Pop: the last light moves into the freed index
+    if (index != last)
+    {
+        mFreeLights[index] = mFreeLights[last];
+
+        int const moved_id = mInternToExternID[last];
+        mExternToInternID[moved_id] = index;
+        mInternToExternID[index] = moved_id;
+    }
+
+    mFreeLights.pop_back();
+    mExternToInternID.erase(light_id);
+    mInternToExternID.erase(last);
 }
 
 void gamedev::LightSystem::Update(float dt) { BuildLights(dt); }

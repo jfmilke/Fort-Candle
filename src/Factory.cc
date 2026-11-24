@@ -127,9 +127,9 @@ gamedev::InstanceHandle gamedev::Factory::Register(std::string asset_identifier,
     instance.xform.scaling = {scaling, scaling, scaling};
 
     // Calculate maximum possible bounding box
-    // TODO: The comma operator makes this scale only max_bounds.max (min stays unscaled).
     auto max_bounds = mObj->getAABB(a_name);
-    max_bounds.min, max_bounds.max *= instance.xform.scaling * 1.15;
+    max_bounds.min *= instance.xform.scaling * 1.15f;
+    max_bounds.max *= instance.xform.scaling * 1.15f;
     instance.max_bounds = MaxBoundingBox(max_bounds);
 
     PostProcessRegistration(handle);
@@ -157,9 +157,9 @@ gamedev::InstanceHandle gamedev::Factory::Register(std::string asset_identifier,
 
     instance.xform.translation = {0, 0, 0};
     instance.xform.scaling = {scaling, scaling, scaling};
-    // TODO: The comma operator makes this scale only max_bounds.max (min stays unscaled).
     auto max_bounds = mObj->getAABB(a_name);
-    max_bounds.min, max_bounds.max *= instance.xform.scaling * 1.25;
+    max_bounds.min *= instance.xform.scaling * 1.25f;
+    max_bounds.max *= instance.xform.scaling * 1.25f;
     instance.max_bounds = MaxBoundingBox(max_bounds);
 
     PostProcessRegistration(handle);
@@ -188,9 +188,9 @@ gamedev::InstanceHandle gamedev::Factory::Register(std::string asset_identifier,
 
     instance.xform.translation = {0, 0, 0};
     instance.xform.scaling = {scaling, scaling, scaling};
-    // TODO: The comma operator makes this scale only max_bounds.max (min stays unscaled).
     auto max_bounds = mObj->getAABB(a_name);
-    max_bounds.min, max_bounds.max *= instance.xform.scaling * 1.25;
+    max_bounds.min *= instance.xform.scaling * 1.25f;
+    max_bounds.max *= instance.xform.scaling * 1.25f;
     instance.max_bounds = MaxBoundingBox(max_bounds);
 
 
@@ -289,6 +289,9 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string identifier)
 gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::pos3 position)
 {
     auto fresh_handle = Create(object_name);
+    if (!fresh_handle.is_valid())
+        return fresh_handle;
+
     auto& transform = mECS->GetInstance(fresh_handle).xform;
     transform.translation = tg::vec3(position);
 
@@ -309,6 +312,9 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::po
 gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::pos3 position, tg::quat rotation)
 {
     auto fresh_handle = Create(object_name, position);
+    if (!fresh_handle.is_valid())
+        return fresh_handle;
+
     auto& transform = mECS->GetInstance(fresh_handle).xform;
     transform.rotation = rotation;
 
@@ -318,6 +324,9 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::po
 gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::pos3 position, tg::quat rotation, tg::size3 scaling)
 {
     auto fresh_handle = Create(object_name, position);
+    if (!fresh_handle.is_valid())
+        return fresh_handle;
+
     auto& transform = mECS->GetInstance(fresh_handle).xform;
     transform.rotation = rotation;
     transform.scaling = scaling;
@@ -328,6 +337,9 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::po
 gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::pos3 position, tg::size3 scaling)
 {
     auto fresh_handle = Create(object_name, position);
+    if (!fresh_handle.is_valid())
+        return fresh_handle;
+
     auto& transform = mECS->GetInstance(fresh_handle).xform;
     transform.scaling = scaling;
 
@@ -375,7 +387,7 @@ std::vector<std::string> gamedev::Factory::GetPathIdentifiers()
 {
     std::vector<std::string> paths;
 
-    for (const auto& path_map : mObjectNameToID)
+    for (const auto& path_map : mObjectPathToID)
     {
         paths.push_back(path_map.first);
     }
@@ -523,6 +535,12 @@ std::vector<gamedev::InstanceHandle> gamedev::Factory::LoadObjectsFrom(std::file
         file.read((char*)&scaling, sizeof(tg::size3));    // read scaling
 
         auto handle = Create(identifier, tg::pos3(translation), rotation, scaling); // create instance upon this
+        if (!handle.is_valid())
+        {
+            glow::error() << "Skipping unknown preset '" << identifier << "' in " << filepath.string() << ".";
+            continue;
+        }
+
         mECS->GetInstanceTransform(handle).translation = translation;
 
         handles.push_back(handle);
