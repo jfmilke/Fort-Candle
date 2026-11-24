@@ -32,9 +32,8 @@ public:
      * Advances arrows and animations. Expired arrows are marked for destruction.
      *
      * @param dt Time step in seconds.
-     * @return Elapsed time in microseconds.
      */
-    int Update(float dt);
+    void Update(float dt);
 
     /**
      * Applies the pending rotations (quaternion target and eased x/y/z angles).

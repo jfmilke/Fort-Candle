@@ -30,6 +30,13 @@
 #include "factories/NatureFactory.hh"
 #include "factories/ItemFactory.hh"
 
+#include "GameHooks.hh"
+#include "GameSettings.hh"
+#include "profiling/Profiler.hh"
+
+#include <memory>
+#include <optional>
+
 /// Top-level game state, switched by the main menu, Escape and P.
 enum GameState
 {
@@ -47,6 +54,14 @@ enum GameState
  *  - `update()` runs the systems at a fixed 60 Hz: audio always, particles and lights except while paused, all other systems only while playing.
  *  - `render()` handles mouse/keyboard input, passes the per-frame state to the `RenderSystem` and renders.
  *  - `onGui()` builds the menus, the in-game HUD and, in editor mode (key E), the debug, editor and spawn windows.
+ *
+ * Every run measures its startup phases, system updates, render, GPU time and frame interval with a `profiling::Profiler`;
+ * the debug UI shows the latest values.
+ *
+ * Outside code controls a run through two seams, both set at construction:
+ *  - `GameSettings`: how the game starts (seed, vsync, input, straight into play, daily waves).
+ *  - `GameHooks` (optional, not owned): notified at startup, after every played tick and at shutdown.
+ *    It gets the profiler and the `GamelogicSystem`; `benchmark::Session` uses this to play scripted scenarios.
  */
 class Game : public glow::glfw::GlfwApp
 {
@@ -112,17 +127,6 @@ private:
     bool mEnableFreeFlyCam = false;       ///< Free-fly camera instead of the strategy camera.
 
 private:
-    // Debug: system update times of the last tick in milliseconds
-    float mTime_PhysicsSys = 0.0;     ///< `PhysicsSystem`.
-    float mTime_CollisionSys = 0.0;   ///< `CollisionSystem`.
-    float mTime_EnvironmentSys = 0.0; ///< `EnvironmentSystem`.
-    float mTime_LightSys = 0.0;       ///< `LightSystem`.
-    float mTime_ParticleSys = 0.0;    ///< `ParticleSystem`.
-    float mTime_GamelogicSys = 0.0;   ///< `GamelogicSystem`.
-    float mTime_AnimationSys = 0.0;   ///< `AnimationSystem`.
-    float mTime_CleanSys = 0.0;       ///< `CleanupSystem`.
-    float mTime_AllSys = 0.0;         ///< Everything that runs only while playing (physics to cleanup, with the waves).
-
     // Shadows
     int mPointShadowResolution = 1024; ///< Edge length of the point shadow cube map faces.
     int mDirShadowResolution = 1024;   ///< Edge length of the sun shadow map.
@@ -216,11 +220,56 @@ private:
     int frameControl = 0;                                                                             ///< Counts simulation ticks. Unused.
     unsigned int attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2}; ///< Unused.
 
+    // Launch
+    gamedev::GameSettings mSettings;      ///< How the game starts and runs.
+    gamedev::GameHooks* mHooks = nullptr; ///< Observer of the run (e.g. a benchmark), or nullptr; not owned.
+
+    // Profiling
+
+    /// Zones of `mProfiler`, in the order of the debug UI and benchmark results.
+    struct ProfileZones
+    {
+        // Startup phases of `init` (once)
+
+        gamedev::profiling::ZoneId window; ///< Window, GL context and ImGui.
+        gamedev::profiling::ZoneId engine; ///< ECS, systems, factories, terrain and render resources.
+        gamedev::profiling::ZoneId assets; ///< Mesh scan and preset registration.
+        gamedev::profiling::ZoneId world;  ///< Start layout (`.fac` files) and player.
+
+        // Per tick
+
+        gamedev::profiling::ZoneId update;      ///< The whole `update` tick (all systems and the wave logic).
+        gamedev::profiling::ZoneId audio;       ///< `AudioSystem::Update`.
+        gamedev::profiling::ZoneId particles;   ///< `ParticleSystem::Update` (not while particles are off).
+        gamedev::profiling::ZoneId lights;      ///< `LightSystem::Update`.
+        gamedev::profiling::ZoneId physics;     ///< `PhysicsSystem::Update`.
+        gamedev::profiling::ZoneId collision;   ///< `CollisionSystem::Update`.
+        gamedev::profiling::ZoneId environment; ///< `EnvironmentSystem::Update`.
+        gamedev::profiling::ZoneId gamelogic;   ///< `GamelogicSystem::Update`.
+        gamedev::profiling::ZoneId animation;   ///< `AnimationSystem::Update`.
+        gamedev::profiling::ZoneId cleanup;     ///< `CleanupSystem::Update`.
+
+        // Per frame
+
+        gamedev::profiling::ZoneId render; ///< CPU time in `render`: submitting the GL work, plus driver waits when the GPU is the bottleneck.
+        gamedev::profiling::ZoneId gpu;    ///< GPU time of `render` as glow-extras' non-blocking GPU timer last reported it (see `onFrameStart`).
+        gamedev::profiling::ZoneId frame;  ///< Time between two frame starts: the frame rate the whole game reaches.
+    };
+
+    gamedev::profiling::Profiler mProfiler;                               ///< Timings of this run.
+    ProfileZones mZones;                                                  ///< Zones of `mProfiler`.
+    std::optional<gamedev::profiling::Clock::time_point> mLastFrameStart; ///< Start of the previous frame.
+
 
     // ctor
 public:
-    /// Creates the app with the ImGui integration of `GlfwApp`.
-    Game();
+    /**
+     * Creates the app with the ImGui integration of `GlfwApp` and registers the profiler zones.
+     *
+     * @param settings How the game starts and runs.
+     * @param hooks Observer of the run, or nullptr; not owned, must outlive `run()`.
+     */
+    explicit Game(gamedev::GameSettings settings = {}, gamedev::GameHooks* hooks = nullptr);
 
     // events
 public:
@@ -236,7 +285,14 @@ public:
      */
     void init() override;
 
-    /// Called at the start of each frame, after input polling (local glow-extras patch, see CLAUDE.md): starts a new statistics frame.
+    /**
+     * Called at the start of each frame, after input polling (local glow-extras patch, see CLAUDE.md):
+     * starts a new statistics frame and records the frame interval and the GPU time of `render`.
+     *
+     * The GPU time comes from glow-extras' non-blocking GPU timer and is not exactly per frame:
+     * it is usually 1-3 frames old, averages all measurements that finished since the last frame, and repeats the previous value if none did.
+     * It is not recorded until the timer has a first result.
+     */
     void onFrameStart() override;
 
     /**
@@ -246,13 +302,15 @@ public:
      *  - while playing: all other simulation systems, the daily enemy waves (day + 3 monsters) and reinforcements (day / 2 + 2 pioneers),
      *    and the deferred destruction (`CleanupSystem`, last).
      *
+     * Then, if a tick was played, notifies `GameHooks::OnTickEnd` and closes the window if it asks to.
+     *
      * @param elapsedSeconds Fixed time step in seconds (1/60).
      */
     void update(float elapsedSeconds) override;
 
     /**
      * Called once per frame (variable timestep):
-     * camera, mouse/keyboard input (selection, orders, editor spawning, key shortcuts), renderer state, and rendering.
+     * camera and mouse/keyboard input (`processInput`; only if `GameSettings::inputEnabled`), renderer state, and rendering.
      *
      * Cursor capture for camera rotation (`setCursorMode`) takes effect at the start of the next frame,
      * when glow-extras applies it in `updateInput()`.
@@ -265,7 +323,10 @@ public:
     /// Called once per frame to build the UI: main menu, HUD and dialogs, or the editor windows.
     void onGui() override;
 
-    /// Releases the statistics, all instances, the factories, the systems and the ECS while the GL context still exists.
+    /**
+     * Notifies `GameHooks::OnClosing`, then releases the statistics, all instances, the factories, the systems and the ECS
+     * while the GL context still exists.
+     */
     void onClose() override;
 
     /**
@@ -308,6 +369,27 @@ public:
      * @param elapsedSeconds Frame time in seconds.
      */
     void updateCamera(float elapsedSeconds);
+
+    /// Handles the mouse and keyboard input of a frame: selection, orders, editor spawning and key shortcuts (pause, menu, editor, ...).
+    void processInput();
+
+    /**
+     * Registers the zones of `Game` in a profiler.
+     *
+     * @param profiler Profiler to register in.
+     * @return The registered zones.
+     */
+    static ProfileZones registerProfileZones(gamedev::profiling::Profiler& profiler);
+
+    /**
+     * Runs the systems and the wave logic of one 60 Hz tick (see `update`).
+     *
+     * @param elapsedSeconds Fixed time step in seconds (1/60).
+     */
+    void updateSystems(float elapsedSeconds);
+
+    /// Where the game stands: won, lost or still running.
+    gamedev::GameOutcome outcome() const;
 
     /// Stores the preset names shown in the editor's spawn menu.
     void fillSpawnMenu(std::vector<std::string> nature, std::vector<std::string> items, std::vector<std::string> units, std::vector<std::string> structures);

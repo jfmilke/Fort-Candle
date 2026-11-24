@@ -39,9 +39,8 @@ public:
      * Renders one frame (see class description).
      *
      * @param dt Unused.
-     * @return Elapsed time in microseconds.
      */
-    int Update(float dt);
+    void Update(float dt);
 
     /**
      * Creates render targets and framebuffers and loads textures, meshes and shaders.

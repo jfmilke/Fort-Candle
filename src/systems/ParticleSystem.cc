@@ -62,10 +62,8 @@ void gamedev::ParticleSystem::UploadParticleData()
     vbo.setData(mParticleAttributes, GL_STREAM_DRAW);
 }
 
-int gamedev::ParticleSystem::Update(float elapsed_time)
+void gamedev::ParticleSystem::Update(float elapsed_time)
 {
-    auto t0 = std::chrono::steady_clock::now();
-
     mParticleAttributes.clear();
 
     // Create new particles for all emitters
@@ -109,9 +107,6 @@ int gamedev::ParticleSystem::Update(float elapsed_time)
 
         mParticleAttributes.push_back({p.position, 0.0, p.color, 0.0, p.rotation_y, scale, life});
     }
-
-    auto tn = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::microseconds>(tn - t0).count();
 }
 
 void gamedev::ParticleSystem::RenderInstanced(const glow::UsedProgram& shader, const glow::SharedFramebuffer& framebuffer)

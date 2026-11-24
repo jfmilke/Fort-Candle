@@ -27,10 +27,8 @@ public:
      *
      * They are removed from components, systems and the spatial hash map.
      * Marked prototypes are not in this system and stay alive.
-     *
-     * @return Elapsed time in microseconds.
      */
-    int Update();
+    void Update();
 
 private:
     EngineECS* mECS = nullptr; ///< ECS (not owned).

@@ -53,9 +53,8 @@ public:
      * Runs the static and dynamic pass (see class description).
      *
      * @param dt Time step in seconds (scales the sliding along obstacles).
-     * @return Elapsed time in microseconds.
      */
-    int Update(float dt);
+    void Update(float dt);
 
     /**
      * Static pass: removes destroyed static colliders and resolves dynamic-vs-static overlaps.

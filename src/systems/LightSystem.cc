@@ -31,14 +31,9 @@ void gamedev::LightSystem::RemoveFreeLight(int light_id)
     mInternToExternID.erase(mFreeLights.size() - 1);            // Remove intern ID of last element (because of pop_back)
 }
 
-int gamedev::LightSystem::Update(float dt)
+void gamedev::LightSystem::Update(float dt)
 {
-    auto t0 = std::chrono::steady_clock::now();
-
     BuildLights(dt);
-
-    auto tn = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::microseconds>(tn - t0).count();
 }
 
 const std::vector<gamedev::PointLight>& gamedev::LightSystem::GetLights() { return mLights; }

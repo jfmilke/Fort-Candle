@@ -26,10 +26,8 @@ void gamedev::EnvironmentSystem::Init(EngineECS& ecs)
     mDayCount = 1;
 }
 
-int gamedev::EnvironmentSystem::Update(float dt)
+void gamedev::EnvironmentSystem::Update(float dt)
 {
-    auto t0 = std::chrono::steady_clock::now();
-
     mGameTime += dt * mSecondToGameSecond;
 
     mNewDay = false;
@@ -78,9 +76,6 @@ int gamedev::EnvironmentSystem::Update(float dt)
 
     if (!mLocked)
       CalculateSun();
-
-    auto tn = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::microseconds>(tn - t0).count();
 }
 
 void gamedev::EnvironmentSystem::SetMinutesPerDay(float minutes)

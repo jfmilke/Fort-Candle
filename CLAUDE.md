@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Fort Candle is a small low-poly strategy game (RWTH Aachen GameDev practical 2021) built on a custom engine that is tightly coupled to the game. C++23, OpenGL 4.5, CMake. The CMake project/executable name is `GameDevSS21`. All dependencies are vendored in `extern/` (glfw, glow, glow-extras, imgui, polymesh, typed-geometry, clean-core, openal, dr-lib); treat them as third-party. Prefer workarounds in the top-level `CMakeLists.txt` or the game; if a library must change, do it in a separate commit per library named `extern/<lib>: ...` (see [Vendored libraries](#vendored-libraries-extern)).
 
-There are no tests, linters, or CI. "Verifying" a change means building and, where relevant, running the game.
+There are no tests, linters, or CI. "Verifying" a change means building and, where relevant, running the game. For performance work, use the built-in benchmark (see [Benchmarks](#benchmarks)).
 
 ## Build & run
 
@@ -31,6 +31,25 @@ cmake --build build --config RelWithDebInfo --parallel
   - The 2021 `extern/` snapshots (replaced in 2026, see below) needed six small fixes for GCC ≥ 14 and binutils ≥ 2.44. The current versions compile unpatched with GCC 15, Clang 21 and MSVC 19.52.
 
 **Working directory matters.** `main.cc` aborts unless `../data` exists, and every asset path in the code is hard-coded relative (`../data/meshes/`, `../data/shaders/`, `../data/config/`, ...). Run the game from a direct subfolder of the repo root, e.g. from `bin/` (`./RelWithDebInfo/GameDevSS21`) or from `build/` (`../bin/RelWithDebInfo/GameDevSS21`).
+
+### Benchmarks
+
+`GameDevSS21 --benchmark <scenario>` plays a scripted scenario without input and exits; `--help` lists the scenarios and options. Run it from `bin/` like the game:
+
+```powershell
+./RelWithDebInfo/GameDevSS21 --benchmark stress
+python ../tools/compare_benchmarks.py benchmarks/baseline benchmarks/candidate
+```
+
+- Scenarios (`src/benchmark/Scenarios.cc`, calling the `GamelogicSystem`): `idle` (start camp, no waves), `waves` (normal play), `stress` (60 monsters + 30 reinforcements at once), `exercise` (building, recruiting, wall upgrades and repairs, supply routes, an 80-monster wave).
+- A run is reproducible: fixed RNG seed (`--seed`), straight into play, vsync off, no input, and a fixed time step per tick. The same seed only reproduces a run with the same standard library (`std::uniform_real_distribution` is implementation-defined, so MSVC and libstdc++ differ). Win/lose is detected in `Game::gameUI` (UI code).
+- It records the profiler zones (see [Profiling](#profiling)) for `--ticks` ticks (default 3600) after `--warmup` ticks (default 120), plus the startup phases. Tick indices count from the first played tick, so `--warmup` shifts which part of a scenario is measured.
+- Results go to `benchmarks/<scenario>-<UTC time>.json` in the working directory (`--output` overrides). `tools/compare_benchmarks.py` (Python 3, standard library only) compares two files or folders of repeated runs: the median over runs, with their spread as noise estimate.
+- Measure RelWithDebInfo builds, run each side several times, and leave the window alone (minimizing or covering it can throttle rendering). Exit codes: 0 done, 1 bad command line or working directory, 2 window closed early, 3 result file not written.
+
+### Profiling
+
+`Game` owns a `profiling::Profiler` (`src/profiling/`) in every mode; the debug UI ("Performance (ms)") shows the latest value per zone, and benchmarks capture every sample. Systems do not time themselves: `Game` wraps each `Update` call in a zone. A new system gets a zone in `Game::ProfileZones`; the zone name is the key in benchmark results.
 
 Code style: `.clang-format` (Google-based, Allman braces, 4-space indent, 150 column limit). Engine code lives in `namespace gamedev`; members use an `m` prefix.
 
@@ -80,7 +99,9 @@ Updating `extern/`:
 
 ### Entry point and main loop
 
-`main.cc` → `Game` (`src/Game.hh/.cc`), which subclasses glow-extras' `glow::glfw::GlfwApp`. `GlfwApp` drives the loop: `update()` runs at a fixed 60 Hz, `render()` once per frame, and `onGui()` builds the ImGui UI (menus, HUD, debug and editor panels). `Game` owns everything: the ECS, every system and factory, the terrain, the camera, and the render settings. Most of the wiring lives in `Game::init()`.
+`main.cc` (parses the command line with `app::ParseCommandLine`, see [Benchmarks](#benchmarks)) → `Game` (`src/Game.hh/.cc`), which subclasses glow-extras' `glow::glfw::GlfwApp`. `GlfwApp` drives the loop: `update()` runs at a fixed 60 Hz, `render()` once per frame, and `onGui()` builds the ImGui UI (menus, HUD, debug and editor panels). `Game` owns everything: the ECS, every system and factory, the terrain, the camera, the render settings and the profiler. Most of the wiring lives in `Game::init()`.
+
+Outside code controls a run only through two seams passed to the `Game` constructor: `GameSettings` (seed, vsync, input, straight into play, daily waves, title) and an optional, non-owned `GameHooks*` observer (`OnStarted`, `OnTickEnd` after each played tick, `OnClosing`), which gets the profiler and the `GamelogicSystem`. `main` owns the `benchmark::Session` that implements it; `Game` does not know about benchmarks.
 
 ### ECS (`src/ecs/`)
 
@@ -96,7 +117,7 @@ The ECS is based on austinmorlan.com's ECS article. `EngineECS` (`ecs/Engine.hh`
 Adding a new component or system requires matching edits in `Game.cc`/`Game.hh`:
 1. `mECS->RegisterComponent<T>()` in `Game::init()`. Using a component before it is registered asserts.
 2. `mECS->RegisterSystem<S, Required...>()`: the system receives every entity that has all `Required` components (none: every entity). Register systems before creating entities; existing entities are not re-checked.
-3. Call the system's `Init(*mECS, ...)`, call its `Update(dt)` from `Game::update()`, and reset its `Game` pointer in `Game::onClose()`. `Update` returns elapsed microseconds, which feed the debug timing UI.
+3. Call the system's `Init(*mECS, ...)`, call its `Update(dt)` from `Game::update()`, and reset its `Game` pointer in `Game::onClose()`. Wrap the `Update` call in a profiler zone (see [Profiling](#profiling)).
 
 Notes:
 - **`Prototype` entities are never added to systems** (`EngineECS::UpdateSystems`). Factory presets carry this component, so they exist only as templates to clone.
@@ -119,6 +140,7 @@ Notes:
 ### Other directories
 
 - `src/advanced/` contains the instance `World`, `transform`, the stats/debug helpers, and the editor. It originated from course framework code.
-- `src/utility/` contains the spatial hash map (`Hash2D`; `FindNear` returns a sorted, deduplicated `std::vector`), a quadtree (fully commented out), RNG, and WAV loading (`Sound.cc` with dr_wav; only `.wav` files are loaded).
+- `src/utility/` contains the spatial hash map (`Hash2D`; `FindNear` returns a sorted, deduplicated `std::vector`), a quadtree (fully commented out), RNG (seedable with `SeedRandom`), and WAV loading (`Sound.cc` with dr_wav; only `.wav` files are loaded).
+- `src/app/` contains the command line; `src/profiling/` the profiler; `src/benchmark/` the benchmark mode (options, scenarios, session, report with statistics); `tools/` the result comparison script.
 - `src/types/` contains plain data types shared across components (lights, materials, particles, unit and structure properties).
 - `docs/` contains early design notes and a ToDo list from the start of the project. They are not authoritative about the current code.

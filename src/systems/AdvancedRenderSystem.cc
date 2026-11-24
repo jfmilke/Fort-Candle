@@ -56,10 +56,8 @@ void gamedev::RenderSystem::InitParticles(glow::SharedVertexArray& vao)
     mVaoParticle = vao;
 }
 
-int gamedev::RenderSystem::Update(float dt)
+void gamedev::RenderSystem::Update(float dt)
 {
-    auto t0 = std::chrono::steady_clock::now();
-
     mDrawCalls = 0;
 
     if (mEnablePointShadows && mEnablePointLight || mEnableDirShadows && mEnableDirLight)
@@ -121,9 +119,6 @@ int gamedev::RenderSystem::Update(float dt)
     GLOW_SCOPED(blendFunc, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     RenderOutlineResolve();
-
-    auto tn = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::microseconds>(tn - t0).count();
 }
 
 // Updating Stuff

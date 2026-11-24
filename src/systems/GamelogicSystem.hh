@@ -66,9 +66,8 @@ public:
      * Advances the game (see class description).
      *
      * @param dt Time step in seconds.
-     * @return Elapsed time in microseconds.
      */
-    int Update(float dt);
+    void Update(float dt);
 
     // ================
     // System Specifics
@@ -184,8 +183,11 @@ public:
     /// Outline color per entry of `GetOutlinedHandles`; alpha fades out over one second (alpha <= -1: permanent).
     const std::vector<tg::vec4>& GetOutlinedColors();
 
-    /// Adds 20 gold.
+    /// Adds 20 gold (the "Crazy Cheat" button).
     void CRAZY_CHEAT_YOU_WONT_BELIEVE();
+
+    /// Adds `amount` gold without paying for it.
+    void AddGold(int amount);
 
     /// Pays for and builds the next fortification ring: sparse fences, wooden barricades, stone walls, then spikes.
     void UpgradeFortifications();

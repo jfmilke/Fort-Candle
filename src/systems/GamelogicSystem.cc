@@ -87,10 +87,8 @@ void gamedev::GamelogicSystem::AttachTerrain(std::shared_ptr<Terrain>& terrain)
     mTerrain = terrain;
 }
 
-int gamedev::GamelogicSystem::Update(float dt)
+void gamedev::GamelogicSystem::Update(float dt)
 {
-    auto t0 = std::chrono::steady_clock::now();
-
     mTime += dt;
 
     ConsumeWood(dt);
@@ -148,9 +146,6 @@ int gamedev::GamelogicSystem::Update(float dt)
 
     
     mUpdateControl++;
-
-    auto tn = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::microseconds>(tn - t0).count();
 }
 
 void gamedev::GamelogicSystem::LookForEnemy(const Instance& instance, Living* lifeform, Attacker* attacker)
@@ -1702,8 +1697,10 @@ bool gamedev::GamelogicSystem::Pay(int gold)
 void gamedev::GamelogicSystem::CRAZY_CHEAT_YOU_WONT_BELIEVE()
 {
     glow::log() << "motherlode";
-    mGold += 20;
+    AddGold(20);
 }
+
+void gamedev::GamelogicSystem::AddGold(int amount) { mGold += float(amount); }
 
 void gamedev::GamelogicSystem::UpdateHomefire()
 {

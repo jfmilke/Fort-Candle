@@ -15,10 +15,8 @@ void gamedev::InputSystem::Init(EngineECS& ecs) {
     mECS = &ecs;
 }
 
-int gamedev::InputSystem::Update(float dt)
+void gamedev::InputSystem::Update(float dt)
 {
-    auto t0 = std::chrono::steady_clock::now();
-
     for (const auto& handle : mEntities)
     {
         auto instance = mECS->GetInstance(handle);
@@ -45,9 +43,6 @@ int gamedev::InputSystem::Update(float dt)
             physics->velocity = tg::normalize_safe(move) * input->runningSpeed;
         }
     }
-
-    auto tn = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::microseconds>(tn - t0).count();
 }
 
 void gamedev::InputSystem::InstructMove(InstanceHandle handle, tg::pos3 targetPosition)

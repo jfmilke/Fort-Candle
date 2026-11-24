@@ -37,12 +37,54 @@
 
 #define GAMEDEV_ADVANCED 1 // unused
 
-Game::Game() : GlfwApp(Gui::ImGui) {}
+Game::Game(gamedev::GameSettings settings, gamedev::GameHooks* hooks)
+  : GlfwApp(Gui::ImGui), mSettings(std::move(settings)), mHooks(hooks), mZones(registerProfileZones(mProfiler))
+{
+}
+
+Game::ProfileZones Game::registerProfileZones(gamedev::profiling::Profiler& profiler)
+{
+    using gamedev::profiling::Cadence;
+    auto const add = [&](char const* name, Cadence cadence) { return profiler.AddZone(name, cadence); };
+
+    ProfileZones zones;
+    zones.window = add("window", Cadence::Once);
+    zones.engine = add("engine", Cadence::Once);
+    zones.assets = add("assets", Cadence::Once);
+    zones.world = add("world", Cadence::Once);
+
+    zones.update = add("update", Cadence::Tick);
+    zones.audio = add("audio", Cadence::Tick);
+    zones.particles = add("particles", Cadence::Tick);
+    zones.lights = add("lights", Cadence::Tick);
+    zones.physics = add("physics", Cadence::Tick);
+    zones.collision = add("collision", Cadence::Tick);
+    zones.environment = add("environment", Cadence::Tick);
+    zones.gamelogic = add("gamelogic", Cadence::Tick);
+    zones.animation = add("animation", Cadence::Tick);
+    zones.cleanup = add("cleanup", Cadence::Tick);
+
+    zones.render = add("render", Cadence::Frame);
+    zones.gpu = add("gpu", Cadence::Frame);
+    zones.frame = add("frame", Cadence::Frame);
+    return zones;
+}
 
 void Game::init()
 {
-    // enable vertical synchronization to synchronize rendering to monitor refresh rate
-    setVSync(true);
+    // startup phases: each one lasts until the next endPhase
+    auto phaseStart = gamedev::profiling::Clock::now();
+    auto const endPhase = [&](gamedev::profiling::ZoneId zone) {
+        auto const now = gamedev::profiling::Clock::now();
+        mProfiler.Record(zone, now - phaseStart);
+        phaseStart = now;
+    };
+
+    if (mSettings.seed)
+        gamedev::SeedRandom(*mSettings.seed);
+
+    // vertical synchronization limits the frame rate to the monitor refresh rate
+    setVSync(mSettings.vsync);
 
     // disable built-in camera
     setUseDefaultCamera(false);
@@ -60,7 +102,13 @@ void Game::init()
     applyCustomImguiTheme();
 
     // set window title
-    setTitle("Fort Candle");
+    setTitle(mSettings.title);
+
+    // without input, the UI ignores the mouse as well
+    if (!mSettings.inputEnabled)
+        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse;
+
+    endPhase(mZones.window);
 
     // set initial camera state
     mEnableTopDownCamera = false;
@@ -163,6 +211,8 @@ void Game::init()
     mRenderSys->InitResources();
     mRenderSys->InitParticles(mParticleSys->GetParticleVAO());
 
+    endPhase(mZones.engine);
+
     mGameAssets->scanMeshes();
     mUnitFac->RegisterAutomatically(mGameAssets->getObjectsByFolder("units"), 0.25f, true);
     mNatureFac->RegisterAutomatically(mGameAssets->getObjectsByFolder("nature"), 0.8f);
@@ -174,6 +224,16 @@ void Game::init()
     mItemFac->InitResources();
 
     fillSpawnMenu(mNatureFac->GetNameIdentifiers(), mItemFac->GetNameIdentifiers(), mUnitFac->GetNameIdentifiers(), mStructFac->GetNameIdentifiers());
+
+    endPhase(mZones.assets);
+
+    if (mSettings.startPlaying)
+    {
+        // straight into play, without the intro dialog (which pauses)
+        state = PLAY;
+        mNewGame = false;
+    }
+    mHoldSpawns = !mSettings.dailyWaves;
 
     // Initialize Game State
     mGamelogicSys->SpawnPlayer();
@@ -196,17 +256,46 @@ void Game::init()
     mItemFac->LoadObjects();
 
     mEnvironmentSys->SetMinutesPerDay(0.5);
+
+    endPhase(mZones.world);
+
+    if (mHooks)
+        mHooks->OnStarted(mProfiler);
 }
 
 void Game::onFrameStart()
 {
     gamedev::newStatFrame(mAdvancedFeatures.mStats);
+
+    auto const now = gamedev::profiling::Clock::now();
+    if (mLastFrameStart)
+    {
+        mProfiler.Record(mZones.frame, now - *mLastFrameStart);
+
+        // 0 until the GPU timer has its first result
+        if (auto const gpuMs = getLastGpuTimeMs(); gpuMs > 0.f)
+            mProfiler.Record(mZones.gpu, gamedev::profiling::Milliseconds(gpuMs));
+    }
+    mLastFrameStart = now;
 }
 
 // update game in 60 Hz fixed timestep
 void Game::update(float elapsedSeconds)
 {
+    bool const playing = state == PLAY;
 
+    mProfiler.Measure(mZones.update, [&] { updateSystems(elapsedSeconds); });
+
+    if (playing && mHooks)
+    {
+        gamedev::TickContext const context{*mGamelogicSys, mProfiler, mECS->getNumLiveInstances()};
+        if (!mHooks->OnTickEnd(context))
+            requestClose();
+    }
+}
+
+void Game::updateSystems(float elapsedSeconds)
+{
     *mAdvancedFeatures.mStatNumUpdates += 1.f;
 
     mAudioSys->SetMasterVolume(mMasterVolume / 100.f);
@@ -216,22 +305,22 @@ void Game::update(float elapsedSeconds)
     mAudioSys->SetVolume(3, mUIVolume / 100.f);
     mAudioSys->UpdateListener(mCamera.physical.position, mCamera.physical.forward);
 
-    mAudioSys->Update(elapsedSeconds);
+    mProfiler.Measure(mZones.audio, [&] { mAudioSys->Update(elapsedSeconds); });
 
     if (state == PLAY || state == MENU)
     {
-        mTime_ParticleSys = (mEnableParticleSpawn) ? mParticleSys->Update(elapsedSeconds) / 1000.f : 0.f;
-        mTime_LightSys = mLightSys->Update(elapsedSeconds) / 1000.f;
+        if (mEnableParticleSpawn)
+            mProfiler.Measure(mZones.particles, [&] { mParticleSys->Update(elapsedSeconds); });
+        mProfiler.Measure(mZones.lights, [&] { mLightSys->Update(elapsedSeconds); });
     }
 
     if (state == PLAY)
     {
-        auto t_0 = std::chrono::steady_clock::now();
-        mTime_PhysicsSys = mPhysicsSys->Update(elapsedSeconds) / 1000.f;
-        mTime_CollisionSys = mCollisionSys->Update(elapsedSeconds) / 1000.f;
-        mTime_EnvironmentSys = mEnvironmentSys->Update(elapsedSeconds) / 1000.f;
-        mTime_GamelogicSys = mGamelogicSys->Update(elapsedSeconds) / 1000.f;
-        mTime_AnimationSys = mAnimationSys->Update(elapsedSeconds) / 1000.f;
+        mProfiler.Measure(mZones.physics, [&] { mPhysicsSys->Update(elapsedSeconds); });
+        mProfiler.Measure(mZones.collision, [&] { mCollisionSys->Update(elapsedSeconds); });
+        mProfiler.Measure(mZones.environment, [&] { mEnvironmentSys->Update(elapsedSeconds); });
+        mProfiler.Measure(mZones.gamelogic, [&] { mGamelogicSys->Update(elapsedSeconds); });
+        mProfiler.Measure(mZones.animation, [&] { mAnimationSys->Update(elapsedSeconds); });
 
         if (mEnvironmentSys->mNewDay)
         {
@@ -247,28 +336,86 @@ void Game::update(float elapsedSeconds)
             }
         }
 
-        mTime_CleanSys = mCleanSys->Update() / 1000.f;
-
-        auto t_n = std::chrono::steady_clock::now();
-        mTime_AllSys = std::chrono::duration_cast<std::chrono::microseconds>(t_n - t_0).count() / 1000.f;
+        mProfiler.Measure(mZones.cleanup, [&] { mCleanSys->Update(); });
 
         frameControl++;
     }
 }
 
+gamedev::GameOutcome Game::outcome() const
+{
+    if (mGameWon)
+        return gamedev::GameOutcome::Won;
+    if (mGameLost)
+        return gamedev::GameOutcome::Lost;
+    return gamedev::GameOutcome::Running;
+}
+
 // render game variable timestep
 void Game::render(float elapsedSeconds)
 {
+    gamedev::profiling::ScopedZone const zone(mProfiler, mZones.render);
+
     if (mFullscreen != GlfwApp::isFullscreen())
         toggleFullscreen();
 
     *mAdvancedFeatures.mStatFrametime = (elapsedSeconds * 1000.f); // in milliseconds
 
-    updateCamera(elapsedSeconds);
+    if (mSettings.inputEnabled)
+    {
+        updateCamera(elapsedSeconds);
+        processInput();
+    }
 
+    // ToDo: Put Animation Update here (see "mAdvancedFeatures.updateAnimationsInWorld(..)")
+
+    auto runtime = getCurrentTime();
+
+    mRenderSys->UpdateTime(runtime, mEnvironmentSys->getGameTime());
+    mRenderSys->UpdateWindowResolution(getWindowSize());
+    mRenderSys->UpdateCamera(mCamera.physical.position, mCamera.physical.forward, tg::vec3::unit_y);
+    mRenderSys->UpdateSepia(mSepiaStrength);
+    mRenderSys->UpdateDesaturation(mGamelogicSys->GetDesaturation());
+    mRenderSys->UpdateVignette(mVignetteColor, mGamelogicSys->GetVignetteRadius(), mVignetteSoftness, mVignetteIntensity);
+    mRenderSys->UpdateDistFadeoff(mDistFadeoffColor, mDistFadeoffIntensity);
+    mRenderSys->UpdateSelected(mAdvancedFeatures.mSelectedInstance);
+    mRenderSys->UpdateOutlined(mGamelogicSys->GetOutlinedHandles(), mGamelogicSys->GetOutlinedColors());
+    mRenderSys->UpdateSelected(mAdvancedFeatures.mSelectedInstance);
+
+    mRenderSys->UpdateParticleCount(mParticleSys->GetParticleCount());
+    if (mEnableDirShadows)
+        mRenderSys->UpdateDirShadowResolution(mDirShadowResolution);
+    if (mEnablePointShadows)
+        mRenderSys->UpdatePointShadowResolution(mPointShadowResolution);
+    if (mEnableAmbLight)
+        mRenderSys->UpdateAmbientLight({mEnvironmentSys->GenerateAmbientlight(mAmbientColor, mAmbientIntensity)});
+    if (mEnableDirLight)
+        mRenderSys->UpdateDirectionalLight(mEnvironmentSys->GenerateSunlight(mSunTheta, mSunPhi, mSunColor, mSunIntensity));
+    if (mEnablePointLight)
+    {
+        mRenderSys->UpdateRegularPointLights(mLightSys->GetLights());
+        mRenderSys->UpdateShadowingPointLight(mLightSys->GetShadowingPointlight());
+    }
+
+    mRenderSys->SwitchDebugShading(mShowNormals, mShowWireframe, mCullFaces);
+    mRenderSys->SwitchLightShading(mEnableAmbLight, mEnableDirLight, mEnablePointLight);
+    mRenderSys->SwitchShadowShading(mEnablePointShadows, mEnableDirShadows);
+    mRenderSys->SwitchGameShading(mEnableFogOfWar);
+    mRenderSys->SwitchPostProcessing(mEnableSRGBCurve, mEnableTonemap, mEnableSepia, mEnableVignette, mEnableDesaturate, mEnableBloom, mEnableDistFadeoff);
+    mRenderSys->SwitchParticles(mEnableParticleSpawn);
+
+    if (mEnableParticleSpawn)
+        mParticleSys->UploadParticleData();
+
+    mRenderSys->Update(elapsedSeconds);
+
+    mAdvancedFeatures.updateStatDraws(mRenderSys->GetDrawCalls());
+}
+
+void Game::processInput()
+{
     if (state != MENU)
     {
-        // ToDo: Put Animation Update here (see "mAdvancedFeatures.updateAnimationsInWorld(..)")
         // Selecting Instances
         if (!ImGui::GetIO().WantCaptureMouse && input().isMouseButtonReleased(GLFW_MOUSE_BUTTON_1))
         {
@@ -329,8 +476,6 @@ void Game::render(float elapsedSeconds)
     if (input().isKeyPressed(GLFW_KEY_ESCAPE))
         toggleMenu();
 
-    auto runtime = getCurrentTime();
-
     // Capture mouse clicks in worldspace
     // TODO: Unlike the selection above, not limited to state != MENU: right clicks next to the main menu still give
     // orders (or spawn in editor mode).
@@ -366,46 +511,6 @@ void Game::render(float elapsedSeconds)
             }
         }
     }
-
-    mRenderSys->UpdateTime(runtime, mEnvironmentSys->getGameTime());
-    mRenderSys->UpdateWindowResolution(getWindowSize());
-    mRenderSys->UpdateCamera(mCamera.physical.position, mCamera.physical.forward, tg::vec3::unit_y);
-    mRenderSys->UpdateSepia(mSepiaStrength);
-    mRenderSys->UpdateDesaturation(mGamelogicSys->GetDesaturation());
-    mRenderSys->UpdateVignette(mVignetteColor, mGamelogicSys->GetVignetteRadius(), mVignetteSoftness, mVignetteIntensity);
-    mRenderSys->UpdateDistFadeoff(mDistFadeoffColor, mDistFadeoffIntensity);
-    mRenderSys->UpdateSelected(mAdvancedFeatures.mSelectedInstance);
-    mRenderSys->UpdateOutlined(mGamelogicSys->GetOutlinedHandles(), mGamelogicSys->GetOutlinedColors());
-    mRenderSys->UpdateSelected(mAdvancedFeatures.mSelectedInstance);
-
-    mRenderSys->UpdateParticleCount(mParticleSys->GetParticleCount());
-    if (mEnableDirShadows)
-        mRenderSys->UpdateDirShadowResolution(mDirShadowResolution);
-    if (mEnablePointShadows)
-        mRenderSys->UpdatePointShadowResolution(mPointShadowResolution);
-    if (mEnableAmbLight)
-        mRenderSys->UpdateAmbientLight({mEnvironmentSys->GenerateAmbientlight(mAmbientColor, mAmbientIntensity)});
-    if (mEnableDirLight)
-        mRenderSys->UpdateDirectionalLight(mEnvironmentSys->GenerateSunlight(mSunTheta, mSunPhi, mSunColor, mSunIntensity));
-    if (mEnablePointLight)
-    {
-        mRenderSys->UpdateRegularPointLights(mLightSys->GetLights());
-        mRenderSys->UpdateShadowingPointLight(mLightSys->GetShadowingPointlight());
-    }
-
-    mRenderSys->SwitchDebugShading(mShowNormals, mShowWireframe, mCullFaces);
-    mRenderSys->SwitchLightShading(mEnableAmbLight, mEnableDirLight, mEnablePointLight);
-    mRenderSys->SwitchShadowShading(mEnablePointShadows, mEnableDirShadows);
-    mRenderSys->SwitchGameShading(mEnableFogOfWar);
-    mRenderSys->SwitchPostProcessing(mEnableSRGBCurve, mEnableTonemap, mEnableSepia, mEnableVignette, mEnableDesaturate, mEnableBloom, mEnableDistFadeoff);
-    mRenderSys->SwitchParticles(mEnableParticleSpawn);
-
-    if (mEnableParticleSpawn)
-        mParticleSys->UploadParticleData();
-
-    mRenderSys->Update(elapsedSeconds);
-
-    mAdvancedFeatures.updateStatDraws(mRenderSys->GetDrawCalls());
 }
 
 // Update the GUI
@@ -600,15 +705,17 @@ void Game::onGui()
 
                 if (ImGui::TreeNodeEx("Performance (ms)", ImGuiTreeNodeFlags_DefaultOpen))
                 {
-                    ImGui::Text("All Systems: %.2f", mTime_AllSys);
-                    ImGui::Text("Animations: %.2f", mTime_AnimationSys);
-                    ImGui::Text("Cleaning: %.2f", mTime_CleanSys);
-                    ImGui::Text("Collisions: %.2f", mTime_CollisionSys);
-                    ImGui::Text("Environment: %.2f", mTime_EnvironmentSys);
-                    ImGui::Text("Gamelogic: %.2f", mTime_GamelogicSys);
-                    ImGui::Text("Lights: %.2f", mTime_LightSys);
-                    ImGui::Text("Particles: %.2f", mTime_ParticleSys);
-                    ImGui::Text("Physics: %.2f", mTime_PhysicsSys);
+                    // latest tick and frame; particles keep their last value while they are off, so hide it
+                    auto const& particles = mProfiler.GetZone(mZones.particles);
+                    for (auto const& zone : mProfiler.Zones())
+                    {
+                        if (zone.cadence == gamedev::profiling::Cadence::Once)
+                            continue;
+                        if (&zone == &particles && !mEnableParticleSpawn)
+                            ImGui::Text("%s: -", zone.name.c_str());
+                        else
+                            ImGui::Text("%s: %.2f", zone.name.c_str(), zone.last.count());
+                    }
 
                     ImGui::TreePop();
                 }
@@ -688,6 +795,12 @@ void Game::onGui()
 
 void Game::onClose()
 {
+    if (mHooks)
+    {
+        auto const renderer = reinterpret_cast<char const*>(glGetString(GL_RENDERER));
+        mHooks->OnClosing({mProfiler, {renderer ? renderer : "unknown", getWindowWidth(), getWindowHeight()}, outcome()});
+    }
+
     // Release everything that owns GL objects while the context still exists; GlfwApp terminates GLFW right after this.
     // Order: instances (meshes, textures), then the users of the ECS, then the ECS, which destroys the systems.
     mAdvancedFeatures.destroy();

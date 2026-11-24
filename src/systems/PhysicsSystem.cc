@@ -12,10 +12,8 @@ void gamedev::PhysicsSystem::SetTerrain(std::shared_ptr<Terrain>& t) {
     mTerrain = t;
 }
 
-int gamedev::PhysicsSystem::Update(float dt)
+void gamedev::PhysicsSystem::Update(float dt)
 {
-    auto t0 = std::chrono::steady_clock::now();
-
     for (const auto& handle : mEntities)
     {
         if (mECS->TestSignature<InTower>(handle))
@@ -74,9 +72,6 @@ int gamedev::PhysicsSystem::Update(float dt)
     }
 
     mUpdateControl++;
-
-    auto tn = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::microseconds>(tn - t0).count();
 }
 
 void gamedev::PhysicsSystem::UpdateHashmap(InstanceHandle handle, tg::vec3& translation) { mECS->GetHashMap().UpdateInstance(handle, translation); }

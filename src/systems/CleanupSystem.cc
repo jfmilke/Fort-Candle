@@ -7,10 +7,8 @@ void gamedev::CleanupSystem::Init(EngineECS& ecs) {
     mECS = &ecs;
 }
 
-int gamedev::CleanupSystem::Update()
+void gamedev::CleanupSystem::Update()
 {
-    auto t0 = std::chrono::steady_clock::now();
-
     std::vector<InstanceHandle> destroy;
 
     for (const auto& handle : mEntities)
@@ -25,7 +23,4 @@ int gamedev::CleanupSystem::Update()
     {
         mECS->DestroyInstance(handle);
     }
-
-    auto tn = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::microseconds>(tn - t0).count();
 }

@@ -136,6 +136,9 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 # Add src/ include dir
 target_include_directories(${PROJECT_NAME} PRIVATE src)
 
+# Build config name for benchmark results
+target_compile_definitions(${PROJECT_NAME} PRIVATE GAMEDEV_BUILD_CONFIG="$<CONFIG>")
+
 # Link libs
 target_link_libraries(${PROJECT_NAME} PRIVATE
     glow
