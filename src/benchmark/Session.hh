@@ -17,9 +17,9 @@
  * every per-tick and per-frame zone (system updates, render, GPU time, frame interval), plus the startup zones.
  *
  * Parts:
- *  - `Scenarios.hh`: the scripted scenarios, which only use `ScenarioActions`.
+ *  - `Options.hh`, `Scenarios.hh`: the settings of a run and the scripted scenarios, which call the `GamelogicSystem`.
  *  - `Session`: drives one run through the `GameHooks` interface.
- *  - `Statistics.hh`, `Report.hh`: statistics and the result file, without game or GL dependencies.
+ *  - `Report.hh`: statistics and the result file, without game or GL dependencies.
  */
 namespace gamedev::benchmark
 {
@@ -61,9 +61,9 @@ public:
      * and starts or stops the profiler capture at the warm-up and run boundaries.
      *
      * @param context The game after the tick.
-     * @return `CloseGame` once all ticks are played.
+     * @return False once all ticks are played.
      */
-    [[nodiscard]] TickResult OnTickEnd(TickContext const& context) override;
+    [[nodiscard]] bool OnTickEnd(TickContext const& context) override;
 
     /**
      * Writes the result file and logs a summary if all ticks were played; otherwise marks the run as aborted.

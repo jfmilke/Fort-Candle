@@ -36,18 +36,10 @@ std::expected<LaunchOptions, std::string> ParseCommandLine(std::span<char const*
 
     for (std::size_t i = 1; i < args.size(); ++i)
     {
-        // "--name value" and "--name=value"
-        std::string_view arg = args[i];
-        std::optional<std::string_view> inlineValue;
-        if (auto const eq = arg.find('='); arg.starts_with("--") && eq != std::string_view::npos)
-        {
-            inlineValue = arg.substr(eq + 1);
-            arg = arg.substr(0, eq);
-        }
+        std::string_view const arg = args[i];
 
+        // "--name value"
         auto const value = [&]() -> std::expected<std::string_view, std::string> {
-            if (inlineValue)
-                return *inlineValue;
             if (i + 1 < args.size())
                 return std::string_view(args[++i]);
             return std::unexpected(std::format("{} needs a value", arg));

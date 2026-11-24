@@ -4,7 +4,7 @@
 
 namespace gamedev
 {
-class ScenarioActions;
+class GamelogicSystem;
 }
 
 namespace gamedev::benchmark
@@ -19,10 +19,10 @@ struct Scenario
     /**
      * Called after every played tick (warm-up included); triggers the actions due at that tick.
      *
-     * @param actions Gameplay commands.
+     * @param gamelogic Gameplay commands; the paid ones spend resources, as the HUD buttons do.
      * @param tick Index of the tick that just ended, counted from the first played tick (0).
      */
-    void (*onTick)(ScenarioActions& actions, int tick);
+    void (*onTick)(GamelogicSystem& gamelogic, int tick);
 };
 
 /// All scenarios, in the order of the usage text.

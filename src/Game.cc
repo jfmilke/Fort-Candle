@@ -288,8 +288,8 @@ void Game::update(float elapsedSeconds)
 
     if (playing && mHooks)
     {
-        gamedev::TickContext const context{*this, mProfiler, mECS->getNumLiveInstances()};
-        if (mHooks->OnTickEnd(context) == gamedev::TickResult::CloseGame)
+        gamedev::TickContext const context{*mGamelogicSys, mProfiler, mECS->getNumLiveInstances()};
+        if (!mHooks->OnTickEnd(context))
             requestClose();
     }
 }
@@ -349,12 +349,6 @@ gamedev::GameOutcome Game::outcome() const
     if (mGameLost)
         return gamedev::GameOutcome::Lost;
     return gamedev::GameOutcome::Running;
-}
-
-gamedev::RunEnvironment Game::runEnvironment() const
-{
-    auto const renderer = reinterpret_cast<char const*>(glGetString(GL_RENDERER));
-    return {renderer ? renderer : "unknown", getWindowWidth(), getWindowHeight()};
 }
 
 // render game variable timestep
@@ -802,7 +796,10 @@ void Game::onGui()
 void Game::onClose()
 {
     if (mHooks)
-        mHooks->OnClosing({mProfiler, runEnvironment(), outcome()});
+    {
+        auto const renderer = reinterpret_cast<char const*>(glGetString(GL_RENDERER));
+        mHooks->OnClosing({mProfiler, {renderer ? renderer : "unknown", getWindowWidth(), getWindowHeight()}, outcome()});
+    }
 
     // Release everything that owns GL objects while the context still exists; GlfwApp terminates GLFW right after this.
     // Order: instances (meshes, textures), then the users of the ECS, then the ECS, which destroys the systems.
@@ -1650,17 +1647,3 @@ void Game::applyCustomImguiTheme()
     colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
     colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
 }
-
-// ScenarioActions
-void Game::SpawnEnemyWave(int monsters) { mGamelogicSys->SpawnEnemyWave(monsters); }
-void Game::SpawnReinforcements(int pioneers) { mGamelogicSys->SpawnReinforcements(pioneers); }
-void Game::SetDailyWaves(bool enabled) { mHoldSpawns = !enabled; }
-void Game::AddGold(int amount) { mGamelogicSys->AddGold(amount); }
-void Game::ConstructHome() { mGamelogicSys->ConstructHome(); }
-void Game::UpgradeProduction() { mGamelogicSys->UpgradeProduction(); }
-void Game::BuyWood() { mGamelogicSys->AddWood(); }
-void Game::AssignArtisan() { mGamelogicSys->AssignArtisan(); }
-void Game::AssignSoldier() { mGamelogicSys->AssignSoldier(); }
-void Game::UpgradeFortifications() { mGamelogicSys->UpgradeFortifications(); }
-void Game::RepairFortifications() { mGamelogicSys->RepairFortifications(); }
-void Game::UpgradeSupply() { mGamelogicSys->UpgradeSupply(); }

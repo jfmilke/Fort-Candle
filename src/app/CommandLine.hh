@@ -20,7 +20,7 @@ struct LaunchOptions
 /**
  * Parses the command line: `[--benchmark <scenario> [--ticks n] [--warmup n] [--seed n] [--output file]] [--help]`.
  *
- * Options take their value as the next argument or after `=`.
+ * Options take their value as the next argument.
  *
  * @param args All arguments, including the program name at index 0.
  * @return What to launch, or an error message for unknown options, missing or invalid values and unknown scenarios.

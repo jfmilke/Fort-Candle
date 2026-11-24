@@ -33,7 +33,7 @@ def load_runs(path):
             data = json.load(f)
         if data.get("format") != "fort-candle-benchmark":
             sys.exit(f"{file}: not a Fort Candle benchmark result")
-        if data.get("version") not in (2, 3):
+        if data.get("version") != 1:
             sys.exit(f"{file}: unsupported result version {data.get('version')}")
         runs.append((file, data))
     if not runs:

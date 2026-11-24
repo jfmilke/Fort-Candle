@@ -35,11 +35,11 @@ void Session::OnStarted(profiling::Profiler& profiler)
         profiler.StartCapture(std::size_t(mOptions.ticks));
 }
 
-TickResult Session::OnTickEnd(TickContext const& context)
+bool Session::OnTickEnd(TickContext const& context)
 {
     // the main loop may play a few more ticks in the frame that closes the game
     if (mPlayedTicks >= TotalTicks())
-        return TickResult::CloseGame;
+        return false;
 
     if (mPlayedTicks >= mOptions.warmupTicks)
     {
@@ -49,17 +49,17 @@ TickResult Session::OnTickEnd(TickContext const& context)
         mInstances.end = context.liveInstances;
     }
 
-    mOptions.scenario->onTick(context.actions, mPlayedTicks);
+    mOptions.scenario->onTick(context.gamelogic, mPlayedTicks);
     ++mPlayedTicks;
 
     if (mPlayedTicks == mOptions.warmupTicks)
         context.profiler.StartCapture(std::size_t(mOptions.ticks));
 
     if (mPlayedTicks < TotalTicks())
-        return TickResult::Continue;
+        return true;
 
     context.profiler.StopCapture();
-    return TickResult::CloseGame;
+    return false;
 }
 
 void Session::OnClosing(ClosingContext const& context)

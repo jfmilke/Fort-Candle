@@ -41,18 +41,15 @@ cmake --build build --config RelWithDebInfo --parallel
 python ../tools/compare_benchmarks.py benchmarks/baseline benchmarks/candidate
 ```
 
-- Scenarios (`src/benchmark/Scenarios.cc`): `idle` (start camp, no waves), `waves` (normal play), `stress` (60 monsters + 30 reinforcements at once), `exercise` (building, recruiting, wall upgrades and repairs, supply routes, an 80-monster wave).
-- A run is reproducible: fixed RNG seed (`--seed`, `SeedRandom`), straight into play without the intro dialog, vsync off, and no input (`Game::processInput` and `updateCamera` are skipped, ImGui ignores the mouse). Each tick has the same fixed time step, so the simulation does not depend on the frame rate. The window opens at 1920x1080.
-  The same seed only reproduces a run with the same standard library (`std::uniform_real_distribution` is implementation-defined, so MSVC and libstdc++ differ). Win/lose is detected in `Game::gameUI` (UI code).
-- It captures the game's profiler zones (see [Profiling](#profiling)) for `--ticks` ticks (default 3600) after `--warmup` ticks (default 120): every system update and the whole `Game::update` tick per tick; render CPU time, GPU time and frame interval per frame (GPU time as glow-extras' non-blocking timer reports it: usually 1-3 frames late, averaged or repeated, and only once it has a first result); and the startup phases of `Game::init`. Scenario actions run after the tick is recorded. Tick indices count from the first played tick, so `--warmup` shifts which part of a scenario is measured.
-- Results go to `benchmarks/<scenario>-<UTC time>.json` in the working directory (`--output` overrides; `bin/` is gitignored). They record the build time (the executable's last-write time, from `argv[0]`), the compiler, config, renderer and window size. The outcome is the game state at shutdown, after the frame of the last tick. Format version 3 (version 2 had no `gpu` channel); the comparison script reads both.
-- `tools/compare_benchmarks.py` (Python 3, standard library only) compares two result files or folders of repeated runs (median over runs, with the spread between runs as noise estimate) and warns about runs with different settings, builds or renderers.
-- Measure RelWithDebInfo builds, run each side several times, and leave the window alone (minimizing or covering it can throttle rendering). `steady_clock` has 100 ns resolution on Windows, so the smallest systems only show that floor. Exit codes: 0 done, 1 bad command line or working directory, 2 window closed early, 3 result file not written.
-- Code: `app::ParseCommandLine` (`src/app/`) → `main` owns a `benchmark::Session`, which implements `GameHooks` and supplies the `GameSettings` (see [Entry point](#entry-point-and-main-loop)). Scenarios only use `ScenarioActions`. `benchmark/Statistics` and `benchmark/Report` (statistics, JSON, summary, file writing) have no game or GL dependencies.
+- Scenarios (`src/benchmark/Scenarios.cc`, calling the `GamelogicSystem`): `idle` (start camp, no waves), `waves` (normal play), `stress` (60 monsters + 30 reinforcements at once), `exercise` (building, recruiting, wall upgrades and repairs, supply routes, an 80-monster wave).
+- A run is reproducible: fixed RNG seed (`--seed`), straight into play, vsync off, no input, and a fixed time step per tick. The same seed only reproduces a run with the same standard library (`std::uniform_real_distribution` is implementation-defined, so MSVC and libstdc++ differ). Win/lose is detected in `Game::gameUI` (UI code).
+- It records the profiler zones (see [Profiling](#profiling)) for `--ticks` ticks (default 3600) after `--warmup` ticks (default 120), plus the startup phases. Tick indices count from the first played tick, so `--warmup` shifts which part of a scenario is measured.
+- Results go to `benchmarks/<scenario>-<UTC time>.json` in the working directory (`--output` overrides). `tools/compare_benchmarks.py` (Python 3, standard library only) compares two files or folders of repeated runs: the median over runs, with their spread as noise estimate.
+- Measure RelWithDebInfo builds, run each side several times, and leave the window alone (minimizing or covering it can throttle rendering). Exit codes: 0 done, 1 bad command line or working directory, 2 window closed early, 3 result file not written.
 
 ### Profiling
 
-`Game` owns a `profiling::Profiler` (`src/profiling/`) in every mode. Zones are registered once in `Game::registerProfileZones` with a cadence (once, per tick, per frame) and recorded with `ScopedZone`/`Profiler::Measure` (or `Record` for startup phases, frame intervals and GPU time). The debug UI ("Performance (ms)") shows the latest value per tick and frame zone (`-` for particles while they are off); `StartCapture`/`StopCapture` keep every sample, which benchmarks use. Systems do not time themselves: their `Update` returns `void`, and `Game` wraps each call in a zone. A new system gets a zone in `ProfileZones`; the zone name is the key in benchmark results.
+`Game` owns a `profiling::Profiler` (`src/profiling/`) in every mode; the debug UI ("Performance (ms)") shows the latest value per zone, and benchmarks capture every sample. Systems do not time themselves: `Game` wraps each `Update` call in a zone. A new system gets a zone in `Game::ProfileZones`; the zone name is the key in benchmark results.
 
 Code style: `.clang-format` (Google-based, Allman braces, 4-space indent, 150 column limit). Engine code lives in `namespace gamedev`; members use an `m` prefix.
 
@@ -104,7 +101,7 @@ Updating `extern/`:
 
 `main.cc` (parses the command line with `app::ParseCommandLine`, see [Benchmarks](#benchmarks)) → `Game` (`src/Game.hh/.cc`), which subclasses glow-extras' `glow::glfw::GlfwApp`. `GlfwApp` drives the loop: `update()` runs at a fixed 60 Hz, `render()` once per frame, and `onGui()` builds the ImGui UI (menus, HUD, debug and editor panels). `Game` owns everything: the ECS, every system and factory, the terrain, the camera, the render settings and the profiler. Most of the wiring lives in `Game::init()`.
 
-Outside code controls a run only through two seams passed to the `Game` constructor: `GameSettings` (seed, vsync, input, straight into play, daily waves, title) and an optional, non-owned `GameHooks*` observer (`OnStarted`, `OnTickEnd` after each played tick, `OnClosing`). Hooks get the profiler and `ScenarioActions`, a narrow set of gameplay commands that `Game` implements privately on top of the `GamelogicSystem`. `Game` does not know about benchmarks.
+Outside code controls a run only through two seams passed to the `Game` constructor: `GameSettings` (seed, vsync, input, straight into play, daily waves, title) and an optional, non-owned `GameHooks*` observer (`OnStarted`, `OnTickEnd` after each played tick, `OnClosing`), which gets the profiler and the `GamelogicSystem`. `main` owns the `benchmark::Session` that implements it; `Game` does not know about benchmarks.
 
 ### ECS (`src/ecs/`)
 
@@ -144,6 +141,6 @@ Notes:
 
 - `src/advanced/` contains the instance `World`, `transform`, the stats/debug helpers, and the editor. It originated from course framework code.
 - `src/utility/` contains the spatial hash map (`Hash2D`; `FindNear` returns a sorted, deduplicated `std::vector`), a quadtree (fully commented out), RNG (seedable with `SeedRandom`), and WAV loading (`Sound.cc` with dr_wav; only `.wav` files are loaded).
-- `src/app/` contains the command line; `src/profiling/` the profiler; `src/benchmark/` the benchmark mode (options, scenarios, session, statistics, report); `tools/` the result comparison script.
+- `src/app/` contains the command line; `src/profiling/` the profiler; `src/benchmark/` the benchmark mode (options, scenarios, session, report with statistics); `tools/` the result comparison script.
 - `src/types/` contains plain data types shared across components (lights, materials, particles, unit and structure properties).
 - `docs/` contains early design notes and a ToDo list from the start of the project. They are not authoritative about the current code.

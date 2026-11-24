@@ -32,7 +32,6 @@
 
 #include "GameHooks.hh"
 #include "GameSettings.hh"
-#include "ScenarioActions.hh"
 #include "profiling/Profiler.hh"
 
 #include <memory>
@@ -62,10 +61,9 @@ enum GameState
  * Outside code controls a run through two seams, both set at construction:
  *  - `GameSettings`: how the game starts (seed, vsync, input, straight into play, daily waves).
  *  - `GameHooks` (optional, not owned): notified at startup, after every played tick and at shutdown.
- *    It gets the profiler and the gameplay commands of `ScenarioActions`, which `Game` implements privately.
- *    `benchmark::Session` uses this to play scripted scenarios.
+ *    It gets the profiler and the `GamelogicSystem`; `benchmark::Session` uses this to play scripted scenarios.
  */
-class Game : public glow::glfw::GlfwApp, private gamedev::ScenarioActions
+class Game : public glow::glfw::GlfwApp
 {
 private:
 
@@ -393,9 +391,6 @@ public:
     /// Where the game stands: won, lost or still running.
     gamedev::GameOutcome outcome() const;
 
-    /// The GL renderer and the framebuffer size.
-    gamedev::RunEnvironment runEnvironment() const;
-
     /// Stores the preset names shown in the editor's spawn menu.
     void fillSpawnMenu(std::vector<std::string> nature, std::vector<std::string> items, std::vector<std::string> units, std::vector<std::string> structures);
 
@@ -497,20 +492,4 @@ public:
 
     /// Leaves the menu paused, behind the intro dialog (which unpauses). Does not reset the world (see TODO).
     void newGame();
-
-private:
-    // ScenarioActions, for GameHooks (documented there); forwarded to the GamelogicSystem
-
-    void SpawnEnemyWave(int monsters) override;
-    void SpawnReinforcements(int pioneers) override;
-    void SetDailyWaves(bool enabled) override; // sets mHoldSpawns
-    void AddGold(int amount) override;
-    void ConstructHome() override;
-    void UpgradeProduction() override;
-    void BuyWood() override;
-    void AssignArtisan() override;
-    void AssignSoldier() override;
-    void UpgradeFortifications() override;
-    void RepairFortifications() override;
-    void UpgradeSupply() override;
 };

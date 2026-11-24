@@ -4,7 +4,7 @@
 
 namespace gamedev
 {
-class ScenarioActions;
+class GamelogicSystem;
 
 namespace profiling
 {
@@ -30,7 +30,7 @@ struct RunEnvironment
 /// What `GameHooks::OnTickEnd` gets.
 struct TickContext
 {
-    ScenarioActions& actions;      ///< Gameplay commands.
+    GamelogicSystem& gamelogic;    ///< Gameplay commands, the same ones the HUD buttons use.
     profiling::Profiler& profiler; ///< The game's profiler; this tick's zones are already recorded.
     std::uint32_t liveInstances;   ///< Live instances after the tick.
 };
@@ -41,13 +41,6 @@ struct ClosingContext
     profiling::Profiler const& profiler; ///< The game's profiler.
     RunEnvironment environment;          ///< Graphics setup.
     GameOutcome outcome;                 ///< Where the game stands at shutdown (after the frame in which `OnTickEnd` asked to close).
-};
-
-/// What `Game` does after `GameHooks::OnTickEnd`.
-enum class TickResult : std::uint8_t
-{
-    Continue,  ///< Keep playing.
-    CloseGame, ///< Close the window; the main loop ends after this frame.
 };
 
 /**
@@ -76,14 +69,14 @@ public:
      * Called after every simulation tick played.
      *
      * @param context The game after the tick.
-     * @return Whether to keep playing.
+     * @return True to keep playing; false closes the window, and the main loop ends after this frame.
      */
-    [[nodiscard]] virtual TickResult OnTickEnd(TickContext const& context) = 0;
+    [[nodiscard]] virtual bool OnTickEnd(TickContext const& context) = 0;
 
     /**
      * Called once when the game shuts down, by request or because the window was closed.
      *
-     * After `OnTickEnd` returns `CloseGame`, the main loop still finishes its frame (remaining ticks, UI and render) before this call,
+     * After `OnTickEnd` returns false, the main loop still finishes its frame (remaining ticks, UI and render) before this call,
      * so the outcome may differ from the one at that tick.
      *
      * @param context The game at the end.
