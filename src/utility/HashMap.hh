@@ -1,21 +1,9 @@
 #pragma once
-#include <map>
-#include <set>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 #include "advanced/World.hh"
 #include "typed-geometry/tg.hh"
-#include "utility/HashData.hh"
-
-namespace std
-{
-/// Orders grid cells row by row (y first, then x), so `tg::ipos2` can be used as `std::map`/`std::set` key.
-template <>
-struct less<tg::ipos2>
-{
-    bool operator()(const tg::ipos2& lhs, const tg::ipos2& rhs) const { return (lhs.y < rhs.y) || ((lhs.y == rhs.y) && (lhs.x < rhs.x)); }
-};
-}
 
 namespace gamedev
 {
@@ -24,6 +12,7 @@ namespace gamedev
  *
  *  - Each instance is stored in every cell its bounding rectangle overlaps.
  *  - Positions outside the map bounds are clamped to the border cells.
+ *  - The cells are a dense array that holds handles only; a move that stays in the same cells changes nothing.
  *
  * Used as the ECS-wide spatial hash map (`EngineECS::GetHashMap`, set up by `Terrain::CreateGround`) and as broad phase by the `CollisionSystem`.
  */
@@ -31,7 +20,7 @@ class Hash2D
 {
 public:
     /**
-     * Sets up the grid. Does not clear existing entries.
+     * Sets up the grid and removes all instances.
      *
      * @param cellCount Number of cells per axis.
      * @param bounds Covered area; x/y of `bounds` are world x/z.
@@ -58,14 +47,6 @@ public:
     void AddInstance(const InstanceHandle identifier, const tg::vec3& translation, const tg::aabb3& dimensions);
 
     /**
-     * Moves a known instance, keeping its bounds. Does nothing for unknown instances.
-     *
-     * @param identifier Instance to move.
-     * @param translation Its new world position (only x/z are used).
-     */
-    void UpdateInstance(const InstanceHandle identifier, const tg::vec3& translation);
-
-    /**
      * Moves a known instance and replaces its bounds. Does nothing for unknown instances.
      *
      * @param identifier Instance to move.
@@ -82,6 +63,17 @@ public:
     void RemoveInstance(const InstanceHandle identifier);
 
     /**
+     * Collects all instances in the cells overlapping a rectangle on the ground plane, without allocating once `result` is large enough.
+     *
+     * The result may contain instances that are not inside the rectangle.
+     *
+     * @param translation World position the rectangle is relative to.
+     * @param bounds Rectangle relative to `translation` (only x/z are used).
+     * @param[out] result Cleared, then filled with the handles of the instances in these cells, each once, sorted by handle value.
+     */
+    void FindNear(const tg::vec3& translation, const tg::aabb3& bounds, std::vector<InstanceHandle>& result) const;
+
+    /**
      * Returns all instances in the cells overlapping a rectangle on the ground plane.
      *
      * The result may contain instances that are not inside the rectangle.
@@ -91,7 +83,7 @@ public:
      * @param max Maximum corner relative to `translation` (only x/z are used).
      * @return Handles of the instances in these cells, each once, sorted by handle value.
      */
-    std::vector<InstanceHandle> FindNear(const tg::vec3& translation, const tg::pos3& min, const tg::pos3& max);
+    std::vector<InstanceHandle> FindNear(const tg::vec3& translation, const tg::pos3& min, const tg::pos3& max) const;
 
     /**
      * `FindNear` with the rectangle given as bounds.
@@ -100,79 +92,72 @@ public:
      * @param bounds Rectangle relative to `translation` (only x/z are used).
      * @return Handles of the instances in these cells, each once, sorted by handle value.
      */
-    std::vector<InstanceHandle> FindNear(const tg::vec3& translation, const tg::aabb3& bounds);
-
-    /**
-     * `FindNear` for a rectangle centered on a position.
-     *
-     * @param translation Center of the rectangle in world space.
-     * @param bounds Half extents: `width` along x, `depth` along z.
-     * @return Handles of the instances in these cells, each once, sorted by handle value.
-     */
-    std::vector<InstanceHandle> FindNear(const tg::vec3& translation, const tg::size3& bounds);
-
-    /**
-     * Returns all instances in the cell that contains a position.
-     *
-     * @param position World position (only x/z are used).
-     * @return Handles of the instances in these cells, each once, sorted by handle value.
-     */
-    std::vector<InstanceHandle> FindNear(const tg::pos3& position);
+    std::vector<InstanceHandle> FindNear(const tg::vec3& translation, const tg::aabb3& bounds) const;
 
     /// Removes all instances.
     void Clear();
 
 private:
+    /// Inclusive range of cells (minimum cell, maximum cell).
+    using CellRange = std::pair<tg::ipos2, tg::ipos2>;
+
+    /// A stored instance.
+    struct Entry
+    {
+        tg::aabb2 dimensions; ///< Bounds relative to the instance position (world x/z).
+        CellRange cells;      ///< Cells the instance is stored in.
+    };
+
     /**
      * Finds the cell containing a ground-plane position.
      *
-     * @param spatial_key Position (world x, z).
+     * @param position Position (world x, z).
      * @return Cell index, clamped to the grid.
      */
-    tg::ipos2 PositionToGrid_(const tg::pos2& spatial_key);
+    tg::ipos2 PositionToGrid_(const tg::pos2& position) const;
 
     /**
-     * Finds the cell containing the x/z part of a position.
+     * Computes the cells a rectangle overlaps.
      *
-     * @param spatial_key World position.
-     * @return Cell index, clamped to the grid.
+     * @param translation World position the rectangle is relative to (only x/z are used).
+     * @param min Minimum corner relative to `translation` (world x, z).
+     * @param max Maximum corner relative to `translation` (world x, z).
+     * @return Covered cells, clamped to the grid.
      */
-    tg::ipos2 PositionToGrid_(const tg::pos3& spatial_key);
+    CellRange CellsOf_(const tg::vec3& translation, const tg::pos2& min, const tg::pos2& max) const;
 
     /**
-     * Builds the string key of a cell. Unused: replaced by `GetIndexID_`.
+     * Moves an entry to new cells, unless they are the cells it is already in.
      *
-     * @param p Cell index.
-     * @return "x.y".
+     * @param identifier Stored instance.
+     * @param[in,out] entry Its entry; `cells` is set to `cells`.
+     * @param cells New cells.
      */
-    std::string Key_(const tg::ipos2& p);
+    void Move_(const InstanceHandle identifier, Entry& entry, const CellRange& cells);
 
     /**
-     * Stores a client in all cells its rectangle overlaps and records it in `mClientMap`.
+     * Stores an instance in a range of cells.
      *
-     * @param[in,out] c Client; its `indicies` are set to the covered cells.
+     * @param identifier Instance to store.
+     * @param cells Cells to store it in.
      */
-    void Insert_(Hash2Client& c);
+    void Insert_(const InstanceHandle identifier, const CellRange& cells);
 
     /**
-     * Removes a client from the cells recorded in its `indicies`.
+     * Removes an instance from a range of cells.
      *
-     * @param c Client to remove.
+     * @param identifier Instance to remove.
+     * @param cells Cells it is stored in.
      */
-    void Remove_(Hash2Client& c);
+    void Remove_(const InstanceHandle identifier, const CellRange& cells);
 
-    /**
-     * Computes the integer key of a cell (row-major, unique per cell).
-     *
-     * @param pos Cell index.
-     * @return Key into `mBinMap`.
-     */
-    int GetIndexID_(tg::ipos2 pos);
+    /// Index of a cell in `mCells` (row-major).
+    size_t CellIndex_(int x, int y) const { return size_t(y) * size_t(mMaxCells.width + 1) + size_t(x); }
 
 private:
-    tg::size2 mMaxCells;                                        ///< Highest cell index per axis (cell count - 1).
-    tg::aabb2 mBounds;                                          ///< Covered area (world x/z).
-    std::unordered_map<int, std::vector<Hash2Client>> mBinMap;  ///< Cell key -> clients in that cell.
-    std::unordered_map<InstanceHandle, Hash2Client> mClientMap; ///< Stored instance -> client.
+    tg::isize2 mMaxCells = {-1, -1};                    ///< Highest cell index per axis (cell count - 1).
+    tg::aabb2 mBounds;                                  ///< Covered area (world x/z).
+    std::vector<std::vector<InstanceHandle>> mCells;    ///< Handles stored per cell, row-major (`CellIndex_`).
+    std::unordered_map<InstanceHandle, Entry> mEntries; ///< Stored instances.
 };
 }

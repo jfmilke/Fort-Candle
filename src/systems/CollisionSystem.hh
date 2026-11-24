@@ -6,36 +6,36 @@
 #include "ecs/Engine.hh"
 #include "ecs/System.hh"
 
+#include <optional>
+#include <vector>
+
 namespace gamedev
 {
 /**
- * 2D collision detection and response on the ground plane (x/z) between box (OBB) and circle shapes.
+ * 2D collision detection and response on the ground plane (x/z) between oriented boxes and circles.
  *
- * Entities: all instances with a `Collider` (plus a `BoxShape` or `CircleShape`).
- * Static and dynamic colliders are kept in separate sets and spatial hash maps (broad phase);
- * `EventType::NewPosition` keeps the hash maps up to date.
+ * Entities: all instances with a `Collider` (plus a `BoxShape` or `CircleShape`); units inside a tower (`InTower`) take no part.
+ * Static and dynamic colliders are kept in separate spatial hash maps (broad phase).
+ * `EventType::NewPosition` keeps the hash maps and the cached world-space shapes up to date for moves outside this system.
  *
  * Every update:
  *
- *  1. Static pass: destructible static colliders with health <= 0 are marked for destruction.
- *     Every dynamic collider overlapping a static one is moved back and sent `EventType::StaticCollision`;
- *     the overlapping pairs are then pushed apart in a second run.
- *  2. Dynamic pass: dynamic colliders are separated from each other.
+ *  1. The world-space shapes and hash map entries of the dynamic colliders are refreshed (their physics moves are not published yet),
+ *     and the candidate pairs (dynamic-dynamic and dynamic-static) are collected from the hash maps.
+ *  2. Overlaps are resolved by moving positions only, in `kIterations` rounds.
+ *     Each round first pushes overlapping dynamic colliders apart (half the overlap each),
+ *     then pushes dynamic colliders fully out of static ones, so static colliders always win.
+ *  3. A dynamic collider squeezed between static colliders goes back to where it was before this update's physics move,
+ *     or to the nearest free spot.
+ *  4. `EventType::StaticCollision` is sent once for every dynamic collider that touches or overlaps a static one.
  *
- * Overlaps are found with the separating axis theorem (`minimalPush`). Units inside a tower (`InTower`) are ignored.
+ * Velocities are not changed: a unit walking into an obstacle is pushed back along the contact normal every update,
+ * so it slides along the obstacle with the tangential part of its velocity.
+ * Moved instances get `Instance::new_position`; `Game` publishes them right after this step (`EngineECS::PublishPositions`).
  */
 class CollisionSystem : public System
 {
 public:
-    /**
-     * Stores the ECS, sets up 1x1 hash maps and registers the position listener.
-     *
-     * Unused: `Game` calls the overload with the map bounds.
-     *
-     * @param ecs The ECS; must outlive this object.
-     */
-    void Init(EngineECS& ecs);
-
     /**
      * Stores the ECS, sets up the hash maps with one cell per world unit and registers the position listener.
      *
@@ -44,148 +44,145 @@ public:
      */
     void Init(EngineECS& ecs, tg::aabb3 map_bounds);
 
-    /// Sorts the entity into the static or dynamic set (by `Collider::dynamic`) and hash map.
+    /// Sorts the entity into the static or dynamic set (by `Collider::dynamic`) and hash map; `InTower` units leave the hash map.
     void AddEntity(InstanceHandle handle, Signature entitySignature) override;
     void RemoveEntity(InstanceHandle handle) override;
     void RemoveAllEntities() override;
 
     /**
-     * Runs the static and dynamic pass (see class description).
+     * Resolves all overlaps (see class description).
      *
-     * @param dt Time step in seconds (scales the sliding along obstacles).
+     * @param dt Time step in seconds. Unused: the response only moves positions.
      */
     void Update(float dt);
 
-    /// Static pass: removes destroyed static colliders and resolves dynamic-vs-static overlaps.
-    void ResolveStaticCollisions();
-
-    /// Dynamic pass: resolves overlaps between dynamic colliders.
-    void ResolveDynamicCollisions();
-
-    // // ToDo: Give a position of intersection
-    // tg::pos2 intersection(const BoxShape& boxA, const BoxShape& boxB);
-    // tg::pos2 intersection(const BoxShape& box, const CircleShape& circle);
-    // tg::pos2 intersection(const CircleShape& circle, const BoxShape& box);
-    // tg::pos2 intersection(const CircleShape& circleA, const CircleShape& circleB);
-
 private:
-    float mDT = 0.0; ///< Time step of the current update in seconds.
+    static constexpr int kIterations = 3;            ///< Resolution rounds per update.
+    static constexpr float kSkin = 1e-3f;            ///< Gap left between shapes after a push, in world units.
+    static constexpr float kContactDistance = 2e-3f; ///< Shapes closer than this touch (`StaticCollision`).
+    static constexpr float kPairMargin = 0.25f;      ///< Extra broad-phase range for movement during the rounds, in world units.
+    static constexpr float kWedgeTolerance = 1e-2f;  ///< Overlap with a static collider after all rounds that triggers `RevertWedgedColliders`.
+    static constexpr float kEscapeStep = 0.05f;      ///< Distance between the rings of candidate positions in `FindFreeSpot`, in world units.
+    static constexpr float kEscapeDistance = 1.f;    ///< Largest distance `FindFreeSpot` searches, in world units.
+    static constexpr int kEscapeDirections = 16;     ///< Candidate directions per ring in `FindFreeSpot`.
+
+    /// Collision shape in world space on the ground plane; 2D vectors hold world (x, z).
+    struct WorldShape
+    {
+        bool box = false;     ///< Oriented box (`halfAxes`) if true, else a circle (`radius`).
+        tg::pos2 center;      ///< Center of the shape.
+        tg::vec2 halfAxes[2]; ///< Box only: half extents along the box's two axes.
+        float radius = 0.f;   ///< Circle radius, or the box's bounding radius (half diagonal).
+    };
+
+    /// Result of a narrow-phase test between two shapes.
+    struct Contact
+    {
+        tg::vec2 normal = {1, 0}; ///< Unit direction in which the first shape has to move to separate.
+        float separation = 0.f;   ///< Distance between the shapes along `normal`; negative if they overlap.
+    };
+
+    /// A dynamic collider near a static one.
+    struct StaticPair
+    {
+        InstanceHandle dynamic; ///< Dynamic collider.
+        InstanceHandle body;    ///< Static collider.
+        bool touching = false;  ///< The shapes touched or overlapped in this update.
+    };
 
     /**
-     * Collides two box shapes and, on overlap, moves `instance_dyn` out of `instance_any` (`resolve`).
+     * Transforms an instance's `BoxShape` or `CircleShape` to world space (rotation about y, translation and scale).
      *
-     * Both shapes are transformed to world space; bounding circles are tested first.
-     *
-     * @param instance_dyn Dynamic collider to move.
-     * @param instance_any Static or dynamic collider it collides with.
-     * @param box1 Shape of `instance_dyn`.
-     * @param box2 Shape of `instance_any`.
-     * @return True on collision.
+     * @param handle Live instance; without a shape the result is a point at its position.
+     * @return The world-space shape.
      */
-    bool Collide(Instance& instance_dyn, Instance& instance_any, const BoxShape* box1, const BoxShape* box2);
+    WorldShape ComputeWorldShape(InstanceHandle handle);
 
     /**
-     * See above; box (dynamic) vs. circle.
+     * Computes the rectangle a shape covers in the spatial hash maps, relative to the instance's position.
      *
-     * @param instance_dyn Dynamic collider to move.
-     * @param instance_any Static or dynamic collider it collides with.
-     * @param box Shape of `instance_dyn`.
-     * @param circle Shape of `instance_any`.
-     * @return True on collision.
+     * Unlike `Instance::max_bounds`, it follows the instance's rotation and scale.
+     *
+     * @param shape World-space shape.
+     * @param translation Instance position the result is relative to.
+     * @param margin Extra range on every side, in world units.
+     * @return Bounds relative to `translation` (only x/z are set).
      */
-    bool Collide(Instance& instance_dyn, Instance& instance_any, const BoxShape* box, const CircleShape* circle);
+    static tg::aabb3 BroadPhaseBounds(WorldShape const& shape, tg::vec3 const& translation, float margin = 0.f);
+
+    /// Cached world-space shape of a live collider, indexed by its `World` slot.
+    WorldShape& CachedShape(InstanceHandle handle);
 
     /**
-     * See above; circle (dynamic) vs. box.
+     * Narrow phase: tests two shapes against each other.
      *
-     * @param instance_dyn Dynamic collider to move.
-     * @param instance_any Static or dynamic collider it collides with.
-     * @param circle Shape of `instance_dyn`.
-     * @param box Shape of `instance_any`.
-     * @return True on collision.
+     * @param a Shape to move.
+     * @param b Shape it collides with.
+     * @return Contact normal (direction for `a`) and separation.
      */
-    bool Collide(Instance& instance_dyn, Instance& instance_any, const CircleShape* circle, const BoxShape* box);
+    static Contact ComputeContact(WorldShape const& a, WorldShape const& b);
 
     /**
-     * See above; circle vs. circle.
+     * Circle-vs-circle test.
      *
-     * @param instance_dyn Dynamic collider to move.
-     * @param instance_any Static or dynamic collider it collides with.
-     * @param circle1 Shape of `instance_dyn`.
-     * @param circle2 Shape of `instance_any`.
-     * @return True on collision.
+     * @param centerA Center of the circle to move.
+     * @param radiusA Its radius.
+     * @param centerB Center of the other circle.
+     * @param radiusB Its radius.
+     * @return Contact for the first circle; coincident centers separate along +x.
      */
-    bool Collide(Instance& instance_dyn, Instance& instance_any, const CircleShape* circle1, const CircleShape* circle2);
+    static Contact CircleCircle(tg::pos2 centerA, float radiusA, tg::pos2 centerB, float radiusB);
 
     /**
-     * Moves an instance out of a collision.
+     * Circle-vs-box test with the closest point on the box.
      *
-     * Unless `mSecondRun` is set, a moving instance (non-zero velocity) is reset to its `Physics::lastPosition`
-     * and slides along the obstacle (friction only, no bounce).
-     * Otherwise it is moved by `push`.
-     *
-     * @param instance1 Dynamic instance to move.
-     * @param instance2 Instance it collides with. Unused.
-     * @param push World-space push out of `instance2`, from `minimalPush`.
+     * @param circle Circle to move.
+     * @param box Box it collides with.
+     * @return Contact for the circle.
      */
-    void resolve(Instance& instance1, Instance& instance2, tg::vec3 push);
+    static Contact CircleBox(WorldShape const& circle, WorldShape const& box);
 
     /**
-     * Computes the minimal push between two boxes with the separating axis theorem.
+     * Box-vs-box test with the separating axis theorem (the four box axes).
      *
-     * @param box1 World-space box to push out.
-     * @param box2 World-space box it overlaps.
-     * @return Push for `box1`, or zero if the boxes do not overlap.
+     * @param a Box to move.
+     * @param b Box it collides with.
+     * @return Contact for `a`; the normal is the axis of least penetration.
      */
-    tg::vec3 minimalPush(const tg::box3& box1, const tg::box3& box2);
+    static Contact BoxBox(WorldShape const& a, WorldShape const& b);
+
+    /// Collects the candidate pairs of this update from the hash maps.
+    void CollectPairs();
 
     /**
-     * Computes the push between two circles.
+     * Frees dynamic colliders that still overlap a static one after all rounds.
      *
-     * @param circle1 World-space circle to push out.
-     * @param circle2 World-space circle it overlaps.
-     * @return Push for `circle1`, or zero if the circles do not overlap.
+     * This happens when a unit is squeezed into a gap between static colliders that is narrower than the unit,
+     * or when a structure is built on top of it: pushing it out of one collider pushes it into the other.
+     * The unit goes back to `Physics::lastPosition` (x/z) if that position is free, else to the nearest free spot (`FindFreeSpot`).
      */
-    tg::vec3 minimalPush(const tg::sphere3& circle1, const tg::sphere3& circle2);
+    void RevertWedgedColliders();
 
     /**
-     * Like the box overload, with the circle approximated by a square aligned to the box.
+     * Searches rings of positions around a dynamic collider for the nearest one that overlaps no static collider.
      *
-     * @param box World-space box to push out.
-     * @param circle World-space circle it overlaps.
-     * @return Push for `box`, or zero if the shapes do not overlap.
+     * @param handle Live dynamic collider.
+     * @param shape Its world shape.
+     * @return Offset (x, z) to the free position, or nothing if there is none within `kEscapeDistance`.
      */
-    tg::vec3 minimalPush(const tg::box3& box, const tg::sphere3& circle);
+    std::optional<tg::vec2> FindFreeSpot(InstanceHandle handle, WorldShape const& shape);
 
     /**
-     * Negated box-vs-circle push.
+     * Moves a dynamic collider on the ground plane and flags its new position.
      *
-     * @param circle_dynamic World-space circle to push out.
-     * @param box_static World-space box it overlaps.
-     * @return Push for `circle_dynamic`, or zero if the shapes do not overlap.
+     * @param handle Live dynamic collider.
+     * @param[in,out] shape Its cached world shape, moved along.
+     * @param offset World-space offset (x, z).
      */
-    tg::vec3 minimalPush(const tg::sphere3& circle_dynamic, const tg::box3& box_static);
+    void Move(InstanceHandle handle, WorldShape& shape, tg::vec2 offset);
 
     /**
-     * Tests one separating axis for `minimalPush`.
-     *
-     * @param axis Axis to project onto (need not be normalized).
-     * @param points1 Corners of the first shape.
-     * @param points2 Corners of the second shape.
-     * @return Push along `axis` that separates the shapes (slightly more than the overlap), or zero if they are already separated on this axis.
-     */
-    tg::vec3 SAT_AxisTest(const tg::vec3& axis, const std::array<tg::pos3, 4>& points1, const std::array<tg::pos3, 4>& points2);
-
-    // http://www.metanetsoftware.com/technique/tutorialA.html#section5
-    // Collision Response Approach
-    // 1. Project our of collision
-    // 2. Split velocity vector into two components: parallel & perpendicular to the collision surface
-    // 3. Calculate bounce using perpendicular component
-    // 4. Calculate friction using parallel component
-
-private:
-    /**
-     * `EventType::NewPosition` listener: moves the sender in the static or dynamic hash map.
+     * `EventType::NewPosition` listener: recomputes the subject's world shape and moves it in its hash map.
      *
      * @param e Position event; sender and subject are the moved instance.
      */
@@ -197,10 +194,12 @@ private:
     std::set<InstanceHandle> mStaticEntities;  ///< Colliders that never move.
     std::set<InstanceHandle> mDynamicEntities; ///< Colliders that move (units).
 
-    bool mSecondRun = false; ///< True during the second run of the static pass (push out instead of reset).
-
+    std::vector<WorldShape> mShapes;                                      ///< World-space shapes by `World` slot (`MAX_INSTANCES` entries).
+    std::vector<std::pair<InstanceHandle, InstanceHandle>> mDynamicPairs; ///< Candidate dynamic pairs of this update (each pair once).
+    std::vector<StaticPair> mStaticPairs;                                 ///< Candidate dynamic-static pairs of this update.
+    std::vector<InstanceHandle> mCandidates;                              ///< Reused result buffer of hash map queries.
 
     Hash2D mStaticColliderHashMap;  ///< Broad phase for static colliders.
-    Hash2D mDynamicColliderHashMap; ///< Broad phase for dynamic colliders.
+    Hash2D mDynamicColliderHashMap; ///< Broad phase for dynamic colliders (without `InTower` units).
 };
 }

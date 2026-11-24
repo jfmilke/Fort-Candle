@@ -1,27 +1,49 @@
 #include "systems/CollisionSystem.hh"
+#include <clean-core/assert.hh>
+#include <algorithm>
+#include <limits>
 #include <typed-geometry/tg-lean.hh>
+
+void gamedev::CollisionSystem::Init(EngineECS& ecs, tg::aabb3 map_bounds)
+{
+    mECS = &ecs;
+    mShapes.resize(MAX_INSTANCES);
+
+    auto size = tg::size_of(map_bounds);
+
+    mDynamicColliderHashMap.Init({size.width, size.depth}, map_bounds);
+    mStaticColliderHashMap.Init({size.width, size.depth}, map_bounds);
+
+    mECS->AddFunctionalListener(FUNCTIONAL_LISTENER(EventType::NewPosition, CollisionSystem::PositionListener));
+}
 
 void gamedev::CollisionSystem::AddEntity(InstanceHandle handle, Signature entitySignature)
 {
+    auto& shape = CachedShape(handle);
+    shape = ComputeWorldShape(handle);
+
+    auto const& translation = mECS->GetInstanceTransform(handle).translation;
+    auto const bounds = BroadPhaseBounds(shape, translation);
+
+    // Called on every signature change, so re-insert with the current bounds
+    mStaticColliderHashMap.RemoveInstance(handle);
+    mDynamicColliderHashMap.RemoveInstance(handle);
+
     if (mECS->GetComponent<Collider>(handle)->dynamic)
     {
         mDynamicEntities.insert(handle);
-
         mStaticEntities.erase(handle);
 
-        auto const& instance = mECS->GetInstance(handle);
-        mDynamicColliderHashMap.AddInstance(handle, instance.xform.translation, instance.max_bounds);
-        mStaticColliderHashMap.RemoveInstance(handle);
+        // Units inside a tower take no part in collisions
+        if (!mECS->TestSignature<InTower>(handle))
+            mDynamicColliderHashMap.AddInstance(handle, translation, bounds);
     }
     else
     {
         mStaticEntities.insert(handle);
-
         mDynamicEntities.erase(handle);
 
-        auto const& instance = mECS->GetInstance(handle);
-        mStaticColliderHashMap.AddInstance(handle, instance.xform.translation, instance.max_bounds);
-        mDynamicColliderHashMap.RemoveInstance(handle);
+        mStaticColliderHashMap.AddInstance(handle, translation, bounds);
     }
 }
 
@@ -43,544 +65,365 @@ void gamedev::CollisionSystem::RemoveAllEntities()
     mDynamicColliderHashMap.Clear();
 }
 
-void gamedev::CollisionSystem::Init(EngineECS& ecs)
+void gamedev::CollisionSystem::Update(float /*dt*/)
 {
-    mECS = &ecs;
+    CollectPairs();
 
-    mDynamicColliderHashMap.Init(tg::size2::unit, tg::aabb3::unit_from_zero);
-    mStaticColliderHashMap.Init(tg::size2::unit, tg::aabb3::unit_from_zero);
-
-    mECS->AddFunctionalListener(FUNCTIONAL_LISTENER(EventType::NewPosition, CollisionSystem::PositionListener));
-}
-
-void gamedev::CollisionSystem::Init(EngineECS& ecs, tg::aabb3 map_bounds)
-{
-    mECS = &ecs;
-
-    auto size = tg::size_of(map_bounds);
-
-    mDynamicColliderHashMap.Init({size.width, size.depth}, map_bounds);
-    mStaticColliderHashMap.Init({size.width, size.depth}, map_bounds);
-
-    mECS->AddFunctionalListener(FUNCTIONAL_LISTENER(EventType::NewPosition, CollisionSystem::PositionListener));
-}
-
-
-void gamedev::CollisionSystem::Update(float dt)
-{
-    mDT = dt;
-
-    ResolveStaticCollisions();
-    ResolveDynamicCollisions();
-}
-
-void gamedev::CollisionSystem::ResolveStaticCollisions()
-{
-    tg::pos3 min{0, 0, 0};
-    tg::pos3 max{0, 0, 0};
-
-    std::queue<std::pair<InstanceHandle, InstanceHandle>> staticDynamic_2nd;
-
-    mSecondRun = false;
-
-    for (const auto& handle_static : mStaticEntities)
+    for (int round = 0; round < kIterations; ++round)
     {
-        // Lifecheck:
-        auto hp = mECS->TryGetComponent<Destructible>(handle_static);
-        if (hp)
+        // Dynamic colliders share the push
+        for (auto const& [a, b] : mDynamicPairs)
         {
-            if (hp->health.current <= 0.0f)
-            {
-                // No event: `GamelogicSystem::Destroy` already sent `EventType::BuildingDestroyed`
-                mECS->MarkDestruction(handle_static);
-            }
+            auto& shapeA = CachedShape(a);
+            auto& shapeB = CachedShape(b);
+
+            auto const contact = ComputeContact(shapeA, shapeB);
+            if (contact.separation >= 0.f)
+                continue;
+
+            auto const push = contact.normal * (0.5f * (kSkin - contact.separation));
+            Move(a, shapeA, push);
+            Move(b, shapeB, -push);
         }
 
-        // Collision Check:
-        auto boxShape_s = mECS->TryGetComponent<BoxShape>(handle_static);
-        auto circleShape_s = mECS->TryGetComponent<CircleShape>(handle_static);
-        auto& instance_s = mECS->GetInstance(handle_static);
-
-        auto bounds = instance_s.max_bounds;
-        bounds.max *= instance_s.xform.scaling;
-        bounds.min *= instance_s.xform.scaling;
-
-        for (const auto& handle_dynamic : mDynamicColliderHashMap.FindNear(instance_s.xform.translation, instance_s.max_bounds))
+        // Static colliders last, so they win
+        for (auto& pair : mStaticPairs)
         {
-            if (mECS->TestSignature<InTower>(handle_dynamic))
+            auto& shape = CachedShape(pair.dynamic);
+
+            auto const contact = ComputeContact(shape, CachedShape(pair.body));
+            if (contact.separation < kContactDistance)
+                pair.touching = true;
+
+            if (contact.separation >= 0.f)
                 continue;
 
-            auto collider = mECS->TryGetComponent<Collider>(handle_dynamic);
-
-            if ((!collider) || (!collider->dynamic))
-                continue;
-
-            auto& instance_d = mECS->GetInstance(handle_dynamic);
-
-            auto boxShape_d = mECS->TryGetComponent<BoxShape>(handle_dynamic);
-            auto circleShape_d = mECS->TryGetComponent<CircleShape>(handle_dynamic);
-
-            bool collision = false;
-
-            if (boxShape_s && boxShape_d)
-                collision = Collide(instance_d, instance_s, boxShape_d, boxShape_s);
-
-            else if (boxShape_s && circleShape_d)
-                collision = Collide(instance_d, instance_s, circleShape_d, boxShape_s);
-
-            else if (circleShape_s && boxShape_d)
-                collision = Collide(instance_d, instance_s, boxShape_d, circleShape_s);
-
-            else if (circleShape_s && circleShape_d)
-                collision = Collide(instance_d, instance_s, circleShape_d, circleShape_s);
-
-            if (collision)
-            {
-                staticDynamic_2nd.push({handle_static, handle_dynamic});
-
-                Event collision_event(EventType::StaticCollision, handle_static, handle_dynamic);
-                mECS->SendFunctionalEvent(collision_event);
-            }
+            Move(pair.dynamic, shape, contact.normal * (kSkin - contact.separation));
         }
     }
 
-    mSecondRun = true;
+    RevertWedgedColliders();
 
-    while (!staticDynamic_2nd.empty())
+    // Listeners run after the positions are final
+    for (auto const& pair : mStaticPairs)
     {
-        auto handle_static = staticDynamic_2nd.front().first;
-        auto handle_dynamic = staticDynamic_2nd.front().second;
-        staticDynamic_2nd.pop();
-
-        // Collision Check:
-        auto boxShape_s = mECS->TryGetComponent<BoxShape>(handle_static);
-        auto circleShape_s = mECS->TryGetComponent<CircleShape>(handle_static);
-        auto& instance_s = mECS->GetInstance(handle_static);
-
-        auto bounds = instance_s.max_bounds;
-        bounds.max *= instance_s.xform.scaling;
-        bounds.min *= instance_s.xform.scaling;
-
-        auto collider = mECS->TryGetComponent<Collider>(handle_dynamic);
-
-        if ((!collider) || (!collider->dynamic))
+        if (!pair.touching)
             continue;
 
-        auto& instance_d = mECS->GetInstance(handle_dynamic);
-
-        auto boxShape_d = mECS->TryGetComponent<BoxShape>(handle_dynamic);
-        auto circleShape_d = mECS->TryGetComponent<CircleShape>(handle_dynamic);
-
-        bool collision = false;
-
-        if (boxShape_s && boxShape_d)
-            collision = Collide(instance_d, instance_s, boxShape_d, boxShape_s);
-
-        else if (boxShape_s && circleShape_d)
-            collision = Collide(instance_d, instance_s, circleShape_d, boxShape_s);
-
-        else if (circleShape_s && boxShape_d)
-            collision = Collide(instance_d, instance_s, boxShape_d, circleShape_s);
-
-        else if (circleShape_s && circleShape_d)
-            collision = Collide(instance_d, instance_s, circleShape_d, circleShape_s);
+        Event collision_event(EventType::StaticCollision, pair.body, pair.dynamic);
+        mECS->SendFunctionalEvent(collision_event);
     }
 }
 
-void gamedev::CollisionSystem::ResolveDynamicCollisions()
+void gamedev::CollisionSystem::CollectPairs()
 {
-    tg::pos3 min{0, 0, 0};
-    tg::pos3 max{0, 0, 0};
+    mDynamicPairs.clear();
+    mStaticPairs.clear();
 
-    mSecondRun = false;
-
-    for (const auto& handle_1 : mDynamicEntities)
+    // Units turn without publishing, and their moves of this update are published after this step,
+    // so their shapes and hash map entries are refreshed here (unchanged cells cost nothing)
+    for (auto const handle : mDynamicEntities)
     {
-        if (mECS->TestSignature<InTower>(handle_1))
+        if (mECS->TestSignature<InTower>(handle))
             continue;
 
-        auto boxShape_1 = mECS->TryGetComponent<BoxShape>(handle_1);
-        auto circleShape_1 = mECS->TryGetComponent<CircleShape>(handle_1);
-        auto& instance_1 = mECS->GetInstance(handle_1);
+        auto& shape = CachedShape(handle);
+        shape = ComputeWorldShape(handle);
 
-        for (const auto& handle_2 : mDynamicColliderHashMap.FindNear(instance_1.xform.translation, instance_1.max_bounds))
+        auto const& translation = mECS->GetInstanceTransform(handle).translation;
+        mDynamicColliderHashMap.UpdateInstance(handle, translation, BroadPhaseBounds(shape, translation));
+    }
+
+    for (auto const handle : mDynamicEntities)
+    {
+        if (mECS->TestSignature<InTower>(handle))
+            continue;
+
+        auto const& translation = mECS->GetInstanceTransform(handle).translation;
+        auto const bounds = BroadPhaseBounds(CachedShape(handle), translation, kPairMargin);
+
+        mDynamicColliderHashMap.FindNear(translation, bounds, mCandidates);
+        for (auto const other : mCandidates)
         {
-            if (handle_1 == handle_2)
+            // Each pair once
+            if (handle < other)
+                mDynamicPairs.push_back({handle, other});
+        }
+
+        mStaticColliderHashMap.FindNear(translation, bounds, mCandidates);
+        for (auto const body : mCandidates)
+            mStaticPairs.push_back({handle, body});
+    }
+}
+
+void gamedev::CollisionSystem::RevertWedgedColliders()
+{
+    // CollectPairs stores the static pairs of each dynamic collider next to each other
+    auto const overlapsAny = [&](size_t begin, size_t end, WorldShape const& shape)
+    {
+        for (auto i = begin; i < end; ++i)
+            if (ComputeContact(shape, CachedShape(mStaticPairs[i].body)).separation < -kWedgeTolerance)
+                return true;
+        return false;
+    };
+
+    for (size_t begin = 0; begin < mStaticPairs.size();)
+    {
+        auto const handle = mStaticPairs[begin].dynamic;
+        auto end = begin + 1;
+        while (end < mStaticPairs.size() && mStaticPairs[end].dynamic == handle)
+            ++end;
+
+        auto& shape = CachedShape(handle);
+        auto const physics = mECS->TryGetComponent<Physics>(handle);
+
+        if (overlapsAny(begin, end, shape))
+        {
+            // Back to the position before this update's physics move, if that one is free
+            auto const& translation = mECS->GetInstanceTransform(handle).translation;
+            auto reverted = shape;
+            if (physics)
+                reverted.center += tg::vec2(physics->lastPosition.x - translation.x, physics->lastPosition.z - translation.z);
+
+            if (physics && !overlapsAny(begin, end, reverted))
+                Move(handle, shape, reverted.center - shape.center);
+            else if (auto const offset = FindFreeSpot(handle, shape))
+                Move(handle, shape, *offset);
+        }
+
+        begin = end;
+    }
+}
+
+std::optional<tg::vec2> gamedev::CollisionSystem::FindFreeSpot(InstanceHandle handle, WorldShape const& shape)
+{
+    auto const& translation = mECS->GetInstanceTransform(handle).translation;
+    mStaticColliderHashMap.FindNear(translation, BroadPhaseBounds(shape, translation, kEscapeDistance), mCandidates);
+
+    // Rings of candidate positions, nearest first
+    for (auto distance = kEscapeStep; distance <= kEscapeDistance; distance += kEscapeStep)
+    {
+        for (int i = 0; i < kEscapeDirections; ++i)
+        {
+            auto const angle = tg::angle::from_degree(360.f * float(i) / float(kEscapeDirections));
+            auto const offset = tg::vec2(tg::cos(angle), tg::sin(angle)) * distance;
+
+            auto candidate = shape;
+            candidate.center += offset;
+
+            auto const blocks = [&](InstanceHandle body) { return ComputeContact(candidate, CachedShape(body)).separation < 0.f; };
+            if (std::ranges::none_of(mCandidates, blocks))
+                return offset;
+        }
+    }
+
+    return std::nullopt;
+}
+
+void gamedev::CollisionSystem::Move(InstanceHandle handle, WorldShape& shape, tg::vec2 offset)
+{
+    auto& instance = mECS->GetInstance(handle);
+    instance.xform.translation.x += offset.x;
+    instance.xform.translation.z += offset.y;
+    instance.new_position = true;
+
+    shape.center += offset;
+}
+
+gamedev::CollisionSystem::Contact gamedev::CollisionSystem::ComputeContact(WorldShape const& a, WorldShape const& b)
+{
+    // Bounding circles first; the separation is then only a lower bound, which is enough to rule out a contact
+    auto const distance = tg::distance(a.center, b.center);
+    if (distance - a.radius - b.radius > kContactDistance)
+        return {tg::vec2(1, 0), distance - a.radius - b.radius};
+
+    if (!a.box && !b.box)
+        return CircleCircle(a.center, a.radius, b.center, b.radius);
+
+    if (!a.box)
+        return CircleBox(a, b);
+
+    if (!b.box)
+    {
+        auto contact = CircleBox(b, a);
+        contact.normal = -contact.normal;
+        return contact;
+    }
+
+    return BoxBox(a, b);
+}
+
+gamedev::CollisionSystem::Contact gamedev::CollisionSystem::CircleCircle(tg::pos2 centerA, float radiusA, tg::pos2 centerB, float radiusB)
+{
+    auto const d = centerA - centerB;
+    auto const distance = tg::length(d);
+
+    Contact contact;
+    contact.normal = distance > 1e-6f ? d / distance : tg::vec2(1, 0);
+    contact.separation = distance - radiusA - radiusB;
+    return contact;
+}
+
+gamedev::CollisionSystem::Contact gamedev::CollisionSystem::CircleBox(WorldShape const& circle, WorldShape const& box)
+{
+    // Box frame: unit axes and half extents
+    tg::vec2 axis[2];
+    float extent[2];
+    for (int i = 0; i < 2; ++i)
+    {
+        extent[i] = tg::length(box.halfAxes[i]);
+        axis[i] = extent[i] > 1e-6f ? box.halfAxes[i] / extent[i] : tg::vec2::zero;
+    }
+
+    // Flat boxes: complete the frame with the perpendicular axis
+    if (extent[0] <= 1e-6f && extent[1] <= 1e-6f)
+        return CircleCircle(circle.center, circle.radius, box.center, 0.f);
+    if (extent[0] <= 1e-6f)
+        axis[0] = {-axis[1].y, axis[1].x};
+    if (extent[1] <= 1e-6f)
+        axis[1] = {-axis[0].y, axis[0].x};
+
+    auto const p = circle.center - box.center;
+    float const local[2] = {tg::dot(p, axis[0]), tg::dot(p, axis[1])};
+
+    Contact contact;
+
+    // Center inside the box: leave through the nearest face
+    if (tg::abs(local[0]) <= extent[0] && tg::abs(local[1]) <= extent[1])
+    {
+        int const i = (extent[0] - tg::abs(local[0]) < extent[1] - tg::abs(local[1])) ? 0 : 1;
+        contact.normal = local[i] < 0.f ? -axis[i] : axis[i];
+        contact.separation = tg::abs(local[i]) - extent[i] - circle.radius;
+        return contact;
+    }
+
+    // Center outside: distance to the closest point on the box
+    auto const closest = box.center + axis[0] * tg::clamp(local[0], -extent[0], extent[0]) + axis[1] * tg::clamp(local[1], -extent[1], extent[1]);
+    auto const d = circle.center - closest;
+    auto const distance = tg::length(d);
+
+    if (distance > 1e-6f)
+    {
+        contact.normal = d / distance;
+    }
+    else
+    {
+        // On the boundary: leave along the axis the center is outside of
+        int const i = tg::abs(local[0]) > extent[0] ? 0 : 1;
+        contact.normal = local[i] < 0.f ? -axis[i] : axis[i];
+    }
+
+    contact.separation = distance - circle.radius;
+    return contact;
+}
+
+gamedev::CollisionSystem::Contact gamedev::CollisionSystem::BoxBox(WorldShape const& a, WorldShape const& b)
+{
+    auto const d = a.center - b.center;
+
+    Contact best;
+    best.separation = -std::numeric_limits<float>::max();
+
+    // The axis with the largest separation (or least penetration) wins
+    for (auto const* box : {&a, &b})
+    {
+        for (auto const& halfAxis : box->halfAxes)
+        {
+            auto const length = tg::length(halfAxis);
+            if (length <= 1e-6f)
                 continue;
 
-            auto collider = mECS->TryGetComponent<Collider>(handle_2);
-            if ((!collider) || (!collider->dynamic))
-                continue;
+            auto const n = halfAxis / length;
+            auto const extentA = tg::abs(tg::dot(a.halfAxes[0], n)) + tg::abs(tg::dot(a.halfAxes[1], n));
+            auto const extentB = tg::abs(tg::dot(b.halfAxes[0], n)) + tg::abs(tg::dot(b.halfAxes[1], n));
+            auto const distance = tg::dot(d, n);
+            auto const separation = tg::abs(distance) - extentA - extentB;
 
-            auto& instance_2 = mECS->GetInstance(handle_2);
-
-            auto boxShape_2 = mECS->TryGetComponent<BoxShape>(handle_2);
-            auto circleShape_2 = mECS->TryGetComponent<CircleShape>(handle_2);
-
-            bool collision = false;
-
-            if (boxShape_1 && boxShape_2)
-                collision = Collide(instance_1, instance_2, boxShape_1, boxShape_2);
-
-            else if (boxShape_1 && circleShape_2)
-                collision = Collide(instance_1, instance_2, boxShape_1, circleShape_2);
-
-            else if (circleShape_1 && boxShape_2)
-                collision = Collide(instance_1, instance_2, circleShape_1, boxShape_2);
-
-            else if (circleShape_1 && circleShape_2)
-                collision = Collide(instance_1, instance_2, circleShape_1, circleShape_2);
-        }
-    }
-}
-
-bool gamedev::CollisionSystem::Collide(Instance& instance_dynamic, Instance& instance_any, const BoxShape* box_dynamic, const BoxShape* box_any)
-{
-    // Transform collision box
-    const auto transform1 = affine_to_mat4(instance_dynamic.xform.transform_mat());
-    auto tBox1 = box_dynamic->box;
-    tBox1.center = transform1 * box_dynamic->box.center;
-    tBox1.half_extents[0] = transform1 * box_dynamic->box.half_extents[0];
-    tBox1.half_extents[2] = transform1 * box_dynamic->box.half_extents[2];
-
-    const auto transform2 = affine_to_mat4(instance_any.xform.transform_mat());
-    auto tBox2 = box_any->box;
-    tBox2.center = transform2 * box_any->box.center;
-    tBox2.half_extents[0] = transform2 * box_any->box.half_extents[0];
-    tBox2.half_extents[2] = transform2 * box_any->box.half_extents[2];
-
-    // Interpret as circles to do fast collision check
-    auto distance = tg::distance(tBox1.center, tBox2.center);
-    auto radius1 = tg::length(tBox1.half_extents[0] + tBox1.half_extents[2]);
-    auto radius2 = tg::length(tBox2.half_extents[0] + tBox2.half_extents[2]);
-    if (distance > (radius1 + radius2))
-        return 0; // No Intersection
-
-    tg::vec3 push = minimalPush(tBox1, tBox2);
-
-    // If the push-vector is zero, no collision happend.
-    if ((push.x == 0) && (push.z == 0))
-        return 0;
-
-    resolve(instance_dynamic, instance_any, push);
-
-    return 1;
-}
-
-bool gamedev::CollisionSystem::Collide(Instance& instance_dynamic, Instance& instance_any, const BoxShape* box_dynamic, const CircleShape* circle_static)
-{
-    // Transform collision box
-    const auto transform1 = instance_dynamic.xform.transform_mat2D();
-    tg::box3 tBox;
-    tBox.center = transform1 * box_dynamic->box.center;
-    tBox.half_extents[0] = transform1 * box_dynamic->box.half_extents[0];
-    tBox.half_extents[2] = transform1 * box_dynamic->box.half_extents[2];
-
-    const auto transform2 = instance_any.xform.transform_mat2D();
-    const auto scale2 = tg::max(instance_any.xform.scaling.width, instance_any.xform.scaling.depth);
-    tg::sphere3 tCircle;
-    tCircle.center = transform2 * circle_static->circle.center;
-    tCircle.radius = scale2 * circle_static->circle.radius;
-
-    // Interpret as circles to do fast collision check
-    auto distance = tg::distance_sqr(tBox.center, tCircle.center);
-    auto radius1 = tg::length(tBox.half_extents[0] + tBox.half_extents[2]);
-    if (distance > (radius1 + tCircle.radius) * (radius1 + tCircle.radius))
-        return 0; // No Intersection
-
-    tg::vec3 push = minimalPush(tBox, tCircle);
-
-    // If the push-vector is zero, no collision happend.
-    if ((push.x == 0) && (push.z == 0))
-        return 0;
-
-    resolve(instance_dynamic, instance_any, push);
-
-    return 1;
-}
-
-bool gamedev::CollisionSystem::Collide(Instance& instance_dynamic, Instance& instance_any, const CircleShape* circle_dynamic, const BoxShape* box_static)
-{
-    // Transform collision box
-    const auto transform1 = instance_any.xform.transform_mat2D();
-    tg::box3 tBox;
-    tBox.center = transform1 * box_static->box.center;
-    tBox.half_extents[0] = transform1 * box_static->box.half_extents[0];
-    tBox.half_extents[2] = transform1 * box_static->box.half_extents[2];
-
-    const auto transform2 = instance_dynamic.xform.transform_mat2D();
-    const auto scale2 = tg::max(instance_dynamic.xform.scaling.width, instance_dynamic.xform.scaling.depth);
-    tg::sphere3 tCircle;
-    tCircle.center = transform2 * circle_dynamic->circle.center;
-    tCircle.radius = scale2 * circle_dynamic->circle.radius;
-
-    // Interpret as circles to do fast collision check
-    auto distance = tg::distance_sqr(tBox.center, tCircle.center);
-    auto radius1 = tg::length(tBox.half_extents[0] + tBox.half_extents[2]);
-    if (distance > (radius1 + tCircle.radius) * (radius1 + tCircle.radius))
-        return 0; // No Intersection
-
-    tg::vec3 push = minimalPush(tCircle, tBox);
-
-    // If the push-vector is zero, no collision happend.
-    if ((push.x == 0) && (push.z == 0))
-        return 0;
-
-    resolve(instance_dynamic, instance_any, push);
-
-    return 1;
-}
-
-bool gamedev::CollisionSystem::Collide(Instance& instance_dynamic, Instance& instance_any, const CircleShape* circle_dynamic, const CircleShape* circle_static)
-{
-    // Transform collision box
-    const auto transform1 = instance_dynamic.xform.transform_mat2D();
-    const auto scale1 = tg::max(instance_dynamic.xform.scaling.width, instance_dynamic.xform.scaling.depth);
-    tg::sphere3 tCircle1;
-    tCircle1.center = transform1 * circle_dynamic->circle.center;
-    tCircle1.radius = scale1 * circle_dynamic->circle.radius;
-
-    const auto transform2 = instance_any.xform.transform_mat2D();
-    const auto scale2 = tg::max(instance_any.xform.scaling.width, instance_any.xform.scaling.depth);
-    tg::sphere3 tCircle2;
-    tCircle2.center = transform2 * circle_static->circle.center;
-    tCircle2.radius = scale2 * circle_static->circle.radius;
-
-    // Do fast circle collision check
-    auto distance = tg::distance_sqr(tCircle1.center, tCircle2.center);
-    if (distance > (tCircle1.radius + tCircle2.radius) * (tCircle1.radius + tCircle2.radius))
-        return 0; // No Intersection
-
-    tg::vec3 push = minimalPush(tCircle1, tCircle2);
-
-    // If the push-vector is zero, no collision happend.
-    if ((push.x == 0) && (push.z == 0))
-        return 0;
-
-    resolve(instance_dynamic, instance_any, push);
-
-    return 1;
-}
-
-tg::vec3 gamedev::CollisionSystem::SAT_AxisTest(const tg::vec3& axis, const std::array<tg::pos3, 4>& points1, const std::array<tg::pos3, 4>& points2)
-{
-    float min1 = INFINITY;
-    float max1 = -INFINITY;
-
-    float min2 = INFINITY;
-    float max2 = -INFINITY;
-
-    // Project all points on the given axis & find maximum/minimum
-    for (const auto& p : points1)
-    {
-        float projection = tg::dot(p, axis);
-
-        min1 = tg::min(min1, projection);
-        max1 = tg::max(max1, projection);
-    }
-
-    for (const auto& p : points2)
-    {
-        float projection = tg::dot(p, axis);
-
-        min2 = tg::min(min2, projection);
-        max2 = tg::max(max2, projection);
-    }
-
-    // On overlap, create a push-vector along the given axis
-    if ((max1 >= min2) && (max2 >= min1))
-    {
-        // Push a bit more than needed
-        float d = tg::min(max2 - min1, max1 - min2) / tg::dot(axis, axis) + 1e-10;
-        return d * axis;
-    }
-
-    // Else, return a zero-vector (equal to: no overlap found).
-    return tg::vec3::zero;
-}
-
-tg::vec3 gamedev::CollisionSystem::minimalPush(const tg::box3& box_dynamic, const tg::box3& box_any)
-{
-    // half_extents are already the axes
-    auto axes = std::array<tg::vec3, 4>();
-    axes[0] = box_dynamic.half_extents[0]; // boxA
-    axes[1] = box_dynamic.half_extents[2]; //
-    axes[2] = box_any.half_extents[0];     // boxB
-    axes[3] = box_any.half_extents[2];     //
-
-    // points must be calculated from the center
-    auto center1 = box_dynamic.center;
-    auto center2 = box_any.center;
-    std::array<tg::pos3, 4> points1;
-    std::array<tg::pos3, 4> points2;
-
-    points1[0] = center1 + box_dynamic.half_extents[0] + box_dynamic.half_extents[2];
-    points1[1] = center1 + box_dynamic.half_extents[0] - box_dynamic.half_extents[2];
-    points1[2] = center1 - box_dynamic.half_extents[0] + box_dynamic.half_extents[2];
-    points1[3] = center1 - box_dynamic.half_extents[0] - box_dynamic.half_extents[2];
-
-    points2[0] = center2 + box_any.half_extents[0] + box_any.half_extents[2];
-    points2[1] = center2 + box_any.half_extents[0] - box_any.half_extents[2];
-    points2[2] = center2 - box_any.half_extents[0] + box_any.half_extents[2];
-    points2[3] = center2 - box_any.half_extents[0] - box_any.half_extents[2];
-
-    // SAT Test all axis for a potential collision. Break if a separting axis is found.
-    // push is the vector, which holds the displacement to avoid collision on this axis.
-    // push == (0,0) => separating axis / no collision
-    // push  > (0,0) => overlap
-    std::vector<tg::vec3> push_vectors;
-    for (const auto& axis : axes)
-    {
-        auto push = SAT_AxisTest(axis, points1, points2);
-        if (push.x != 0 || push.z != 0)
-            push_vectors.push_back(push);
-        else
-            return tg::vec3::zero;
-    }
-
-    // Get minimum necessary vector to resolve collision.
-    tg::vec3 minimum_push;
-    float minimum = INFINITY;
-    for (const auto& push : push_vectors)
-    {
-        if (tg::dot(push, push) < minimum)
-        {
-            minimum_push = push;
-            minimum = tg::dot(push, push);
+            if (separation > best.separation)
+            {
+                best.separation = separation;
+                best.normal = distance < 0.f ? -n : n;
+            }
         }
     }
 
-    // Ensure that the dynamic shape is pushed away from the other one
-    tg::vec3 d = box_any.center - box_dynamic.center;
-    if (tg::dot(d, minimum_push) > 0)
-        minimum_push *= -1;
+    // Both boxes flat in both directions: points
+    if (best.separation == -std::numeric_limits<float>::max())
+        return CircleCircle(a.center, 0.f, b.center, 0.f);
 
-    return minimum_push;
+    return best;
 }
 
-
-tg::vec3 gamedev::CollisionSystem::minimalPush(const tg::box3& box_dynamic, const tg::sphere3& circle_any)
+gamedev::CollisionSystem::WorldShape& gamedev::CollisionSystem::CachedShape(InstanceHandle handle)
 {
-    // half_extents are already the axes
-    auto axes = std::array<tg::vec3, 2>();
-    axes[0] = tg::normalize_safe(box_dynamic.half_extents[0]);
-    axes[1] = tg::normalize_safe(box_dynamic.half_extents[2]);
-
-    // points must be calculated from the center
-    auto center1 = box_dynamic.center;
-    auto center2 = circle_any.center;
-    std::array<tg::pos3, 4> points1;
-    std::array<tg::pos3, 4> points2;
-
-    points1[0] = center1 + box_dynamic.half_extents[0] + box_dynamic.half_extents[2];
-    points1[1] = center1 + box_dynamic.half_extents[0] - box_dynamic.half_extents[2];
-    points1[2] = center1 - box_dynamic.half_extents[0] + box_dynamic.half_extents[2];
-    points1[3] = center1 - box_dynamic.half_extents[0] - box_dynamic.half_extents[2];
-
-    // Circle is interpreted as a rectangle for collision, but it works
-    points2[0] = center2 + circle_any.radius * axes[0];
-    points2[1] = center2 + circle_any.radius * axes[1];
-    points2[2] = center2 - circle_any.radius * axes[0];
-    points2[3] = center2 - circle_any.radius * axes[1];
-
-    // SAT Test all axis for a potential collision. Break if a separting axis is found.
-    // push is the vector, which holds the displacement to avoid collision on this axis.
-    // push == (0,0) => separating axis / no collision
-    // push  > (0,0) => overlap
-    std::vector<tg::vec3> push_vectors;
-    for (const auto& axis : axes)
-    {
-        auto push = SAT_AxisTest(axis, points1, points2);
-        if (push.x != 0 || push.z != 0)
-            push_vectors.push_back(push);
-        else
-            return tg::vec3::zero;
-    }
-
-    // Get minimum necessary vector to resolve collision.
-    tg::vec3 minimum_push;
-    float minimum = INFINITY;
-    for (const auto& push : push_vectors)
-    {
-        if (tg::dot(push, push) < minimum)
-        {
-            minimum_push = push;
-            minimum = tg::dot(push, push);
-        }
-    }
-
-    // Ensure that the dynamic shape is pushed away from the other one
-    tg::vec3 d = circle_any.center - box_dynamic.center;
-    if (tg::dot(d, minimum_push) > 0)
-        minimum_push *= -1;
-
-    return minimum_push;
-}
-
-
-tg::vec3 gamedev::CollisionSystem::minimalPush(const tg::sphere3& circle_dynamic, const tg::box3& box_static)
-{
-    return -1.0 * minimalPush(box_static, circle_dynamic);
-}
-
-tg::vec3 gamedev::CollisionSystem::minimalPush(const tg::sphere3& circle_dynamic, const tg::sphere3& circle_static)
-{
-    tg::vec3 dir = circle_dynamic.center - circle_static.center;
-    float len = tg::length(dir);
-
-    if (len >= circle_dynamic.radius + circle_static.radius)
-        return tg::vec3::zero;
-
-    dir /= len;
-
-    tg::vec3 push = dir * tg::abs(len - circle_dynamic.radius - circle_static.radius);
-
-    return push;
-}
-
-void gamedev::CollisionSystem::resolve(Instance& instance_dynamic, Instance& instance_any, tg::vec3 push)
-{
-    auto physics1 = mECS->TryGetComponent<Physics>(instance_dynamic.mHandle);
-
-    if (physics1)
-    {
-        if (!mSecondRun && tg::any(tg::comp<3, bool>(physics1->velocity)))
-        {
-            instance_dynamic.xform.move_absolute(physics1->lastPosition - instance_dynamic.xform.translation);
-
-            const float bounce_damping = 0.0;
-            const float friction_damping = 0.4;
-
-            tg::vec3 N = tg::normalize(push);
-            tg::vec3 vec_collision = tg::normalize_safe(physics1->velocity);
-
-            // todo: fix bounce
-            // if (physics2)
-            //    vec_collision -= physics2->velocity;
-
-            tg::vec3 bounce = tg::dot(vec_collision, N) * N; // perpendicular: bounce
-            tg::vec3 friction = vec_collision - bounce;
-
-            instance_dynamic.xform.move_absolute((friction_damping * friction) * mDT);
-            instance_dynamic.new_position = true;
-
-            return;
-        }
-    }
-
-    instance_dynamic.xform.move_absolute(push);
-    instance_dynamic.new_position = true;
+    auto const slot = mECS->GetInstanceManager()->SlotIndex(handle);
+    CC_ASSERT_MSG(slot != World::kNoSlot, "Collision shape of a dead instance.");
+    return mShapes[slot];
 }
 
 void gamedev::CollisionSystem::PositionListener(Event& e)
 {
     auto collider = mECS->TryGetComponent<Collider>(e.mSubject);
+    if (!collider)
+        return;
 
-    if (collider)
+    // Rotation and scale may have changed too, so the shape and bounds are recomputed
+    auto& shape = CachedShape(e.mSubject);
+    shape = ComputeWorldShape(e.mSubject);
+
+    auto const& translation = mECS->GetInstanceTransform(e.mSubject).translation;
+    auto const bounds = BroadPhaseBounds(shape, translation);
+
+    if (collider->dynamic)
+        mDynamicColliderHashMap.UpdateInstance(e.mSubject, translation, bounds);
+    else
+        mStaticColliderHashMap.UpdateInstance(e.mSubject, translation, bounds);
+}
+
+gamedev::CollisionSystem::WorldShape gamedev::CollisionSystem::ComputeWorldShape(InstanceHandle handle)
+{
+    auto const& xform = mECS->GetInstanceTransform(handle);
+    auto const m = xform.transform_mat2D();
+
+    WorldShape shape;
+
+    if (auto const box = mECS->TryGetComponent<BoxShape>(handle))
     {
-        if (collider->dynamic)
-            mDynamicColliderHashMap.UpdateInstance(e.mSender, mECS->GetInstanceTransform(e.mSender).translation);
-        else
-            mStaticColliderHashMap.UpdateInstance(e.mSender, mECS->GetInstanceTransform(e.mSender).translation);
+        auto const center = m * box->box.center;
+        auto const axis0 = m * box->box.half_extents[0];
+        auto const axis1 = m * box->box.half_extents[2];
+
+        shape.box = true;
+        shape.center = {center.x, center.z};
+        shape.halfAxes[0] = {axis0.x, axis0.z};
+        shape.halfAxes[1] = {axis1.x, axis1.z};
+        shape.radius = tg::length(shape.halfAxes[0] + shape.halfAxes[1]);
     }
+    else if (auto const circle = mECS->TryGetComponent<CircleShape>(handle))
+    {
+        auto const center = m * circle->circle.center;
+
+        shape.center = {center.x, center.z};
+        shape.radius = circle->circle.radius * tg::max(xform.scaling.width, xform.scaling.depth);
+    }
+    else
+    {
+        shape.center = {xform.translation.x, xform.translation.z};
+    }
+
+    return shape;
+}
+
+tg::aabb3 gamedev::CollisionSystem::BroadPhaseBounds(WorldShape const& shape, tg::vec3 const& translation, float margin)
+{
+    auto extent = tg::vec2(shape.radius, shape.radius);
+    if (shape.box)
+    {
+        extent.x = tg::abs(shape.halfAxes[0].x) + tg::abs(shape.halfAxes[1].x);
+        extent.y = tg::abs(shape.halfAxes[0].y) + tg::abs(shape.halfAxes[1].y);
+    }
+    extent += tg::vec2(margin, margin);
+
+    auto const offset = shape.center - tg::pos2(translation.x, translation.z);
+    return {tg::pos3(offset.x - extent.x, 0, offset.y - extent.y), tg::pos3(offset.x + extent.x, 0, offset.y + extent.y)};
 }

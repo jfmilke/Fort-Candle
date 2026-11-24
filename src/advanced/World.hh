@@ -56,10 +56,11 @@ struct Instance
     tg::dir3 facing; ///< Direction the unrotated mesh faces (`+z` by default); rotate with `xform` for the heading.
 
     /**
-     * Position changed since it was last published.
+     * Transform changed since it was last published.
      *
-     * `PhysicsSystem` then sends `EventType::NewPosition`, updates the spatial hash map and resets it.
-     * Set at creation, by `PhysicsSystem` moves and by `CollisionSystem` pushes.
+     * `EngineECS::PublishPositions` (once per update, after the collision step) then sends `EventType::NewPosition`,
+     * updates the spatial hash map and resets it.
+     * Set at creation, by `PhysicsSystem` moves and by `CollisionSystem` pushes; code that needs the move visible at once calls `EngineECS::PublishPosition`.
      */
     bool new_position;
 
@@ -205,9 +206,12 @@ private:
 
 }
 
+namespace std
+{
 /// Lets `InstanceHandle` be a key of `std::unordered_map`/`std::unordered_set` without a custom hasher.
 template <>
-struct std::hash<gamedev::InstanceHandle>
+struct hash<gamedev::InstanceHandle>
 {
     size_t operator()(gamedev::InstanceHandle handle) const noexcept { return std::hash<uint32_t>()(handle._value); }
 };
+}

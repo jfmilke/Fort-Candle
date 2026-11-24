@@ -19,6 +19,16 @@ tg::angle StepRemainingAngle(tg::angle& remaining, bool& active, float dt)
     remaining -= step;
     return step;
 }
+
+// Squared distance from the point p to the segment from a to b.
+float SegmentPointDistanceSqr(tg::pos3 a, tg::pos3 b, tg::pos3 p)
+{
+    auto ab = b - a;
+    auto lengthSqr = tg::dot(ab, ab);
+    auto t = lengthSqr > 0.f ? tg::clamp(tg::dot(p - a, ab) / lengthSqr, 0.f, 1.f) : 0.f;
+    auto d = p - (a + t * ab);
+    return tg::dot(d, d);
+}
 }
 
 void gamedev::AnimationSystem::AddEntity(InstanceHandle handle, Signature entitySignature)
@@ -72,13 +82,24 @@ void gamedev::AnimationSystem::Update(float dt)
             if (physics)
             {
                 AlignTrajectory(instance, physics);
+
+                // Clearly past the end of its arc (missed): it would only fly on underground
+                if (physics->arrowArc && physics->arc_x > physics->arc_xMax + 1.f)
+                {
+                    mECS->MarkDestruction(handle);
+                    continue;
+                }
             }
 
-            // Collision
+            // Collision: the segment travelled in this update against the target's body center
             if (mECS->IsLiveHandle(arrow->target))
             {
                 auto& target = mECS->GetInstance(arrow->target);
-                if (tg::distance_sqr(instance.xform.translation, target.xform.translation) < 0.1)
+                auto aim = tg::pos3(target.xform.translation) + tg::vec3(0.f, Arrow::aimHeight, 0.f);
+                auto end = tg::pos3(instance.xform.translation);
+                auto start = physics ? tg::pos3(physics->lastPosition) : end;
+
+                if (SegmentPointDistanceSqr(start, end, aim) < tg::pow2(Arrow::hitRadius))
                 {
                     Event e(EventType::ArrowHit, handle, arrow->target);
                     mECS->SendFunctionalEvent(e);

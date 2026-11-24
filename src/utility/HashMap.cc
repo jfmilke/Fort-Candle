@@ -1,14 +1,15 @@
 #include "utility/HashMap.hh"
+#include <clean-core/assert.hh>
 #include <algorithm>
-#include <string>
 
 void gamedev::Hash2D::Init(tg::size2 cellCount, tg::aabb2 bounds)
 {
-    mMaxCells = cellCount;
-    // Is being used later for denormalization, so correct values for that
-    mMaxCells.width -= 1;
-    mMaxCells.height -= 1;
+    // Highest index per axis; used to denormalize positions into cells
+    mMaxCells = {tg::max(int(cellCount.width), 1) - 1, tg::max(int(cellCount.height), 1) - 1};
     mBounds = bounds;
+
+    mEntries.clear();
+    mCells.assign(size_t(mMaxCells.width + 1) * size_t(mMaxCells.height + 1), {});
 }
 
 void gamedev::Hash2D::Init(tg::size2 cellCount, tg::aabb3 bounds)
@@ -20,181 +21,129 @@ void gamedev::Hash2D::Init(tg::size2 cellCount, tg::aabb3 bounds)
     Init(cellCount, bounds2D);
 }
 
-// mMaxCells holds the highest index, so a row has mMaxCells.width + 1 cells
-int gamedev::Hash2D::GetIndexID_(tg::ipos2 pos) { return pos.y * (mMaxCells.width + 1) + pos.x; }
-
-tg::ipos2 gamedev::Hash2D::PositionToGrid_(const tg::pos2& position)
+tg::ipos2 gamedev::Hash2D::PositionToGrid_(const tg::pos2& position) const
 {
-    tg::vec2 spatial_coordinate;
-
     // Normalized world space coordinates within the grid
-    spatial_coordinate.x = tg::saturate((position.x - mBounds.min.x) / (mBounds.max.x - mBounds.min.x));
-    spatial_coordinate.y = tg::saturate((position.y - mBounds.min.y) / (mBounds.max.y - mBounds.min.y));
+    auto const x = tg::saturate((position.x - mBounds.min.x) / (mBounds.max.x - mBounds.min.x));
+    auto const y = tg::saturate((position.y - mBounds.min.y) / (mBounds.max.y - mBounds.min.y));
 
-    // Output denormalized in cell space
-    return tg::ipos2(spatial_coordinate * mMaxCells);
+    // Denormalized in cell space
+    return {int(x * float(mMaxCells.width)), int(y * float(mMaxCells.height))};
 }
 
-tg::ipos2 gamedev::Hash2D::PositionToGrid_(const tg::pos3& position)
+gamedev::Hash2D::CellRange gamedev::Hash2D::CellsOf_(const tg::vec3& translation, const tg::pos2& min, const tg::pos2& max) const
 {
-    tg::vec2 spatial_coordinate;
+    CC_ASSERT_MSG(!mCells.empty(), "Hash2D used before Init.");
 
-    spatial_coordinate.x = tg::saturate((position.x - mBounds.min.x) / (mBounds.max.x - mBounds.min.x));
-    spatial_coordinate.y = tg::saturate((position.z - mBounds.min.y) / (mBounds.max.y - mBounds.min.y));
-
-    // Output denormalized in cell space
-    return tg::ipos2(spatial_coordinate * mMaxCells);
+    tg::vec2 const offset = {translation.x, translation.z};
+    return {PositionToGrid_(min + offset), PositionToGrid_(max + offset)};
 }
 
-void gamedev::Hash2D::Insert_(Hash2Client& c)
+void gamedev::Hash2D::Insert_(const InstanceHandle identifier, const CellRange& cells)
 {
-    auto i1 = PositionToGrid_(c.dimensions.min + c.translation);
-    auto i2 = PositionToGrid_(c.dimensions.max + c.translation);
+    for (int y = cells.first.y; y <= cells.second.y; y++)
+        for (int x = cells.first.x; x <= cells.second.x; x++)
+            mCells[CellIndex_(x, y)].push_back(identifier);
+}
 
-    c.indicies = {i1, i2};
-
-    for (int x = i1.x; x <= i2.x; x++)
+void gamedev::Hash2D::Remove_(const InstanceHandle identifier, const CellRange& cells)
+{
+    for (int y = cells.first.y; y <= cells.second.y; y++)
     {
-        for (int y = i1.y; y <= i2.y; y++)
+        for (int x = cells.first.x; x <= cells.second.x; x++)
         {
-            tg::ipos2 pos{x, y};
-            auto k = GetIndexID_(pos);
-
-            mBinMap[k].push_back(c);
-        }
-    }
-
-    mClientMap.insert_or_assign(c.handle, c);
-}
-
-void gamedev::Hash2D::Remove_(Hash2Client& c)
-{
-    auto i1 = c.indicies.first;
-    auto i2 = c.indicies.second;
-
-    for (int x = i1.x; x <= i2.x; x++)
-    {
-        for (int y = i1.y; y <= i2.y; y++)
-        {
-            tg::ipos2 pos{x, y};
-            auto k = GetIndexID_(pos);
-
-            auto bin = mBinMap.find(k);
-            if (bin == mBinMap.end())
-                continue;
-
-            // Each client is stored at most once per cell
-            auto& clients = bin->second;
-            auto it = std::ranges::find(clients, c.handle, &Hash2Client::handle);
-            if (it != clients.end())
+            // Each instance is stored at most once per cell
+            auto& handles = mCells[CellIndex_(x, y)];
+            if (auto it = std::ranges::find(handles, identifier); it != handles.end())
             {
-                *it = clients.back();
-                clients.pop_back();
+                *it = handles.back();
+                handles.pop_back();
             }
         }
     }
 }
 
-std::string gamedev::Hash2D::Key_(const tg::ipos2& p) { return std::to_string(p.x) + "." + std::to_string(p.y); }
-
-void gamedev::Hash2D::AddInstance(const InstanceHandle handle, const tg::vec3& translation, const tg::aabb3& dimensions)
+void gamedev::Hash2D::Move_(const InstanceHandle identifier, Entry& entry, const CellRange& cells)
 {
-    if (mClientMap.find(handle) != mClientMap.end())
+    if (cells == entry.cells)
         return;
 
-    tg::pos2 min = {dimensions.min.x, dimensions.min.z};
-    tg::pos2 max = {dimensions.max.x, dimensions.max.z};
-
-    // Create a new internal client which holds some easy access information
-    Hash2Client hc2{handle, {translation.x, translation.z}, {min, max}, {}};
-
-    Insert_(hc2);
+    Remove_(identifier, entry.cells);
+    Insert_(identifier, cells);
+    entry.cells = cells;
 }
 
-void gamedev::Hash2D::UpdateInstance(const InstanceHandle handle, const tg::vec3& translation)
+void gamedev::Hash2D::AddInstance(const InstanceHandle identifier, const tg::vec3& translation, const tg::aabb3& dimensions)
 {
-    if (auto client = mClientMap.find(handle); client != mClientMap.end())
-    {
-        auto& c = client->second;
-        c.translation.x = translation.x;
-        c.translation.y = translation.z;
+    if (mEntries.contains(identifier))
+        return;
 
-        Remove_(c);
-        Insert_(c);
+    Entry entry;
+    entry.dimensions = {{dimensions.min.x, dimensions.min.z}, {dimensions.max.x, dimensions.max.z}};
+    entry.cells = CellsOf_(translation, entry.dimensions.min, entry.dimensions.max);
+
+    Insert_(identifier, entry.cells);
+    mEntries.emplace(identifier, entry);
+}
+
+void gamedev::Hash2D::UpdateInstance(const InstanceHandle identifier, const tg::vec3& translation, const tg::aabb3& dimensions)
+{
+    if (auto it = mEntries.find(identifier); it != mEntries.end())
+    {
+        auto& entry = it->second;
+        entry.dimensions = {{dimensions.min.x, dimensions.min.z}, {dimensions.max.x, dimensions.max.z}};
+        Move_(identifier, entry, CellsOf_(translation, entry.dimensions.min, entry.dimensions.max));
     }
 }
 
-void gamedev::Hash2D::UpdateInstance(const InstanceHandle handle, const tg::vec3& translation, const tg::aabb3& dimensions)
+void gamedev::Hash2D::RemoveInstance(const InstanceHandle identifier)
 {
-    if (auto client = mClientMap.find(handle); client != mClientMap.end())
-    {
-        auto& c = client->second;
-        c.translation.x = translation.x;
-        c.translation.y = translation.z;
-        c.dimensions.min = {dimensions.min.x, dimensions.min.z};
-        c.dimensions.max = {dimensions.max.x, dimensions.max.z};
-
-        Remove_(c);
-        Insert_(c);
-    }
-}
-
-void gamedev::Hash2D::RemoveInstance(InstanceHandle handle)
-{
-    auto client = mClientMap.find(handle);
-    if (client == mClientMap.end())
+    auto it = mEntries.find(identifier);
+    if (it == mEntries.end())
         return;
 
-    Remove_(client->second);
-    mClientMap.erase(client);
+    Remove_(identifier, it->second.cells);
+    mEntries.erase(it);
 }
 
-std::vector<gamedev::InstanceHandle> gamedev::Hash2D::FindNear(const tg::vec3& translation, const tg::pos3& min, const tg::pos3& max)
+void gamedev::Hash2D::FindNear(const tg::vec3& translation, const tg::aabb3& bounds, std::vector<InstanceHandle>& result) const
 {
-    // find area to search for instances
-    auto i1 = PositionToGrid_(min + translation);
-    auto i2 = PositionToGrid_(max + translation);
+    result.clear();
 
-    std::vector<InstanceHandle> handles;
-
-    // search whole area
-    for (int x = i1.x; x <= i2.x; x++)
+    auto const cells = CellsOf_(translation, {bounds.min.x, bounds.min.z}, {bounds.max.x, bounds.max.z});
+    for (int y = cells.first.y; y <= cells.second.y; y++)
     {
-        for (int y = i1.y; y <= i2.y; y++)
+        for (int x = cells.first.x; x <= cells.second.x; x++)
         {
-            tg::ipos2 pos{x, y};
-
-            if (auto bin = mBinMap.find(GetIndexID_(pos)); bin != mBinMap.end())
-                for (auto const& client : bin->second)
-                    handles.push_back(client.handle);
+            auto const& handles = mCells[CellIndex_(x, y)];
+            result.insert(result.end(), handles.begin(), handles.end());
         }
     }
 
-    // instances overlapping several cells were collected once per cell
-    std::ranges::sort(handles);
-    auto const duplicates = std::ranges::unique(handles);
-    handles.erase(duplicates.begin(), duplicates.end());
-
-    return handles;
+    // Instances overlapping several cells were collected once per cell
+    std::ranges::sort(result);
+    auto const duplicates = std::ranges::unique(result);
+    result.erase(duplicates.begin(), duplicates.end());
 }
 
-std::vector<gamedev::InstanceHandle> gamedev::Hash2D::FindNear(const tg::vec3& translation, const tg::aabb3& bounds)
+std::vector<gamedev::InstanceHandle> gamedev::Hash2D::FindNear(const tg::vec3& translation, const tg::pos3& min, const tg::pos3& max) const
 {
-    return FindNear(translation, bounds.min, bounds.max);
+    tg::aabb3 bounds;
+    bounds.min = min;
+    bounds.max = max;
+    return FindNear(translation, bounds);
 }
 
-std::vector<gamedev::InstanceHandle> gamedev::Hash2D::FindNear(const tg::vec3& translation, const tg::size3& bounds)
+std::vector<gamedev::InstanceHandle> gamedev::Hash2D::FindNear(const tg::vec3& translation, const tg::aabb3& bounds) const
 {
-    return FindNear(translation, {-bounds.width, 0, -bounds.depth}, {bounds.width, 0, bounds.depth});
-}
-
-std::vector<gamedev::InstanceHandle> gamedev::Hash2D::FindNear(const tg::pos3& position)
-{
-    return FindNear(tg::vec3(position), tg::pos3::zero, tg::pos3::zero);
+    std::vector<InstanceHandle> result;
+    FindNear(translation, bounds, result);
+    return result;
 }
 
 void gamedev::Hash2D::Clear()
 {
-    mBinMap.clear();
-    mClientMap.clear();
+    mEntries.clear();
+    for (auto& handles : mCells)
+        handles.clear();
 }

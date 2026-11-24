@@ -15,7 +15,9 @@ namespace gamedev
  * Instances that also have an `Arrow` are kept separately and are not animated otherwise:
  *  - their lifetime runs down,
  *  - they are aligned to their trajectory,
- *  - `EventType::ArrowHit` is sent when they reach their target.
+ *  - they are removed once they are 1 unit past the end of their arc (a miss),
+ *  - `EventType::ArrowHit` is sent when the segment they travelled in this update (from `Physics::lastPosition`)
+ *    passes within `Arrow::hitRadius` of the target's aim point (`Arrow::aimHeight` above its position).
  */
 class AnimationSystem : public System
 {
@@ -29,7 +31,7 @@ public:
     void RemoveAllEntities() override;
 
     /**
-     * Advances arrows and animations. Expired arrows are marked for destruction.
+     * Advances arrows and animations. Expired arrows and arrows past their arc are marked for destruction.
      *
      * @param dt Time step in seconds.
      */

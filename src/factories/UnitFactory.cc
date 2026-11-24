@@ -132,7 +132,7 @@ void gamedev::UnitFactory::Init_Monster()
 
     auto prototype = mECS->CreateComponent<gamedev::Prototype>(handle);
     auto renderable = mECS->CreateComponent<Render>(handle);
-    auto shape = mECS->CreateComponent<gamedev::BoxShape>(handle);
+    auto shape = mECS->CreateComponent<gamedev::CircleShape>(handle);
     auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
     auto lifeform = mECS->CreateComponent<gamedev::Living>(handle);
     auto attacker = mECS->CreateComponent<gamedev::Attacker>(handle);
@@ -148,7 +148,7 @@ void gamedev::UnitFactory::Init_Monster()
     renderable->targetable = true;
 
     // Shape
-    shape->box = mObj->aabb3_as_box(mObj->getAABB("creature"));
+    shape->circle = mObj->aabb3_as_circle(mObj->getAABB("creature"));
 
     // Collider
     collider->dynamic = true;
@@ -181,7 +181,7 @@ void gamedev::UnitFactory::Init_Person()
 
     auto prototype = mECS->CreateComponent<gamedev::Prototype>(handle);
     auto renderable = mECS->CreateComponent<Render>(handle);
-    auto shape = mECS->CreateComponent<gamedev::BoxShape>(handle);
+    auto shape = mECS->CreateComponent<gamedev::CircleShape>(handle);
     auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
     auto lifeform = mECS->CreateComponent<gamedev::Living>(handle);
     auto mortal = mECS->CreateComponent<gamedev::Mortal>(handle);
@@ -196,7 +196,7 @@ void gamedev::UnitFactory::Init_Person()
     renderable->selectable = true;
 
     // Shape
-    shape->box = mObj->aabb3_as_box(mObj->getAABB("person"));
+    shape->circle = mObj->aabb3_as_circle(mObj->getAABB("person"));
 
     // Collider
     collider->dynamic = true;
@@ -223,7 +223,7 @@ void gamedev::UnitFactory::Init_Artisan()
 
     auto prototype = mECS->CreateComponent<gamedev::Prototype>(handle);
     auto renderable = mECS->CreateComponent<Render>(handle);
-    auto shape = mECS->CreateComponent<gamedev::BoxShape>(handle);
+    auto shape = mECS->CreateComponent<gamedev::CircleShape>(handle);
     auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
     auto lifeform = mECS->CreateComponent<gamedev::Living>(handle);
     auto producer = mECS->CreateComponent<gamedev::Producer>(handle);
@@ -240,7 +240,7 @@ void gamedev::UnitFactory::Init_Artisan()
     renderable->selectable = true;
 
     // Shape
-    shape->box = mObj->aabb3_as_box(mObj->getAABB("person_artisan"));
+    shape->circle = mObj->aabb3_as_circle(mObj->getAABB("person_artisan"));
 
     // Collider
     collider->dynamic = true;
@@ -270,7 +270,7 @@ void gamedev::UnitFactory::Init_Soldier()
 
     auto prototype = mECS->CreateComponent<gamedev::Prototype>(handle);
     auto renderable = mECS->CreateComponent<Render>(handle);
-    auto shape = mECS->CreateComponent<gamedev::BoxShape>(handle);
+    auto shape = mECS->CreateComponent<gamedev::CircleShape>(handle);
     auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
     auto lifeform = mECS->CreateComponent<gamedev::Living>(handle);
     auto attacker = mECS->CreateComponent<gamedev::Attacker>(handle);
@@ -288,7 +288,7 @@ void gamedev::UnitFactory::Init_Soldier()
     renderable->selectable = true;
 
     // Shape
-    shape->box = mObj->aabb3_as_box(mObj->getAABB("person_soldier"));
+    shape->circle = mObj->aabb3_as_circle(mObj->getAABB("person_soldier"));
 
     // Collider
     collider->dynamic = true;
