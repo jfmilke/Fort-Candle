@@ -274,7 +274,7 @@ private:
     void SetFocus(Living* subject, InstanceHandle focusHandle);
 
     /**
-     * Turns the unit towards its move target and sets its velocity; stops it when it has arrived.
+     * Turns the unit towards its move target and sets its velocity; stops it when it has arrived or has no move order.
      *
      * @param instance Data of the unit.
      * @param subject Its `Living` component.
@@ -346,7 +346,8 @@ private:
     void SetAttackOrder(Living* subject, Attacker* attacker, InstanceHandle target);
 
     /**
-     * Drops dead or out-of-range targets; otherwise draws and aims the weapon and attacks when the cooldown is over and the unit faces the target.
+     * Drops dead, destroyed (`Prototype`) or out-of-range targets;
+     * otherwise draws and aims the weapon and attacks when the cooldown is over and the unit faces the target.
      *
      * @param instance Data of the unit.
      * @param subject Its `Living` component.
@@ -422,6 +423,8 @@ private:
 
     /**
      * Sends the destruction event; walls become `Prototype` (hidden, repairable), other structures are removed.
+     *
+     * Does nothing if the structure is already destroyed (marked for destruction or a `Prototype`).
      *
      * @param destroyedHandle Destroyed structure.
      * @param destroyerHandle Attacker; its attack target is cleared.

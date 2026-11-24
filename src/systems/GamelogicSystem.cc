@@ -213,11 +213,16 @@ void gamedev::GamelogicSystem::SetMoveOrder(Living* subject, tg::vec3 moveTo)
 
 void gamedev::GamelogicSystem::UpdateMoveOrder(const Instance& instance, Living* subject, float dt)
 {
-    if (!subject->moveOrder)
-        return;
-
     if (mECS->TestSignature<InTower>(instance.mHandle))
     {
+        return;
+    }
+
+    // Without a move order a unit stands still; otherwise a stale velocity keeps pushing it (e.g. into the structure it attacks)
+    if (!subject->moveOrder)
+    {
+        if (auto physics = mECS->TryGetComponent<Physics>(instance.mHandle))
+            physics->velocity = tg::vec3::zero;
         return;
     }
 
@@ -314,8 +319,8 @@ void gamedev::GamelogicSystem::UpdateAttackOrder(const Instance& instance, Livin
 {
     const int updatesPerSecond = 60;
 
-    // Check if target handle is stale
-    if (!mECS->IsLiveHandle(attacker->attackOrder))
+    // Check if target handle is stale (dead, or a destroyed wall that became a prototype)
+    if (!mECS->IsLiveHandle(attacker->attackOrder) || mECS->TestSignature<Prototype>(attacker->attackOrder))
     {
         subject->focusHandle._value = std::uint32_t(-1);
         attacker->attackOrder._value = std::uint32_t(-1);
@@ -881,6 +886,10 @@ void gamedev::GamelogicSystem::Kill(InstanceHandle killedHandle, bool killedPion
 
 void gamedev::GamelogicSystem::Destroy(InstanceHandle destroyedHandle, InstanceHandle destroyerHandle)
 {
+    // Already destroyed (by another attacker in this update, or a wall waiting for repair)
+    if (mECS->GetInstance(destroyedHandle).destroy || mECS->TestSignature<Prototype>(destroyedHandle))
+        return;
+
     Event e(EventType::BuildingDestroyed, destroyerHandle, destroyedHandle);
     mECS->SendFunctionalEvent(e);
 
