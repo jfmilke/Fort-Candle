@@ -107,7 +107,7 @@ public:
      * Creates a live instance from a preset, at the preset's transform.
      *
      * The instance gets copies of all components except `Prototype`, so it joins the systems.
-     * It is added to the spatial hash map, announced with `EventType::NewPosition` and remembered for saving and for `MarkLastCreated`.
+     * It is added to the spatial hash map, published (`EngineECS::PublishPosition`) and remembered for saving and for `MarkLastCreated`.
      *
      * @param identifier Preset name or path.
      * @return The new instance, or an invalid handle if the preset does not exist.
@@ -157,7 +157,7 @@ public:
     /**
      * Creates a copy of an instance with all its components (a `Prototype` stays a prototype) and adds it to the spatial hash map.
      *
-     * Unlike `Create`, the copy is not remembered for saving, and no `EventType::NewPosition` is sent.
+     * Unlike `Create`, the copy is not remembered for saving, and it is not published right away.
      *
      * @param templateHandle Live instance to copy.
      * @return The copy.
@@ -165,7 +165,7 @@ public:
     InstanceHandle Clone(InstanceHandle templateHandle);
 
     /**
-     * Like `Clone(templateHandle)`, placed at `position` and announced with `EventType::NewPosition`.
+     * Like `Clone(templateHandle)`, placed at `position` and published (`EngineECS::PublishPosition`).
      *
      * @param templateHandle Live instance to copy.
      * @param position World position; the height is taken from the terrain, if attached.
@@ -299,14 +299,6 @@ private:
      * @return The created instances; empty if the file cannot be opened.
      */
     std::vector<InstanceHandle> LoadObjectsFrom(std::filesystem::path filepath, bool marked = false);
-
-    /**
-     * Sends `EventType::NewPosition` for an instance whose rotation or scale changed after it was placed,
-     * so that the `CollisionSystem` recomputes its collision shape.
-     *
-     * @param handle Live instance.
-     */
-    void AnnounceTransform(InstanceHandle handle);
 
     /**
      * Sets `Physics::lastPosition` to the current position of a freshly placed instance,

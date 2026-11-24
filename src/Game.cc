@@ -59,6 +59,7 @@ Game::ProfileZones Game::registerProfileZones(gamedev::profiling::Profiler& prof
     zones.lights = add("lights", Cadence::Tick);
     zones.physics = add("physics", Cadence::Tick);
     zones.collision = add("collision", Cadence::Tick);
+    zones.publish = add("publish", Cadence::Tick);
     zones.environment = add("environment", Cadence::Tick);
     zones.gamelogic = add("gamelogic", Cadence::Tick);
     zones.animation = add("animation", Cadence::Tick);
@@ -319,6 +320,7 @@ void Game::updateSystems(float elapsedSeconds)
     {
         mProfiler.Measure(mZones.physics, [&] { mPhysicsSys->Update(elapsedSeconds); });
         mProfiler.Measure(mZones.collision, [&] { mCollisionSys->Update(elapsedSeconds); });
+        mProfiler.Measure(mZones.publish, [&] { mECS->PublishPositions(); });
         mProfiler.Measure(mZones.environment, [&] { mEnvironmentSys->Update(elapsedSeconds); });
         mProfiler.Measure(mZones.gamelogic, [&] { mGamelogicSys->Update(elapsedSeconds); });
         mProfiler.Measure(mZones.animation, [&] { mAnimationSys->Update(elapsedSeconds); });
@@ -758,8 +760,8 @@ void Game::onGui()
 
                 // run the editor (some Imgui and a gizmo to move it around)
                 gamedev::manipulateTransform(mAdvancedFeatures.mEditorState, view, proj, transformToManipulate);
-                // let the PhysicsSystem publish gizmo moves (hash maps)
-                mAdvancedFeatures.mWorld.getInstance(mAdvancedFeatures.mSelectedInstance).new_position = true;
+                // publish gizmo moves (hash maps, collision shape) right away, also while the game is paused
+                mECS->PublishPosition(mAdvancedFeatures.mSelectedInstance);
                 if (mECS->TestSignature<gamedev::Physics>(mAdvancedFeatures.mSelectedInstance))
                 {
                     gamedev::manipulatePhysics(mAdvancedFeatures.mEditorState, mECS->GetComponent<gamedev::Physics>(mAdvancedFeatures.mSelectedInstance));

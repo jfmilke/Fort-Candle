@@ -242,6 +242,7 @@ private:
         gamedev::profiling::ZoneId lights;      ///< `LightSystem::Update`.
         gamedev::profiling::ZoneId physics;     ///< `PhysicsSystem::Update`.
         gamedev::profiling::ZoneId collision;   ///< `CollisionSystem::Update`.
+        gamedev::profiling::ZoneId publish;     ///< `EngineECS::PublishPositions` (hash maps and collision shapes of moved instances).
         gamedev::profiling::ZoneId environment; ///< `EnvironmentSystem::Update`.
         gamedev::profiling::ZoneId gamelogic;   ///< `GamelogicSystem::Update`.
         gamedev::profiling::ZoneId animation;   ///< `AnimationSystem::Update`.

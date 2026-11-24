@@ -58,16 +58,5 @@ void gamedev::PhysicsSystem::Update(float dt)
             if (InstanceBody->velocity.y < 0.f)
                 InstanceBody->velocity.y = 0.f;
         }
-
-        // Publish moves (by this system or by collision pushes) once
-        if (Instance.new_position)
-        {
-            Instance.new_position = false;
-            auto e = Event(EventType::NewPosition, handle, handle);
-            mECS->SendFunctionalEvent(e);
-            UpdateHashmap(handle, Instance.xform.translation);
-        }
     }
 }
-
-void gamedev::PhysicsSystem::UpdateHashmap(InstanceHandle handle, tg::vec3& translation) { mECS->GetHashMap().UpdateInstance(handle, translation); }

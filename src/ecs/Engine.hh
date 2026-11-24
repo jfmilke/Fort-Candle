@@ -371,9 +371,43 @@ public:
     /**
      * Spatial hash of instances on the ground plane for neighbourhood queries (e.g. targets in range, free spawn spots).
      *
-     * Factories add created instances and `PhysicsSystem` updates moved ones.
+     * Factories add created instances; `PublishPosition` updates moved ones.
      */
     Hash2D& GetHashMap() { return mSpatialHashMap; }
+
+    // Position Publishing
+    // -------------------
+
+    /**
+     * Publishes the transform of an instance after it was moved, rotated or scaled, and clears `Instance::new_position`.
+     *
+     * Updates the instance in the spatial hash map (`GetHashMap`, with its `Instance::max_bounds`)
+     * and sends `EventType::NewPosition`, so that the `CollisionSystem` updates its shape and hash maps.
+     * Call it right away when other code must see the move in the same update; otherwise setting `Instance::new_position` is enough.
+     *
+     * @param handle Live instance.
+     */
+    void PublishPosition(InstanceHandle handle)
+    {
+        auto& instance = mInstanceManager->getInstance(handle);
+        instance.new_position = false;
+        mSpatialHashMap.UpdateInstance(handle, instance.xform.translation, instance.max_bounds);
+
+        Event e(EventType::NewPosition, handle, handle);
+        SendFunctionalEvent(e);
+    }
+
+    /// Publishes (`PublishPosition`) every live instance with `Instance::new_position`; `Game` calls it once per update after the collision step.
+    void PublishPositions()
+    {
+        // Indexed loop: listeners must not destroy instances, but they may create some (appended to the pool)
+        for (uint32_t i = 0; i < mInstanceManager->getNumLiveInstances(); ++i)
+        {
+            auto const& instance = mInstanceManager->getNthInstance(i);
+            if (instance.new_position)
+                PublishPosition(instance.mHandle);
+        }
+    }
 
 private:
     /// Sets or clears the signature bit of `CompT` and re-evaluates the system membership.

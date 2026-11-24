@@ -1276,8 +1276,7 @@ void gamedev::GamelogicSystem::SpawnSpikes()
         mOutlinedHandles.push_back(mWalls.back());
         mOutlinedColors.push_back(tg::vec4(0.0, 153.0 / 255.0, 1.0, 1.0));
 
-        auto e = Event(EventType::NewPosition, spikes, spikes);
-        mECS->SendFunctionalEvent(e);
+        mECS->PublishPosition(spikes);
 
         translation = wRot * translation;
         w++;
@@ -1291,8 +1290,7 @@ void gamedev::GamelogicSystem::SpawnSpikes()
     mOutlinedHandles.push_back(mWalls.back());
     mOutlinedColors.push_back(tg::vec4(0.0, 153.0 / 255.0, 1.0, 1.0));
 
-    auto e = Event(EventType::NewPosition, spikes, spikes);
-    mECS->SendFunctionalEvent(e);
+    mECS->PublishPosition(spikes);
 
 
     w++;
@@ -2207,6 +2205,7 @@ void gamedev::GamelogicSystem::UpgradeSupply()
             auto soldierHandle = mUF->Create("person_soldier");
             mECS->CreateComponent<InTower>(soldierHandle);
             mECS->GetInstanceTransform(soldierHandle).translation = tg::vec3(xform.translation + tg::vec3(tower->position) * xform.scaling);
+            mECS->PublishPosition(soldierHandle); // Monsters find their targets in the ECS hash map
 
             mOutlinedHandles.push_back(towerHandle);
             mOutlinedColors.push_back(tg::vec4(0.0, 153.0 / 255.0, 1.0, 1.0));

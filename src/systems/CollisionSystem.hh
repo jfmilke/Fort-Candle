@@ -16,11 +16,11 @@ namespace gamedev
  *
  * Entities: all instances with a `Collider` (plus a `BoxShape` or `CircleShape`); units inside a tower (`InTower`) take no part.
  * Static and dynamic colliders are kept in separate spatial hash maps (broad phase).
- * `EventType::NewPosition` keeps the hash maps and the cached world-space shapes of static colliders up to date.
+ * `EventType::NewPosition` keeps the hash maps and the cached world-space shapes up to date for moves outside this system.
  *
  * Every update:
  *
- *  1. The world-space shapes of the dynamic colliders are refreshed,
+ *  1. The world-space shapes and hash map entries of the dynamic colliders are refreshed (their physics moves are not published yet),
  *     and the candidate pairs (dynamic-dynamic and dynamic-static) are collected from the hash maps.
  *  2. Overlaps are resolved by moving positions only, in `kIterations` rounds.
  *     Each round first pushes overlapping dynamic colliders apart (half the overlap each),
@@ -31,7 +31,7 @@ namespace gamedev
  *
  * Velocities are not changed: a unit walking into an obstacle is pushed back along the contact normal every update,
  * so it slides along the obstacle with the tangential part of its velocity.
- * Moved instances get `Instance::new_position`.
+ * Moved instances get `Instance::new_position`; `Game` publishes them right after this step (`EngineECS::PublishPositions`).
  */
 class CollisionSystem : public System
 {
@@ -194,9 +194,10 @@ private:
     std::set<InstanceHandle> mStaticEntities;  ///< Colliders that never move.
     std::set<InstanceHandle> mDynamicEntities; ///< Colliders that move (units).
 
-    std::vector<WorldShape> mShapes;                                    ///< World-space shapes by `World` slot (`MAX_INSTANCES` entries).
+    std::vector<WorldShape> mShapes;                                      ///< World-space shapes by `World` slot (`MAX_INSTANCES` entries).
     std::vector<std::pair<InstanceHandle, InstanceHandle>> mDynamicPairs; ///< Candidate dynamic pairs of this update (each pair once).
-    std::vector<StaticPair> mStaticPairs;                               ///< Candidate dynamic-static pairs of this update.
+    std::vector<StaticPair> mStaticPairs;                                 ///< Candidate dynamic-static pairs of this update.
+    std::vector<InstanceHandle> mCandidates;                              ///< Reused result buffer of hash map queries.
 
     Hash2D mStaticColliderHashMap;  ///< Broad phase for static colliders.
     Hash2D mDynamicColliderHashMap; ///< Broad phase for dynamic colliders (without `InTower` units).

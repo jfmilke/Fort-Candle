@@ -15,8 +15,7 @@ namespace gamedev
  *
  * Entities: all instances with a `Physics` component; units inside a tower (`InTower`) are skipped.
  *
- *  - It publishes the positions of instances with `Instance::new_position`: it sends `EventType::NewPosition`
- *    (so the `CollisionSystem` updates its hash maps) and updates the ECS spatial hash map.
+ * Moved instances get `Instance::new_position`; `EngineECS::PublishPositions` publishes them after the collision step.
  */
 class PhysicsSystem : public System
 {
@@ -33,20 +32,11 @@ public:
 
 
     /**
-     * Moves all entities and publishes the positions that changed (`Instance::new_position`), then resets the flag.
+     * Moves all entities, sets `Physics::lastPosition` before the move and flags moved instances (`Instance::new_position`).
      *
      * @param dt Time step in seconds.
      */
     void Update(float dt);
-
-private:
-    /**
-     * Moves an instance in the ECS spatial hash map.
-     *
-     * @param handle Instance to move.
-     * @param translation Its new world position.
-     */
-    void UpdateHashmap(InstanceHandle handle, tg::vec3& translation);
 
 private:
     const float mGravity = -9.81f; ///< Gravity in world units per second squared.

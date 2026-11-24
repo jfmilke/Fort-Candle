@@ -215,7 +215,6 @@ gamedev::InstanceHandle gamedev::Factory::Clone(InstanceHandle source_handle, tg
     auto clone_handle = Clone(source_handle);
     auto& clone = mECS->GetInstance(clone_handle);
     clone.xform.translation = position - tg::pos3::zero;
-    mECS->GetHashMap().UpdateInstance(clone_handle, clone.xform.translation, clone.max_bounds);
 
     if (mT)
     {
@@ -223,9 +222,7 @@ gamedev::InstanceHandle gamedev::Factory::Clone(InstanceHandle source_handle, tg
     }
     SettlePhysics(clone_handle);
 
-    mECS->GetHashMap().UpdateInstance(clone_handle, clone.xform.translation, clone.max_bounds);
-    auto e = Event(EventType::NewPosition, clone_handle, clone_handle);
-    mECS->SendFunctionalEvent(e);
+    mECS->PublishPosition(clone_handle);
 
     return clone_handle;
 }
@@ -235,7 +232,7 @@ gamedev::InstanceHandle gamedev::Factory::Clone(InstanceHandle source_handle, tg
     auto clone_handle = Clone(source_handle, position);
     auto& clone = mECS->GetInstance(clone_handle);
     clone.xform.rotation = rotation;
-    AnnounceTransform(clone_handle);
+    mECS->PublishPosition(clone_handle);
 
     return clone_handle;
 }
@@ -246,7 +243,7 @@ gamedev::InstanceHandle gamedev::Factory::Clone(InstanceHandle source_handle, tg
     auto& clone = mECS->GetInstance(clone_handle);
     clone.xform.rotation = rotation;
     clone.xform.scaling = scaling;
-    AnnounceTransform(clone_handle);
+    mECS->PublishPosition(clone_handle);
 
     return clone_handle;
 }
@@ -256,7 +253,7 @@ gamedev::InstanceHandle gamedev::Factory::Clone(InstanceHandle source_handle, tg
     auto clone_handle = Clone(source_handle, position);
     auto& clone = mECS->GetInstance(clone_handle);
     clone.xform.scaling = scaling;
-    AnnounceTransform(clone_handle);
+    mECS->PublishPosition(clone_handle);
 
     return clone_handle;
 }
@@ -279,10 +276,9 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string identifier)
 
     auto& instance = mECS->GetInstance(fresh_handle);
     mECS->GetHashMap().AddInstance(fresh_handle, instance.xform.translation, instance.max_bounds);
-    auto e = Event(EventType::NewPosition, fresh_handle, fresh_handle);
-    mECS->SendFunctionalEvent(e);
 
     mECS->UpdateSystems(fresh_handle);
+    mECS->PublishPosition(fresh_handle);
 
     mGeneratedObjects.push_back({fresh_handle, name});
     mLastCreated = mGeneratedObjects.back();
@@ -299,17 +295,13 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::po
     auto& transform = mECS->GetInstance(fresh_handle).xform;
     transform.translation = tg::vec3(position);
 
-    auto& instance = mECS->GetInstance(fresh_handle);
-
     if (mT)
     {
         transform.translation.y = mT->heightAt(position);
     }
     SettlePhysics(fresh_handle);
 
-    mECS->GetHashMap().UpdateInstance(fresh_handle, instance.xform.translation, instance.max_bounds);
-    auto e = Event(EventType::NewPosition, fresh_handle, fresh_handle);
-    mECS->SendFunctionalEvent(e);
+    mECS->PublishPosition(fresh_handle);
 
     return fresh_handle;
 }
@@ -322,7 +314,7 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::po
 
     auto& transform = mECS->GetInstance(fresh_handle).xform;
     transform.rotation = rotation;
-    AnnounceTransform(fresh_handle);
+    mECS->PublishPosition(fresh_handle);
 
     return fresh_handle;
 }
@@ -336,7 +328,7 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::po
     auto& transform = mECS->GetInstance(fresh_handle).xform;
     transform.rotation = rotation;
     transform.scaling = scaling;
-    AnnounceTransform(fresh_handle);
+    mECS->PublishPosition(fresh_handle);
 
     return fresh_handle;
 }
@@ -349,7 +341,7 @@ gamedev::InstanceHandle gamedev::Factory::Create(std::string object_name, tg::po
 
     auto& transform = mECS->GetInstance(fresh_handle).xform;
     transform.scaling = scaling;
-    AnnounceTransform(fresh_handle);
+    mECS->PublishPosition(fresh_handle);
 
     return fresh_handle;
 }
@@ -433,12 +425,6 @@ std::vector<std::pair<gamedev::InstanceHandle, std::string>> gamedev::Factory::G
     }
 
     return identifiers;
-}
-
-void gamedev::Factory::AnnounceTransform(InstanceHandle handle)
-{
-    auto e = Event(EventType::NewPosition, handle, handle);
-    mECS->SendFunctionalEvent(e);
 }
 
 void gamedev::Factory::SettlePhysics(InstanceHandle handle)

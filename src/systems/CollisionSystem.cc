@@ -120,11 +120,18 @@ void gamedev::CollisionSystem::CollectPairs()
     mDynamicPairs.clear();
     mStaticPairs.clear();
 
-    // Units turn and move without publishing every change, so their shapes are refreshed once per update
+    // Units turn without publishing, and their moves of this update are published after this step,
+    // so their shapes and hash map entries are refreshed here (unchanged cells cost nothing)
     for (auto const handle : mDynamicEntities)
     {
-        if (!mECS->TestSignature<InTower>(handle))
-            CachedShape(handle) = ComputeWorldShape(handle);
+        if (mECS->TestSignature<InTower>(handle))
+            continue;
+
+        auto& shape = CachedShape(handle);
+        shape = ComputeWorldShape(handle);
+
+        auto const& translation = mECS->GetInstanceTransform(handle).translation;
+        mDynamicColliderHashMap.UpdateInstance(handle, translation, BroadPhaseBounds(shape, translation));
     }
 
     for (auto const handle : mDynamicEntities)
@@ -135,14 +142,16 @@ void gamedev::CollisionSystem::CollectPairs()
         auto const& translation = mECS->GetInstanceTransform(handle).translation;
         auto const bounds = BroadPhaseBounds(CachedShape(handle), translation, kPairMargin);
 
-        for (auto const other : mDynamicColliderHashMap.FindNear(translation, bounds))
+        mDynamicColliderHashMap.FindNear(translation, bounds, mCandidates);
+        for (auto const other : mCandidates)
         {
             // Each pair once
             if (handle < other)
                 mDynamicPairs.push_back({handle, other});
         }
 
-        for (auto const body : mStaticColliderHashMap.FindNear(translation, bounds))
+        mStaticColliderHashMap.FindNear(translation, bounds, mCandidates);
+        for (auto const body : mCandidates)
             mStaticPairs.push_back({handle, body});
     }
 }
@@ -189,7 +198,7 @@ void gamedev::CollisionSystem::RevertWedgedColliders()
 std::optional<tg::vec2> gamedev::CollisionSystem::FindFreeSpot(InstanceHandle handle, WorldShape const& shape)
 {
     auto const& translation = mECS->GetInstanceTransform(handle).translation;
-    auto const bodies = mStaticColliderHashMap.FindNear(translation, BroadPhaseBounds(shape, translation, kEscapeDistance));
+    mStaticColliderHashMap.FindNear(translation, BroadPhaseBounds(shape, translation, kEscapeDistance), mCandidates);
 
     // Rings of candidate positions, nearest first
     for (auto distance = kEscapeStep; distance <= kEscapeDistance; distance += kEscapeStep)
@@ -203,7 +212,7 @@ std::optional<tg::vec2> gamedev::CollisionSystem::FindFreeSpot(InstanceHandle ha
             candidate.center += offset;
 
             auto const blocks = [&](InstanceHandle body) { return ComputeContact(candidate, CachedShape(body)).separation < 0.f; };
-            if (std::ranges::none_of(bodies, blocks))
+            if (std::ranges::none_of(mCandidates, blocks))
                 return offset;
         }
     }
