@@ -17,13 +17,12 @@ namespace gamedev
  *
  *  - It publishes the positions of instances with `Instance::new_position`: it sends `EventType::NewPosition`
  *    (so the `CollisionSystem` updates its hash maps) and updates the ECS spatial hash map.
- *  - On `EventType::StaticCollision` it resets the subject's `Physics::lastPosition`.
  */
 class PhysicsSystem : public System
 {
 public:
     /**
-     * Stores the ECS and registers the collision listener.
+     * Stores the ECS.
      *
      * @param ecs The ECS; must outlive this object.
      */
@@ -49,17 +48,8 @@ private:
      */
     void UpdateHashmap(InstanceHandle handle, tg::vec3& translation);
 
-    /**
-     * `EventType::StaticCollision` listener: sets the subject's `lastPosition` to its current position.
-     *
-     * @param e Collision event; the subject is the dynamic collider.
-     */
-    void CollisionListener(Event& e);
-
 private:
     const float mGravity = -9.81f; ///< Gravity in world units per second squared.
-    const float mDamping = 0.02f;  ///< Unused.
-    float last_dt = 0.0;           ///< Unused.
 
 private:
     EngineECS* mECS = nullptr;         ///< ECS (not owned).

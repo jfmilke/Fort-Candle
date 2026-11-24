@@ -13,7 +13,7 @@ struct Component;
  */
 enum class EventType
 {
-    StaticCollision,   ///< `CollisionSystem`: a dynamic entity (subject) overlaps a static one (sender).
+    StaticCollision,   ///< `CollisionSystem`: a dynamic entity (subject) touches or overlaps a static one (sender); sent every update.
     NewPosition,       ///< The sender (= subject) moved or was created; `CollisionSystem` updates its hash maps.
     ArrowHit,          ///< `AnimationSystem`: arrow (sender) reached its target (subject).
     MonsterHit,        ///< An arrow (sender) damaged a monster (subject).

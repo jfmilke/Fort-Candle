@@ -215,7 +215,7 @@ void Game::init()
     endPhase(mZones.engine);
 
     mGameAssets->scanMeshes();
-    mUnitFac->RegisterAutomatically(mGameAssets->getObjectsByFolder("units"), 0.25f, true);
+    mUnitFac->RegisterAutomatically(mGameAssets->getObjectsByFolder("units"), 0.25f, false);
     mNatureFac->RegisterAutomatically(mGameAssets->getObjectsByFolder("nature"), 0.8f);
     mStructFac->RegisterAutomatically(mGameAssets->getObjectsByFolder("structures"), 2.f, true);
     mItemFac->RegisterAutomatically(mGameAssets->getObjectsByFolder("items"), 0.8f);

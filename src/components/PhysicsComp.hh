@@ -19,7 +19,7 @@ struct Physics : Component
     using Component::Component; // Use constructor of component
 
     tg::vec3 velocity = tg::vec3::zero;     ///< Velocity in world units per second.
-    tg::vec3 lastPosition = tg::vec3::zero; ///< Position before the last physics update; used to undo moves into colliders and to aim arrows ahead.
+    tg::vec3 lastPosition = tg::vec3::zero; ///< Position before the last physics update; used to estimate the velocity for leading arrow shots.
 
     bool forceGround = true; ///< Snap the height to the terrain every update.
     bool gravity = false;    ///< Accelerate downwards (-y) by 9.81 per second squared.

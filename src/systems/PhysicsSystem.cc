@@ -4,8 +4,6 @@
 void gamedev::PhysicsSystem::Init(EngineECS& ecs)
 {
     mECS = &ecs;
-
-    mECS->AddFunctionalListener(FUNCTIONAL_LISTENER(EventType::StaticCollision, PhysicsSystem::CollisionListener));
 }
 
 void gamedev::PhysicsSystem::SetTerrain(std::shared_ptr<Terrain>& t) { mTerrain = t; }
@@ -21,18 +19,18 @@ void gamedev::PhysicsSystem::Update(float dt)
         auto InstanceBody = mECS->GetComponent<Physics>(handle);
         InstanceBody->lastPosition = Instance.xform.translation;
 
+        // Gravity (also accelerates resting bodies)
+        if (InstanceBody->gravity)
+        {
+            InstanceBody->velocity.y += dt * mGravity;
+        }
+
         // Move
         if (InstanceBody->velocity != tg::vec3::zero)
         {
             auto move = dt * InstanceBody->velocity;
             Instance.xform.move_absolute(move);
             Instance.new_position = true;
-
-            // Gravity
-            if (InstanceBody->gravity)
-            {
-                InstanceBody->velocity.y += dt * mGravity;
-            }
 
             // Arrow parabola (fake gravity)
             if (InstanceBody->arrowArc)
@@ -57,6 +55,10 @@ void gamedev::PhysicsSystem::Update(float dt)
         {
             float h = mTerrain->heightAt(tg::pos3::zero + Instance.xform.translation);
             Instance.xform.translation.y = h;
+
+            // Landed: gravity must not build up speed while the body stands on the ground
+            if (InstanceBody->velocity.y < 0.f)
+                InstanceBody->velocity.y = 0.f;
         }
 
         // Publish moves (by this system or by collision pushes) once
@@ -71,13 +73,3 @@ void gamedev::PhysicsSystem::Update(float dt)
 }
 
 void gamedev::PhysicsSystem::UpdateHashmap(InstanceHandle handle, tg::vec3& translation) { mECS->GetHashMap().UpdateInstance(handle, translation); }
-
-void gamedev::PhysicsSystem::CollisionListener(Event& e)
-{
-    auto physics = mECS->TryGetComponent<Physics>(e.mSubject);
-
-    if (physics)
-    {
-        physics->lastPosition = mECS->GetInstanceTransform(e.mSubject).translation;
-    }
-}
