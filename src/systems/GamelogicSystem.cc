@@ -446,8 +446,8 @@ void gamedev::GamelogicSystem::ShootArrow(Attacker* attacker)
     auto const bowCenter = bowBounds.min + 0.5f * (bowBounds.max - bowBounds.min);
     auto const spawn = tg::pos3(bow.translation + bow.rotation * (tg::vec3(bowCenter) * bow.scaling));
 
-    auto const launchVelocity = AimArrow(attacker, spawn);
-    if (!launchVelocity)
+    auto const shot = AimArrow(attacker, spawn);
+    if (!shot)
         return;
 
     auto arrowHandle = mIF->Create("arrow", spawn);
@@ -457,10 +457,12 @@ void gamedev::GamelogicSystem::ShootArrow(Attacker* attacker)
     auto arrowComp = mECS->GetComponent<Arrow>(arrowHandle);
     arrowComp->target = attacker->attackOrder;
     arrowComp->shotBy = {attacker->handle_value};
+    arrowComp->hitsBlockers = shot->straight;
+    arrowComp->launchPosition = spawn;
 
     // Ballistic flight; the AnimationSystem aligns the arrow to its velocity before it is drawn
     auto physicsComp = mECS->GetComponent<Physics>(arrowHandle);
-    physicsComp->velocity = *launchVelocity;
+    physicsComp->velocity = shot->velocity;
     physicsComp->lastPosition = arrow.xform.translation;
     physicsComp->forceGround = false;
     physicsComp->gravity = true;
@@ -587,7 +589,7 @@ void gamedev::GamelogicSystem::AimWeapon(Attacker* attacker)
 }
 
 
-std::optional<tg::vec3> gamedev::GamelogicSystem::AimArrow(Attacker* attacker, tg::pos3 start)
+std::optional<gamedev::GamelogicSystem::ArrowShot> gamedev::GamelogicSystem::AimArrow(Attacker* attacker, tg::pos3 start)
 {
     const auto& target = mECS->GetInstance(attacker->attackOrder);
 
@@ -600,7 +602,8 @@ std::optional<tg::vec3> gamedev::GamelogicSystem::AimArrow(Attacker* attacker, t
     auto const toTarget = tg::vec2(target.xform.translation.x - start.x, target.xform.translation.z - start.z);
 
     // From the flattest arc the bow can shoot to the highest lob
-    std::optional<tg::vec3> highest;
+    std::optional<ArrowShot> lob;
+    auto flattest = true;
     for (auto t = kMinArrowFlightTime; t <= kMaxArrowFlightTime; t *= kArrowFlightTimeStep)
     {
         // Aim point: body center above the ground where the target will be after t
@@ -615,26 +618,35 @@ std::optional<tg::vec3> gamedev::GamelogicSystem::AimArrow(Attacker* attacker, t
         // Too fast for the bow: before the reachable flight times (flat side) or past them (too high)
         if (tg::length(velocity) > maxSpeed)
         {
-            if (highest)
+            if (!flattest)
                 break;
             continue;
         }
 
-        highest = velocity;
-        if (IsArrowArcClear(start, velocity, t, tg::length(offset)))
-            return velocity;
+        // Straight shot: the flattest arc, if nothing is in the way up to the target
+        if (flattest)
+        {
+            flattest = false;
+            if (IsArrowArcClear(start, velocity, t, tg::length(offset), 0.f))
+                return ArrowShot{velocity, true};
+        }
+
+        // Lob: the lowest arc that passes over the structures (it flies through them anyway)
+        lob = ArrowShot{velocity, false};
+        if (IsArrowArcClear(start, velocity, t, tg::length(offset), kArrowFreeApproach))
+            return lob;
     }
 
-    return highest;
+    return lob;
 }
 
-bool gamedev::GamelogicSystem::IsArrowArcClear(tg::pos3 start, tg::vec3 velocity, float flightTime, float distance)
+bool gamedev::GamelogicSystem::IsArrowArcClear(tg::pos3 start, tg::vec3 velocity, float flightTime, float distance, float freeApproach)
 {
-    if (!mCollision || distance <= kArrowFreeApproach)
+    if (!mCollision || distance <= freeApproach)
         return true;
 
     // Straight pieces of the arc up to the free approach (the horizontal speed is constant)
-    auto const checkedTime = flightTime * (1.f - kArrowFreeApproach / distance);
+    auto const checkedTime = flightTime * (1.f - freeApproach / distance);
     auto const pointAt = [&](float time) { return start + velocity * time - tg::vec3(0.f, 0.5f * PhysicsSystem::kGravity * time * time, 0.f); };
 
     auto previous = start;

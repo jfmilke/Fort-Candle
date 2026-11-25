@@ -1,4 +1,5 @@
 #include "systems/AnimationSystem.hh"
+#include "systems/CollisionSystem.hh"
 #include "advanced/transform.hh"
 #include "glow/common/log.hh"
 
@@ -55,19 +56,21 @@ void gamedev::AnimationSystem::RemoveEntity(InstanceHandle handle)
 {
     mArrows.erase(handle);
     mEntities.erase(handle);
-    std::erase(mGroundArrows, handle);
+    std::erase(mStuckArrows, handle);
 }
 
 void gamedev::AnimationSystem::RemoveAllEntities()
 {
     mArrows.clear();
     mEntities.clear();
-    mGroundArrows.clear();
+    mStuckArrows.clear();
 }
 
 void gamedev::AnimationSystem::Init(EngineECS& ecs) { mECS = &ecs; }
 
 void gamedev::AnimationSystem::SetTerrain(std::shared_ptr<Terrain> terrain) { mTerrain = std::move(terrain); }
+
+void gamedev::AnimationSystem::SetCollision(std::shared_ptr<CollisionSystem> collision) { mCollision = std::move(collision); }
 
 void gamedev::AnimationSystem::Update(float dt)
 {
@@ -87,15 +90,15 @@ void gamedev::AnimationSystem::Update(float dt)
 
         if (arrow->state == ArrowState::Flying)
             UpdateFlyingArrow(handle, *arrow, dt);
-        else if (arrow->state == ArrowState::InTarget)
-            FollowTarget(handle, *arrow);
+        else if (arrow->state == ArrowState::InObject)
+            FollowObject(handle, *arrow);
     }
 
-    // The oldest arrows in the ground make room for new ones
-    while (mGroundArrows.size() > kMaxGroundArrows)
+    // The oldest arrows in the ground or in structures make room for new ones
+    while (mStuckArrows.size() > kMaxStuckArrows)
     {
-        mECS->MarkDestruction(mGroundArrows.front());
-        mGroundArrows.pop_front();
+        mECS->MarkDestruction(mStuckArrows.front());
+        mStuckArrows.pop_front();
     }
 }
 
@@ -122,25 +125,45 @@ void gamedev::AnimationSystem::UpdateFlyingArrow(InstanceHandle handle, Arrow& a
     auto const tipBefore = tg::pos3(physics->lastPosition) + dir * Arrow::tipOffset;
     auto const tipNow = tg::pos3(xform.translation) + dir * Arrow::tipOffset;
 
-    // Hit: the tip passes the target's aim point
+    // Target: the tip passes its aim point
+    auto targetFraction = 2.f; // none
+    auto aim = tg::pos3::zero;
+    auto targetOffset = tg::vec3::zero;
     if (mECS->IsLiveHandle(arrow.target) && !mECS->GetInstance(arrow.target).destroy)
     {
-        auto const aim = tg::pos3(mECS->GetInstanceTransform(arrow.target).translation) + tg::vec3(0.f, Arrow::aimHeight, 0.f);
-        auto const closest = tg::mix(tipBefore, tipNow, ClosestOnSegment(tipBefore, tipNow, aim));
-        auto const offset = closest - aim;
+        aim = tg::pos3(mECS->GetInstanceTransform(arrow.target).translation) + tg::vec3(0.f, Arrow::aimHeight, 0.f);
+        auto const fraction = ClosestOnSegment(tipBefore, tipNow, aim);
+        targetOffset = tg::mix(tipBefore, tipNow, fraction) - aim;
 
-        if (tg::dot(offset, offset) < tg::pow2(Arrow::hitRadius))
+        if (tg::dot(targetOffset, targetOffset) < tg::pow2(Arrow::hitRadius))
+            targetFraction = fraction;
+    }
+
+    // Structure: straight shots stick in the first one the tip enters, unless the target comes first
+    if (arrow.hitsBlockers && mCollision)
+    {
+        if (auto const hit = mCollision->FindSegmentHit(tipBefore, tipNow, arrow.launchPosition); hit && hit->fraction < targetFraction)
         {
-            Event e(EventType::ArrowHit, handle, arrow.target);
-            mECS->SendFunctionalEvent(e);
+            auto const impact = tg::mix(tipBefore, tipNow, hit->fraction);
+            xform.translation = tg::vec3(impact + dir * (Arrow::embedDepth - Arrow::tipOffset));
 
-            // The tip sticks near the aim point, at most `stuckRadius` off it
-            auto const stuck = tg::length(offset) > Arrow::stuckRadius ? tg::normalize(offset) * Arrow::stuckRadius : offset;
-            xform.translation = tg::vec3(aim + stuck - dir * Arrow::tipOffset);
-
-            StickInTarget(handle, arrow);
+            mStuckArrows.push_back(handle);
+            StickIn(handle, arrow, hit->body);
             return;
         }
+    }
+
+    if (targetFraction <= 1.f)
+    {
+        Event e(EventType::ArrowHit, handle, arrow.target);
+        mECS->SendFunctionalEvent(e);
+
+        // The tip sticks near the aim point, at most `stuckRadius` off it
+        auto const stuck = tg::length(targetOffset) > Arrow::stuckRadius ? tg::normalize(targetOffset) * Arrow::stuckRadius : targetOffset;
+        xform.translation = tg::vec3(aim + stuck - dir * Arrow::tipOffset);
+
+        StickIn(handle, arrow, arrow.target);
+        return;
     }
 
     // Landing: the tip goes below the terrain
@@ -157,40 +180,41 @@ void gamedev::AnimationSystem::UpdateFlyingArrow(InstanceHandle handle, Arrow& a
     xform.translation = tg::vec3(impact + dir * (Arrow::embedDepth - Arrow::tipOffset));
 
     arrow.state = ArrowState::InGround;
-    mGroundArrows.push_back(handle);
+    mStuckArrows.push_back(handle);
     StopArrow(handle);
 }
 
-void gamedev::AnimationSystem::StickInTarget(InstanceHandle handle, Arrow& arrow)
+void gamedev::AnimationSystem::StickIn(InstanceHandle handle, Arrow& arrow, InstanceHandle object)
 {
-    auto const& target = mECS->GetInstanceTransform(arrow.target);
+    auto const& host = mECS->GetInstanceTransform(object);
     auto const& xform = mECS->GetInstanceTransform(handle);
 
-    // Relative to the target: position in its local frame before scaling, and rotation
-    auto const inverseRotation = tg::conjugate(target.rotation);
-    auto const local = inverseRotation * (xform.translation - target.translation);
-    arrow.stuckOffset = {local.x / target.scaling.width, local.y / target.scaling.height, local.z / target.scaling.depth};
+    // Relative to the object: position in its local frame before scaling, and rotation
+    auto const inverseRotation = tg::conjugate(host.rotation);
+    auto const local = inverseRotation * (xform.translation - host.translation);
+    arrow.stuckTo = object;
+    arrow.stuckOffset = {local.x / host.scaling.width, local.y / host.scaling.height, local.z / host.scaling.depth};
     arrow.stuckRotation = tg::normalize(inverseRotation * xform.rotation);
-    arrow.state = ArrowState::InTarget;
+    arrow.state = ArrowState::InObject;
 
     StopArrow(handle);
 
     // If this arrow killed the target, it goes with it
-    FollowTarget(handle, arrow);
+    FollowObject(handle, arrow);
 }
 
-void gamedev::AnimationSystem::FollowTarget(InstanceHandle handle, Arrow& arrow)
+void gamedev::AnimationSystem::FollowObject(InstanceHandle handle, Arrow& arrow)
 {
-    if (!mECS->IsLiveHandle(arrow.target) || mECS->GetInstance(arrow.target).destroy)
+    if (!mECS->IsLiveHandle(arrow.stuckTo) || mECS->GetInstance(arrow.stuckTo).destroy || mECS->TestSignature<Prototype>(arrow.stuckTo))
     {
         mECS->MarkDestruction(handle);
         return;
     }
 
-    auto const& target = mECS->GetInstanceTransform(arrow.target);
+    auto const& host = mECS->GetInstanceTransform(arrow.stuckTo);
     auto& xform = mECS->GetInstanceTransform(handle);
-    xform.translation = target.translation + target.rotation * (arrow.stuckOffset * target.scaling);
-    xform.rotation = tg::normalize(target.rotation * arrow.stuckRotation);
+    xform.translation = host.translation + host.rotation * (arrow.stuckOffset * host.scaling);
+    xform.rotation = tg::normalize(host.rotation * arrow.stuckRotation);
 }
 
 void gamedev::AnimationSystem::StopArrow(InstanceHandle handle)

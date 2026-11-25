@@ -391,33 +391,42 @@ private:
      */
     void AimWeapon(Attacker* attacker);
 
+    /// Launch of an arrow chosen by `AimArrow`.
+    struct ArrowShot
+    {
+        tg::vec3 velocity; ///< World-space launch velocity.
+        bool straight;     ///< Straight shot (sticks in structures in its way, `Arrow::hitsBlockers`) or lob (flies through them).
+    };
+
     /**
-     * Computes the launch velocity of an arrow that hits the target if the target keeps its course.
+     * Chooses the launch of an arrow that hits the target if the target keeps its course.
      *
      * The target is assumed to move on at its `Physics::observedVelocity`;
      * the arrow flies a ballistic arc (`PhysicsSystem::kGravity`) to `Arrow::aimHeight` above the ground at the predicted target position.
      * Every flight time gives one such arc: short ones are flat and fast, long ones are high lobs.
      * The flight times from `kMinArrowFlightTime` to `kMaxArrowFlightTime` are tried in steps of `kArrowFlightTimeStep`,
-     * skipping arcs that need more than the bow's `missileSpeed`.
-     * The first arc that passes no structure (`IsArrowArcClear`) wins.
-     * If none does, the highest one is used, and the arrow flies through the obstacle (arrows do not collide with structures).
+     * skipping arcs that need more than the bow's `missileSpeed`:
+     *  1. The flattest arc is a straight shot if no structure is in its way up to the aim point (`IsArrowArcClear`).
+     *  2. Otherwise the archer lobs: the lowest arc that passes over the structures except in the last `kArrowFreeApproach`,
+     *     or the highest one if none does. Lobs fly through structures.
      *
      * @param attacker `Attacker` component of the soldier, with a bow and an attack target.
      * @param start Launch position of the arrow (world space).
-     * @return World-space launch velocity, or nothing if no arc reaches the target at the bow's speed.
+     * @return The launch, or nothing if no arc reaches the target at the bow's speed.
      */
-    std::optional<tg::vec3> AimArrow(Attacker* attacker, tg::pos3 start);
+    std::optional<ArrowShot> AimArrow(Attacker* attacker, tg::pos3 start);
 
     /**
-     * Tests whether an arrow arc passes a static collider (`CollisionSystem::IsSegmentBlocked`) before it gets within `kArrowFreeApproach` of the aim point.
+     * Tests whether an arrow arc passes a static collider (`CollisionSystem::IsSegmentBlocked`) before it gets within `freeApproach` of the aim point.
      *
      * @param start Launch position (world space); the collider the archer stands in does not count.
      * @param velocity Launch velocity.
      * @param flightTime Time until the arc reaches the aim point, in seconds.
      * @param distance Horizontal distance from `start` to the aim point.
+     * @param freeApproach Horizontal distance before the aim point in which obstacles are ignored.
      * @return True if no static collider is in the way, or if there is no collision system.
      */
-    bool IsArrowArcClear(tg::pos3 start, tg::vec3 velocity, float flightTime, float distance);
+    bool IsArrowArcClear(tg::pos3 start, tg::vec3 velocity, float flightTime, float distance, float freeApproach);
 
     /**
      * Launches an arrow with a smoke trail from the center of the bow, aimed with `AimArrow`.
@@ -671,7 +680,7 @@ private:
     static constexpr float kMaxArrowFlightTime = 3.5f;  ///< Longest flight time `AimArrow` tries (the highest lob), in seconds.
     static constexpr float kArrowFlightTimeStep = 1.1f; ///< Factor between the flight times `AimArrow` tries.
     static constexpr int kArrowArcChords = 12;          ///< Straight pieces an arc is split into for the obstacle test.
-    static constexpr float kArrowFreeApproach = 0.5f; ///< Horizontal distance before the aim point in which obstacles are ignored (monsters at a wall).
+    static constexpr float kArrowFreeApproach = 0.5f; ///< Horizontal distance before the aim point in which lobs ignore obstacles (monsters at a wall).
 
     EngineECS* mECS = nullptr;                   ///< ECS (not owned).
     std::shared_ptr<AudioSystem> mAS;            ///< Audio.

@@ -380,7 +380,7 @@ void gamedev::CollisionSystem::PositionListener(Event& e)
         mStaticColliderHashMap.UpdateInstance(e.mSubject, translation, bounds);
 }
 
-bool gamedev::CollisionSystem::IsSegmentBlocked(tg::pos3 from, tg::pos3 to, tg::pos3 exempt)
+std::optional<gamedev::CollisionSystem::SegmentHit> gamedev::CollisionSystem::FindSegmentHit(tg::pos3 from, tg::pos3 to, tg::pos3 exempt)
 {
     // Rectangle covered by the segment, relative to its start
     tg::aabb3 bounds;
@@ -388,17 +388,21 @@ bool gamedev::CollisionSystem::IsSegmentBlocked(tg::pos3 from, tg::pos3 to, tg::
     bounds.max = tg::pos3(tg::max(0.f, to.x - from.x), 0.f, tg::max(0.f, to.z - from.z));
     mStaticColliderHashMap.FindNear(from - tg::pos3::zero, bounds, mSegmentCandidates);
 
+    std::optional<SegmentHit> first;
     for (auto const body : mSegmentCandidates)
     {
         if (!mECS->GetComponent<Collider>(body)->blocksArrows)
             continue;
 
         auto const& shape = CachedShape(body);
-        if (!Contains(shape, {exempt.x, exempt.z}) && SegmentOverlaps(shape, from, to))
-            return true;
+        if (Contains(shape, {exempt.x, exempt.z}))
+            continue;
+
+        if (auto const entry = SegmentEntry(shape, from, to); entry && (!first || *entry < first->fraction))
+            first = SegmentHit{body, *entry};
     }
 
-    return false;
+    return first;
 }
 
 bool gamedev::CollisionSystem::Contains(WorldShape const& shape, tg::pos2 point)
@@ -416,7 +420,7 @@ bool gamedev::CollisionSystem::Contains(WorldShape const& shape, tg::pos2 point)
     return true;
 }
 
-bool gamedev::CollisionSystem::SegmentOverlaps(WorldShape const& shape, tg::pos3 from, tg::pos3 to)
+std::optional<float> gamedev::CollisionSystem::SegmentEntry(WorldShape const& shape, tg::pos3 from, tg::pos3 to)
 {
     // Parameter interval [enter, leave] of the segment inside all constraints so far
     auto enter = 0.f;
@@ -440,7 +444,7 @@ bool gamedev::CollisionSystem::SegmentOverlaps(WorldShape const& shape, tg::pos3
 
     // Height
     if (!clip(from.y, to.y - from.y, shape.bottom, shape.top))
-        return false;
+        return std::nullopt;
 
     auto const start = tg::pos2(from.x, from.z) - shape.center;
     auto const delta = tg::vec2(to.x - from.x, to.z - from.z);
@@ -452,11 +456,11 @@ bool gamedev::CollisionSystem::SegmentOverlaps(WorldShape const& shape, tg::pos3
         {
             auto const lengthSqr = tg::dot(axis, axis);
             if (lengthSqr <= 0.f)
-                return false;
+                return std::nullopt;
             if (!clip(tg::dot(start, axis) / lengthSqr, tg::dot(delta, axis) / lengthSqr, -1.f, 1.f))
-                return false;
+                return std::nullopt;
         }
-        return true;
+        return enter;
     }
 
     // Circle: |start + s * delta|² <= radius²
@@ -464,16 +468,16 @@ bool gamedev::CollisionSystem::SegmentOverlaps(WorldShape const& shape, tg::pos3
     auto const b = 2.f * tg::dot(start, delta);
     auto const c = tg::dot(start, start) - shape.radius * shape.radius;
     if (a < 1e-12f)
-        return c <= 0.f;
+        return c <= 0.f ? std::optional<float>(enter) : std::nullopt;
 
     auto const discriminant = b * b - 4.f * a * c;
     if (discriminant < 0.f)
-        return false;
+        return std::nullopt;
 
     auto const root = tg::sqrt(discriminant);
     enter = tg::max(enter, (-b - root) / (2.f * a));
     leave = tg::min(leave, (-b + root) / (2.f * a));
-    return enter <= leave;
+    return enter <= leave ? std::optional<float>(enter) : std::nullopt;
 }
 
 gamedev::CollisionSystem::WorldShape gamedev::CollisionSystem::ComputeWorldShape(InstanceHandle handle)

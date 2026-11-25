@@ -200,6 +200,7 @@ void Game::init()
 
     mPhysicsSys->SetTerrain(mTerrain);
     mAnimationSys->SetTerrain(mTerrain);
+    mAnimationSys->SetCollision(mCollisionSys);
     mItemFac->AttachTerrain(mTerrain);
     mUnitFac->AttachTerrain(mTerrain);
     mStructFac->AttachTerrain(mTerrain);

@@ -301,7 +301,7 @@ void gamedev::UnitFactory::Init_Soldier()
     // Attacker
     attacker->weapon.cooldown = 1.5f;
     attacker->weapon.damage = 2;
-    attacker->weapon.range = 8;
+    attacker->weapon.range = 10;
     attacker->weapon.type = WeaponType::Bow;
     attacker->weapon.missileSpeed = 8.f;
 

@@ -56,18 +56,35 @@ public:
      */
     void Update(float dt);
 
+    /// Where a segment enters a static collider (`FindSegmentHit`).
+    struct SegmentHit
+    {
+        InstanceHandle body; ///< The static collider.
+        float fraction;      ///< Position along the segment where it enters, in [0, 1].
+    };
+
     /**
-     * Tests whether a straight segment passes through a static collider, taken as its ground-plane shape extruded from its bottom to its top.
+     * Finds the first static collider a straight segment enters, each taken as its ground-plane shape extruded from its bottom to its top.
      *
      * Only colliders with `Collider::blocksArrows` count.
-     * Archers use it to pick an arrow arc that clears structures (`GamelogicSystem::AimArrow`).
+     * Archers use it to pick an arrow arc that clears structures (`GamelogicSystem::AimArrow`), and straight shots stick in what they hit.
      *
      * @param from Start of the segment (world space).
      * @param to End of the segment (world space).
      * @param exempt Colliders whose ground-plane shape contains this point (x/z) are ignored, e.g. the tower an archer stands in.
-     * @return True if the segment overlaps a static collider.
+     * @return The collider entered first, or nothing.
      */
-    bool IsSegmentBlocked(tg::pos3 from, tg::pos3 to, tg::pos3 exempt);
+    std::optional<SegmentHit> FindSegmentHit(tg::pos3 from, tg::pos3 to, tg::pos3 exempt);
+
+    /**
+     * Tests whether a straight segment enters a static collider (see `FindSegmentHit`).
+     *
+     * @param from Start of the segment (world space).
+     * @param to End of the segment (world space).
+     * @param exempt Colliders whose ground-plane shape contains this point (x/z) are ignored.
+     * @return True if the segment enters a static collider.
+     */
+    bool IsSegmentBlocked(tg::pos3 from, tg::pos3 to, tg::pos3 exempt) { return FindSegmentHit(from, to, exempt).has_value(); }
 
 private:
     static constexpr int kIterations = 3;            ///< Resolution rounds per update.
@@ -172,9 +189,9 @@ private:
      * @param shape World-space shape.
      * @param from Start of the segment (world space).
      * @param to End of the segment (world space).
-     * @return True if a part of the segment lies inside.
+     * @return Position along the segment where it enters the shape, in [0, 1], or nothing if it misses.
      */
-    static bool SegmentOverlaps(WorldShape const& shape, tg::pos3 from, tg::pos3 to);
+    static std::optional<float> SegmentEntry(WorldShape const& shape, tg::pos3 from, tg::pos3 to);
 
     /**
      * Tests whether a point lies inside a shape on the ground plane.
@@ -232,7 +249,7 @@ private:
     std::vector<std::pair<InstanceHandle, InstanceHandle>> mDynamicPairs; ///< Candidate dynamic pairs of this update (each pair once).
     std::vector<StaticPair> mStaticPairs;                                 ///< Candidate dynamic-static pairs of this update.
     std::vector<InstanceHandle> mCandidates;                              ///< Reused result buffer of hash map queries.
-    std::vector<InstanceHandle> mSegmentCandidates;                       ///< Reused result buffer of `IsSegmentBlocked`.
+    std::vector<InstanceHandle> mSegmentCandidates;                       ///< Reused result buffer of `FindSegmentHit`.
 
     Hash2D mStaticColliderHashMap;  ///< Broad phase for static colliders.
     Hash2D mDynamicColliderHashMap; ///< Broad phase for dynamic colliders (without `InTower` units).

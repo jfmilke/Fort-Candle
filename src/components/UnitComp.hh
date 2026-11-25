@@ -23,7 +23,7 @@ struct Living : public Component
 
     bool moveOrder = false;                 ///< Moving towards `movePosition`.
     tg::pos3 movePosition = tg::pos3::zero; ///< Move target in world space.
-    float moveSpeed = 1.5;                  ///< Speed in world units per second.
+    float moveSpeed = 1.8f;                 ///< Speed in world units per second.
     bool forceMove = false;                 ///< Re-apply heading and velocity on the next update (set with each new order).
 
     InstanceHandle focusHandle = {std::uint32_t(-1)}; ///< Instance to face (e.g. the attack target).
@@ -111,12 +111,14 @@ struct Climber : public Component
 enum class ArrowState
 {
     Flying,   ///< Moved ballistically by the `PhysicsSystem`.
-    InGround, ///< Stuck in the terrain for good (`AnimationSystem` keeps the newest `AnimationSystem::kMaxGroundArrows`).
-    InTarget  ///< Stuck in the unit it hit; follows it and is removed with it.
+    InGround, ///< Stuck in the terrain for good (`AnimationSystem` keeps the newest `AnimationSystem::kMaxStuckArrows`).
+    InObject  ///< Stuck in the unit or structure it hit (`Arrow::stuckTo`); follows it and is removed with it.
 };
 
 /**
- * An arrow: flies along a ballistic arc, then sticks in its target or in the ground.
+ * An arrow: flies along a ballistic arc, then sticks in its target, a structure or the ground.
+ *
+ * A straight shot (`hitsBlockers`) sticks in the first structure in its way; a lobbed shot flies through structures.
  *
  * `GamelogicSystem::ShootArrow` launches it, the `PhysicsSystem` moves it,
  * the `AnimationSystem` aligns it to its flight direction, detects hits and landings and keeps stuck arrows in place,
@@ -133,14 +135,17 @@ struct Arrow : public Component
     InstanceHandle shotBy = {std::uint32_t(-1)}; ///< Shooter (credited for kills).
     InstanceHandle target = {std::uint32_t(-1)}; ///< Target; the arrow hits when its tip passes within `hitRadius` of its aim point.
 
-    ArrowState state = ArrowState::Flying;       ///< Flying or stuck.
-    tg::vec3 stuckOffset = tg::vec3::zero;       ///< `InTarget`: position in the target's local frame (before the target's scale).
-    tg::quat stuckRotation = tg::quat::identity; ///< `InTarget`: rotation relative to the target.
+    bool hitsBlockers = false;                    ///< Straight shot: sticks in the first structure in its way (`CollisionSystem::FindSegmentHit`).
+    tg::pos3 launchPosition = tg::pos3::zero;     ///< Where it was shot; the structure there (the archer's tower) never stops it.
+    ArrowState state = ArrowState::Flying;        ///< Flying or stuck.
+    InstanceHandle stuckTo = {std::uint32_t(-1)}; ///< `InObject`: the unit or structure it is stuck in.
+    tg::vec3 stuckOffset = tg::vec3::zero;        ///< `InObject`: position in `stuckTo`'s local frame (before its scale).
+    tg::quat stuckRotation = tg::quat::identity;  ///< `InObject`: rotation relative to `stuckTo`.
 
     static constexpr float aimHeight = 0.25f;   ///< Aim point above the target's position: about the body center of the 0.25-scaled units.
     static constexpr float hitRadius = 0.32f;   ///< Hit when the path of the tip in one update passes this close to the aim point.
     static constexpr float tipOffset = 0.33f;   ///< Distance from the arrow's origin to its tip, along its local +z axis (at the item scale 0.8).
-    static constexpr float embedDepth = 0.1f;   ///< How deep the tip sinks into the ground.
+    static constexpr float embedDepth = 0.1f;   ///< How deep the tip sinks into the ground or a structure.
     static constexpr float stuckRadius = 0.08f; ///< The tip of an arrow stuck in a unit is at most this far from the aim point.
 };
 

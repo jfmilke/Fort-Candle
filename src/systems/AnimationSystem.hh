@@ -11,6 +11,8 @@
 
 namespace gamedev
 {
+class CollisionSystem;
+
 /**
  * Plays the non-skeletal `Animated` animations and handles arrows.
  *
@@ -22,7 +24,10 @@ namespace gamedev
  *  - sends `EventType::ArrowHit` when the path of the tip in this update (from `Physics::lastPosition`)
  *    passes within `Arrow::hitRadius` of the target's aim point (`Arrow::aimHeight` above its position);
  *    the arrow then sticks in the target, follows it and is removed with it,
- *  - lets them stick in the terrain where the tip goes below it, for good (only the newest `kMaxGroundArrows` stay),
+ *  - lets straight shots (`Arrow::hitsBlockers`) stick in the first structure the tip enters (`CollisionSystem::FindSegmentHit`),
+ *    until the structure is destroyed,
+ *  - lets them stick in the terrain where the tip goes below it, for good.
+ *    Of the arrows in the ground or in structures, only the newest `kMaxStuckArrows` stay,
  *  - removes arrows whose flight lasts longer than `Arrow::lifetime`.
  *
  * A stuck arrow loses its `Physics` and `ParticleEmitter` and leaves the ECS spatial hash map.
@@ -35,6 +40,9 @@ public:
 
     /// Sets the terrain that arrows land on.
     void SetTerrain(std::shared_ptr<Terrain> terrain);
+
+    /// Sets the collision system, which finds the structures straight shots stick in.
+    void SetCollision(std::shared_ptr<CollisionSystem> collision);
 
     /// Sorts the entity into the arrow set or the animated set.
     void AddEntity(InstanceHandle handle, Signature entitySignature) override;
@@ -76,8 +84,8 @@ public:
      */
     void Wiggle(Living* subject, float dt);
 
-    /// Arrows stuck in the ground that are kept; older ones are removed (the instance pool holds only `MAX_INSTANCES`).
-    static constexpr size_t kMaxGroundArrows = 200;
+    /// Arrows stuck in the ground or in structures that are kept; older ones are removed (the instance pool holds only `MAX_INSTANCES`).
+    static constexpr size_t kMaxStuckArrows = 200;
 
 private:
     /**
@@ -90,20 +98,23 @@ private:
     void UpdateFlyingArrow(InstanceHandle handle, Arrow& arrow, float dt);
 
     /**
-     * Makes an arrow that hit its target stick in it: stores its transform relative to the target.
+     * Makes an arrow stick in a unit or structure: stores its transform relative to it.
      *
      * @param handle Arrow instance, already placed where it sticks.
-     * @param[in,out] arrow Its `Arrow` component; becomes `ArrowState::InTarget`.
+     * @param[in,out] arrow Its `Arrow` component; becomes `ArrowState::InObject`.
+     * @param object Live unit or structure it hit.
      */
-    void StickInTarget(InstanceHandle handle, Arrow& arrow);
+    void StickIn(InstanceHandle handle, Arrow& arrow, InstanceHandle object);
 
     /**
-     * Moves an arrow stuck in a target along with it, or removes it once the target is gone or marked for destruction.
+     * Moves an arrow stuck in a unit or structure along with it.
+     *
+     * Removes the arrow once the object is gone, marked for destruction, or a `Prototype` (a destroyed wall).
      *
      * @param handle Arrow instance.
-     * @param arrow Its `Arrow` component (`ArrowState::InTarget`).
+     * @param arrow Its `Arrow` component (`ArrowState::InObject`).
      */
-    void FollowTarget(InstanceHandle handle, Arrow& arrow);
+    void FollowObject(InstanceHandle handle, Arrow& arrow);
 
     /**
      * Ends the flight of an arrow: removes its `Physics` and `ParticleEmitter` and takes it out of the ECS spatial hash map.
@@ -113,11 +124,12 @@ private:
     void StopArrow(InstanceHandle handle);
 
 private:
-    EngineECS* mECS = nullptr;         ///< ECS (not owned).
-    std::shared_ptr<Terrain> mTerrain; ///< Terrain for arrow landings; without it, arrows fly until their lifetime ends.
+    EngineECS* mECS = nullptr;                   ///< ECS (not owned).
+    std::shared_ptr<Terrain> mTerrain;           ///< Terrain for arrow landings; without it, arrows fly until their lifetime ends.
+    std::shared_ptr<CollisionSystem> mCollision; ///< Structures that straight shots stick in; without it, they fly through.
 
-    std::set<InstanceHandle> mArrows;         ///< Entities with an `Arrow` component.
-    std::deque<InstanceHandle> mGroundArrows; ///< Arrows stuck in the ground, oldest first.
-    std::set<InstanceHandle> mLiving;         ///< Unused.
+    std::set<InstanceHandle> mArrows;        ///< Entities with an `Arrow` component.
+    std::deque<InstanceHandle> mStuckArrows; ///< Arrows stuck in the ground or in structures, oldest first.
+    std::set<InstanceHandle> mLiving;        ///< Unused.
 };
 }
