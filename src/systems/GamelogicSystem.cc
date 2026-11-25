@@ -2,6 +2,8 @@
 #include <typed-geometry/tg.hh>
 #include "advanced/transform.hh"
 #include "glow/common/log.hh"
+#include "systems/CollisionSystem.hh"
+#include "systems/PhysicsSystem.hh"
 #include "utility/Random.hh"
 #include "utility/misc.hh"
 
@@ -83,6 +85,8 @@ void gamedev::GamelogicSystem::Init(EngineECS& ecs,
 }
 
 void gamedev::GamelogicSystem::AttachTerrain(std::shared_ptr<Terrain>& terrain) { mTerrain = terrain; }
+
+void gamedev::GamelogicSystem::AttachCollision(std::shared_ptr<CollisionSystem> collision) { mCollision = std::move(collision); }
 
 void gamedev::GamelogicSystem::Update(float dt)
 {
@@ -371,7 +375,7 @@ void gamedev::GamelogicSystem::UpdateAttackOrder(const Instance& instance, Livin
             return;
 
         if (attacker->weapon.type == WeaponType::Bow)
-            ShootArrow(attacker, dt);
+            ShootArrow(attacker);
         else if (attacker->weapon.type == WeaponType::Claws)
             AttackClaw(attacker, dt);
 
@@ -434,43 +438,34 @@ void gamedev::GamelogicSystem::AttackClaw(Attacker* attacker, float dt)
     }
 }
 
-void gamedev::GamelogicSystem::ShootArrow(Attacker* attacker, float dt)
+void gamedev::GamelogicSystem::ShootArrow(Attacker* attacker)
 {
-    // Spawn point: in front of the bow, a bit above it
-    const auto& bow = mECS->GetInstance(attacker->weaponHandle);
-    auto spawn = tg::pos3(bow.xform.translation) + bow.xform.forward_vec() * 0.2f;
-    spawn.y = bow.xform.translation.y + 0.3f;
+    // Launch from the center of the bow
+    const auto& bow = mECS->GetInstance(attacker->weaponHandle).xform;
+    auto const bowBounds = mGO->getAABB("bow");
+    auto const bowCenter = bowBounds.min + 0.5f * (bowBounds.max - bowBounds.min);
+    auto const spawn = tg::pos3(bow.translation + bow.rotation * (tg::vec3(bowCenter) * bow.scaling));
 
-    auto arrowArc = GetArrowArc(attacker, spawn, dt);
-
-    if (arrowArc.xMax <= 0.0f)
+    auto const shot = AimArrow(attacker, spawn);
+    if (!shot)
         return;
 
     auto arrowHandle = mIF->Create("arrow", spawn);
     auto& arrow = mECS->GetInstance(arrowHandle);
     arrow.xform.translation = spawn - tg::pos3::zero; // Create snaps the height to the terrain
-    auto dir = arrowArc.velocity;
-    dir.y = 0.0;
-    dir = tg::normalize(dir);
-    arrow.xform.rotation = tg::quat::from_axis_angle(tg::dir3::pos_y, tg::angle_towards(arrow.xform.forward_vec(), dir, tg::vec3::unit_y));
 
     auto arrowComp = mECS->GetComponent<Arrow>(arrowHandle);
     arrowComp->target = attacker->attackOrder;
     arrowComp->shotBy = {attacker->handle_value};
+    arrowComp->hitsBlockers = shot->straight;
+    arrowComp->launchPosition = spawn;
 
+    // Ballistic flight; the AnimationSystem aligns the arrow to its velocity before it is drawn
     auto physicsComp = mECS->GetComponent<Physics>(arrowHandle);
-    physicsComp->velocity = arrowArc.velocity;
-    physicsComp->velocity.y = 0.0;
+    physicsComp->velocity = shot->velocity;
     physicsComp->lastPosition = arrow.xform.translation;
     physicsComp->forceGround = false;
-    physicsComp->gravity = false;
-    physicsComp->arrowArc = true;
-    physicsComp->arc_x = 0.0;
-    physicsComp->arc_xMax = arrowArc.xMax;
-    physicsComp->arc_height = arrowArc.height;
-    physicsComp->arc_yStart = arrowArc.yStart;
-    physicsComp->arc_yEnd = arrowArc.yEnd;
-    physicsComp->arc_ySlope = (arrowArc.yEnd - arrowArc.yStart + 4.f * arrowArc.height) / arrowArc.xMax;
+    physicsComp->gravity = true;
 
     auto particleComp = mECS->CreateComponent<ParticleEmitter>(arrowHandle);
     ParticleProperties pp;
@@ -594,60 +589,76 @@ void gamedev::GamelogicSystem::AimWeapon(Attacker* attacker)
 }
 
 
-gamedev::arcEq gamedev::GamelogicSystem::GetArrowArc(Attacker* attacker, tg::pos3 start, float dt)
+std::optional<gamedev::GamelogicSystem::ArrowShot> gamedev::GamelogicSystem::AimArrow(Attacker* attacker, tg::pos3 start)
 {
-    // Get instances
     const auto& target = mECS->GetInstance(attacker->attackOrder);
 
-    // Projectile speed + target velocity
-    auto vm_a = attacker->weapon.missileSpeed;
-    auto v_q = tg::vec3::zero;
+    // The target keeps its course: constant observed velocity on the ground plane
+    auto targetVelocity = tg::vec2::zero;
+    if (auto const targetPhysics = mECS->TryGetComponent<Physics>(attacker->attackOrder))
+        targetVelocity = {targetPhysics->observedVelocity.x, targetPhysics->observedVelocity.z};
 
-    auto targetPhysics = mECS->TryGetComponent<Physics>(attacker->attackOrder);
-    if (targetPhysics)
+    auto const maxSpeed = attacker->weapon.missileSpeed;
+    auto const toTarget = tg::vec2(target.xform.translation.x - start.x, target.xform.translation.z - start.z);
+
+    // From the flattest arc the bow can shoot to the highest lob
+    std::optional<ArrowShot> lob;
+    auto flattest = true;
+    for (auto t = kMinArrowFlightTime; t <= kMaxArrowFlightTime; t *= kArrowFlightTimeStep)
     {
-        v_q = (target.xform.translation - targetPhysics->lastPosition) / dt;
-        v_q.y = 0;
+        // Aim point: body center above the ground where the target will be after t
+        auto const offset = toTarget + targetVelocity * t;
+        auto const predicted = tg::pos3(start.x + offset.x, 0.f, start.z + offset.y);
+        auto const ground = mTerrain ? mTerrain->heightAt(predicted) : target.xform.translation.y;
+        auto const rise = ground + Arrow::aimHeight - start.y;
+
+        // Ballistic launch velocity that reaches the aim point after t: rise = vy t - g t^2 / 2
+        auto const velocity = tg::vec3(offset.x / t, rise / t + 0.5f * PhysicsSystem::kGravity * t, offset.y / t);
+
+        // Too fast for the bow: before the reachable flight times (flat side) or past them (too high)
+        if (tg::length(velocity) > maxSpeed)
+        {
+            if (!flattest)
+                break;
+            continue;
+        }
+
+        // Straight shot: the flattest arc, if nothing is in the way up to the target
+        if (flattest)
+        {
+            flattest = false;
+            if (IsArrowArcClear(start, velocity, t, tg::length(offset), 0.f))
+                return ArrowShot{velocity, true};
+        }
+
+        // Lob: the lowest arc that passes over the structures (it flies through them anyway)
+        lob = ArrowShot{velocity, false};
+        if (IsArrowArcClear(start, velocity, t, tg::length(offset), kArrowFreeApproach))
+            return lob;
     }
 
-    // Initial positions
-    tg::vec3 p = start - tg::pos3::zero;
-    p.y = 0;
-    tg::vec3 q0 = target.xform.translation;
-    q0.y = 0;
-    auto pq0 = q0 - p;
+    return lob;
+}
 
-    // Less projectile speed if target is nearby
-    auto lambdaDist = tg::saturate(tg::length(pq0) / 3.f);
-    vm_a = tg::mix(tg::length(v_q) * 1.1f, vm_a, lambdaDist);
+bool gamedev::GamelogicSystem::IsArrowArcClear(tg::pos3 start, tg::vec3 velocity, float flightTime, float distance, float freeApproach)
+{
+    if (!mCollision || distance <= freeApproach)
+        return true;
 
-    // Calculate time until impact
-    // (dot(v_q, v_q) - vm_a^2)t^2 + 2*dot(v_q, pq0)t + dot(pq0, pq0) = 0
-    auto a = tg::dot(v_q, v_q) - vm_a * vm_a;
-    auto b = 2.f * tg::dot(v_q, pq0);
-    auto c = tg::dot(pq0, pq0);
-    auto t1t2 = solveQuadratic(a, b, c);
-    auto t = tg::max(t1t2.first, t1t2.second);
+    // Straight pieces of the arc up to the free approach (the horizontal speed is constant)
+    auto const checkedTime = flightTime * (1.f - freeApproach / distance);
+    auto const pointAt = [&](float time) { return start + velocity * time - tg::vec3(0.f, 0.5f * PhysicsSystem::kGravity * time * time, 0.f); };
 
-    // Time must not be in the past
-    if (t <= 0.f)
-        return {};
+    auto previous = start;
+    for (int i = 1; i <= kArrowArcChords; ++i)
+    {
+        auto const next = pointAt(checkedTime * float(i) / float(kArrowArcChords));
+        if (mCollision->IsSegmentBlocked(previous, next, start))
+            return false;
+        previous = next;
+    }
 
-    // Future position (target)
-    auto q1 = q0 + t * v_q;
-    q1.y = 0;
-    auto pq1 = q1 - p;
-
-    // Let's fake some gravity
-    auto arcLengthX = tg::length(pq1);
-    // Less arc height if target is nearby
-    auto lambdaRange = tg::saturate(arcLengthX / 2.0f);
-    float arcHeightMax = tg::mix(1.5f, 3.f, lambdaRange);
-
-    // Aim at the body center; the target's current ground height stands in for the one at the predicted position
-    auto yEnd = target.xform.translation.y + Arrow::aimHeight;
-
-    return {arcLengthX, arcHeightMax, start.y, yEnd, tg::normalize(pq1) * vm_a};
+    return true;
 }
 
 bool gamedev::GamelogicSystem::LookForProduction(InstanceHandle handle)
@@ -977,9 +988,6 @@ void gamedev::GamelogicSystem::ArrowListener(Event& e)
     {
         Kill(e.mSubject, false, arrow->shotBy);
     }
-
-    // Destroy arrow
-    mECS->MarkDestruction(e.mSender);
 }
 
 // Algorithm:

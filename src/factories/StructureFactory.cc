@@ -47,6 +47,8 @@ gamedev::InstanceHandle gamedev::StructureFactory::Register(std::string asset_id
 
         // BoxShape
         shape->box = mObj->aabb3_as_box(mObj->getAABB(a_name));
+        shape->minY = mObj->getAABB(a_name).min.y;
+        shape->maxY = mObj->getAABB(a_name).max.y;
     }
     else
     {
@@ -54,6 +56,8 @@ gamedev::InstanceHandle gamedev::StructureFactory::Register(std::string asset_id
 
         // CircleShape
         shape->circle = mObj->aabb3_as_circle(mObj->getAABB(a_name));
+        shape->minY = mObj->getAABB(a_name).min.y;
+        shape->maxY = mObj->getAABB(a_name).max.y;
     }
 
     auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
@@ -79,6 +83,8 @@ gamedev::InstanceHandle gamedev::StructureFactory::Register(std::string asset_id
 
         // BoxShape
         shape->box = mObj->aabb3_as_box(mObj->getAABB(a_name));
+        shape->minY = mObj->getAABB(a_name).min.y;
+        shape->maxY = mObj->getAABB(a_name).max.y;
     }
     else
     {
@@ -86,6 +92,8 @@ gamedev::InstanceHandle gamedev::StructureFactory::Register(std::string asset_id
 
         // CircleShape
         shape->circle = mObj->aabb3_as_circle(mObj->getAABB(a_name));
+        shape->minY = mObj->getAABB(a_name).min.y;
+        shape->maxY = mObj->getAABB(a_name).max.y;
     }
 
     auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
@@ -112,6 +120,8 @@ gamedev::InstanceHandle gamedev::StructureFactory::Register(
 
         // BoxShape
         shape->box = mObj->aabb3_as_box(mObj->getAABB(a_name));
+        shape->minY = mObj->getAABB(a_name).min.y;
+        shape->maxY = mObj->getAABB(a_name).max.y;
     }
     else
     {
@@ -119,6 +129,8 @@ gamedev::InstanceHandle gamedev::StructureFactory::Register(
 
         // CircleShape
         shape->circle = mObj->aabb3_as_circle(mObj->getAABB(a_name));
+        shape->minY = mObj->getAABB(a_name).min.y;
+        shape->maxY = mObj->getAABB(a_name).max.y;
     }
 
     auto collider = mECS->CreateComponent<gamedev::Collider>(handle);
@@ -171,9 +183,12 @@ void gamedev::StructureFactory::Init_StartingBonfire()
 
     // Shape
     shape->box = mObj->aabb3_as_box(mObj->getAABB("bonfire"));
+    shape->minY = mObj->getAABB("bonfire").min.y;
+    shape->maxY = mObj->getAABB("bonfire").max.y;
 
     // Collider
     collider->dynamic = false;
+    collider->blocksArrows = false; // Arrows fly over the campfire
 
     // Light
     light->pl.position = shape->box.center + tg::vec3(0, 1, 0); // Light above center
@@ -232,9 +247,12 @@ void gamedev::StructureFactory::Init_aLantern()
 
     // Shape
     shape->circle = mObj->aabb3_as_circle(mObj->getAABB("aStreetLantern"));
+    shape->minY = mObj->getAABB("aStreetLantern").min.y;
+    shape->maxY = mObj->getAABB("aStreetLantern").max.y;
 
     // Collider
     collider->dynamic = false;
+    collider->blocksArrows = false; // Only the pole is solid; the circle also covers the lamp arm
 
     // Light
     light->pl.position = tg::pos3(0.77, 1.8, 0);
@@ -264,9 +282,12 @@ void gamedev::StructureFactory::Init_RegularBonfire()
 
     // Shape
     shape->box = mObj->aabb3_as_box(mObj->getAABB("bonfire"));
+    shape->minY = mObj->getAABB("bonfire").min.y;
+    shape->maxY = mObj->getAABB("bonfire").max.y;
 
     // Collider
     collider->dynamic = false;
+    collider->blocksArrows = false; // Arrows fly over the campfire
 
     // Light
     light->pl.position = shape->box.center + tg::vec3(0, 1, 0); // Light above center
@@ -322,6 +343,8 @@ void gamedev::StructureFactory::Init_Tower()
 
     // Shape
     shape->circle = mObj->aabb3_as_circle(mObj->getAABB("tower0"));
+    shape->minY = mObj->getAABB("tower0").min.y;
+    shape->maxY = mObj->getAABB("tower0").max.y;
 
     // Collider
     collider->dynamic = false;
@@ -350,6 +373,8 @@ void gamedev::StructureFactory::Init_Forge()
 
     // Shape
     shape->box = mObj->aabb3_as_box(mObj->getAABB("forgefurnace"));
+    shape->minY = mObj->getAABB("forgefurnace").min.y;
+    shape->maxY = mObj->getAABB("forgefurnace").max.y;
 
     // Collider
     collider->dynamic = false;
@@ -407,6 +432,8 @@ void gamedev::StructureFactory::Init_aFences()
 
         // Shape
         shape->box = mObj->aabb3_as_box(mObj->getAABB(n));
+        shape->minY = mObj->getAABB(n).min.y;
+        shape->maxY = mObj->getAABB(n).max.y;
 
         // Collider
         collider->dynamic = false;
@@ -436,6 +463,8 @@ void gamedev::StructureFactory::Init_aStonewall()
 
     // Shape
     shape->box = mObj->aabb3_as_box(mObj->getAABB("astonewall"));
+    shape->minY = mObj->getAABB("astonewall").min.y;
+    shape->maxY = mObj->getAABB("astonewall").max.y;
 
     // Collider
     collider->dynamic = false;
@@ -466,6 +495,8 @@ void gamedev::StructureFactory::Init_aStoneGate()
 
     // Shape
     shape->box = mObj->aabb3_as_box(mObj->getAABB(id));
+    shape->minY = mObj->getAABB(id).min.y;
+    shape->maxY = mObj->getAABB(id).max.y;
 }
 
 
@@ -494,6 +525,8 @@ void gamedev::StructureFactory::Init_aStonePillar()
 
     // Shape
     shape->box = mObj->aabb3_as_box(mObj->getAABB(id));
+    shape->minY = mObj->getAABB(id).min.y;
+    shape->maxY = mObj->getAABB(id).max.y;
 
     // Collider
     collider->dynamic = false;
@@ -524,6 +557,8 @@ void gamedev::StructureFactory::Init_aSpikeBarriers()
 
     // Shape
     shape->box = mObj->aabb3_as_box(mObj->getAABB(id));
+    shape->minY = mObj->getAABB(id).min.y;
+    shape->maxY = mObj->getAABB(id).max.y;
 
     // Collider
     collider->dynamic = false;
@@ -552,6 +587,8 @@ void gamedev::StructureFactory::Init_aWagon()
 
     // Shape
     shape->box = mObj->aabb3_as_box(mObj->getAABB(id));
+    shape->minY = mObj->getAABB(id).min.y;
+    shape->maxY = mObj->getAABB(id).max.y;
 }
 
 
@@ -579,6 +616,8 @@ void gamedev::StructureFactory::Init_aBanner()
 
     // Shape
     shape->box = mObj->aabb3_as_box(mObj->getAABB(id));
+    shape->minY = mObj->getAABB(id).min.y;
+    shape->maxY = mObj->getAABB(id).max.y;
 }
 
 void gamedev::StructureFactory::Init_Streets()
@@ -624,6 +663,8 @@ void gamedev::StructureFactory::Init_WatchTowers()
 
         // Shape
         shape->box = mObj->aabb3_as_box(mObj->getAABB(n));
+        shape->minY = mObj->getAABB(n).min.y;
+        shape->maxY = mObj->getAABB(n).max.y;
 
         // Collider
         collider->dynamic = false;
@@ -650,6 +691,8 @@ void gamedev::StructureFactory::Init_Stonefence()
 
     // Shape
     shape->box = mObj->aabb3_as_box(mObj->getAABB("astonefence0"));
+    shape->minY = mObj->getAABB("astonefence0").min.y;
+    shape->maxY = mObj->getAABB("astonefence0").max.y;
 
     // Collider
     collider->dynamic = false;

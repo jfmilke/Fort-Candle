@@ -23,7 +23,7 @@ struct Living : public Component
 
     bool moveOrder = false;                 ///< Moving towards `movePosition`.
     tg::pos3 movePosition = tg::pos3::zero; ///< Move target in world space.
-    float moveSpeed = 1.5;                  ///< Speed in world units per second.
+    float moveSpeed = 1.8f;                 ///< Speed in world units per second.
     bool forceMove = false;                 ///< Re-apply heading and velocity on the next update (set with each new order).
 
     InstanceHandle focusHandle = {std::uint32_t(-1)}; ///< Instance to face (e.g. the attack target).
@@ -107,20 +107,46 @@ struct Climber : public Component
     tg::vec3 climbOrder = tg::vec3::zero; ///< Climb target. Unused.
 };
 
-/// A flying arrow; see `AnimationSystem` (flight, hit detection) and `GamelogicSystem::ArrowListener` (damage).
+/// Flight state of an `Arrow`.
+enum class ArrowState
+{
+    Flying,   ///< Moved ballistically by the `PhysicsSystem`.
+    InGround, ///< Stuck in the terrain for good (`AnimationSystem` keeps the newest `AnimationSystem::kMaxStuckArrows`).
+    InObject  ///< Stuck in the unit or structure it hit (`Arrow::stuckTo`); follows it and is removed with it.
+};
+
+/**
+ * An arrow: flies along a ballistic arc, then sticks in its target, a structure or the ground.
+ *
+ * A straight shot (`hitsBlockers`) sticks in the first structure in its way; a lobbed shot flies through structures.
+ *
+ * `GamelogicSystem::ShootArrow` launches it, the `PhysicsSystem` moves it,
+ * the `AnimationSystem` aligns it to its flight direction, detects hits and landings and keeps stuck arrows in place,
+ * and `GamelogicSystem::ArrowListener` deals the damage.
+ */
 struct Arrow : public Component
 {
     using Component::Component;
 
     float damage = 1.0;                          ///< Damage on hit.
-    float lifetime = 4.0;                        ///< Seconds until the arrow is removed.
+    float lifetime = 5.0;                        ///< Seconds of flight until the arrow is removed (if it never lands).
     float velocity = 0.0;                        ///< Unused: `Physics::velocity` moves the arrow.
     tg::angle32 angle = 0_deg;                   ///< Unused.
     InstanceHandle shotBy = {std::uint32_t(-1)}; ///< Shooter (credited for kills).
-    InstanceHandle target = {std::uint32_t(-1)}; ///< Target; the arrow hits when it passes within `hitRadius` of its aim point.
+    InstanceHandle target = {std::uint32_t(-1)}; ///< Target; the arrow hits when its tip passes within `hitRadius` of its aim point.
 
-    static constexpr float aimHeight = 0.25f; ///< Aim point above the target's position: about the body center of the 0.25-scaled units.
-    static constexpr float hitRadius = 0.32f; ///< Hit when the path of the arrow in one update passes this close to the aim point.
+    bool hitsBlockers = false;                    ///< Straight shot: sticks in the first structure in its way (`CollisionSystem::FindSegmentHit`).
+    tg::pos3 launchPosition = tg::pos3::zero;     ///< Where it was shot; the structure there (the archer's tower) never stops it.
+    ArrowState state = ArrowState::Flying;        ///< Flying or stuck.
+    InstanceHandle stuckTo = {std::uint32_t(-1)}; ///< `InObject`: the unit or structure it is stuck in.
+    tg::vec3 stuckOffset = tg::vec3::zero;        ///< `InObject`: position in `stuckTo`'s local frame (before its scale).
+    tg::quat stuckRotation = tg::quat::identity;  ///< `InObject`: rotation relative to `stuckTo`.
+
+    static constexpr float aimHeight = 0.25f;   ///< Aim point above the target's position: about the body center of the 0.25-scaled units.
+    static constexpr float hitRadius = 0.32f;   ///< Hit when the path of the tip in one update passes this close to the aim point.
+    static constexpr float tipOffset = 0.33f;   ///< Distance from the arrow's origin to its tip, along its local +z axis (at the item scale 0.8).
+    static constexpr float embedDepth = 0.1f;   ///< How deep the tip sinks into the ground or a structure.
+    static constexpr float stuckRadius = 0.08f; ///< The tip of an arrow stuck in a unit is at most this far from the aim point.
 };
 
 /// Marks a soldier stationed in a watch tower: it does not move and is ignored by physics and collision.

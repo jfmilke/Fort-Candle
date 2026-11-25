@@ -56,6 +56,36 @@ public:
      */
     void Update(float dt);
 
+    /// Where a segment enters a static collider (`FindSegmentHit`).
+    struct SegmentHit
+    {
+        InstanceHandle body; ///< The static collider.
+        float fraction;      ///< Position along the segment where it enters, in [0, 1].
+    };
+
+    /**
+     * Finds the first static collider a straight segment enters, each taken as its ground-plane shape extruded from its bottom to its top.
+     *
+     * Only colliders with `Collider::blocksArrows` count.
+     * Archers use it to pick an arrow arc that clears structures (`GamelogicSystem::AimArrow`), and straight shots stick in what they hit.
+     *
+     * @param from Start of the segment (world space).
+     * @param to End of the segment (world space).
+     * @param exempt Colliders whose ground-plane shape contains this point (x/z) are ignored, e.g. the tower an archer stands in.
+     * @return The collider entered first, or nothing.
+     */
+    std::optional<SegmentHit> FindSegmentHit(tg::pos3 from, tg::pos3 to, tg::pos3 exempt);
+
+    /**
+     * Tests whether a straight segment enters a static collider (see `FindSegmentHit`).
+     *
+     * @param from Start of the segment (world space).
+     * @param to End of the segment (world space).
+     * @param exempt Colliders whose ground-plane shape contains this point (x/z) are ignored.
+     * @return True if the segment enters a static collider.
+     */
+    bool IsSegmentBlocked(tg::pos3 from, tg::pos3 to, tg::pos3 exempt) { return FindSegmentHit(from, to, exempt).has_value(); }
+
 private:
     static constexpr int kIterations = 3;            ///< Resolution rounds per update.
     static constexpr float kSkin = 1e-3f;            ///< Gap left between shapes after a push, in world units.
@@ -73,6 +103,8 @@ private:
         tg::pos2 center;      ///< Center of the shape.
         tg::vec2 halfAxes[2]; ///< Box only: half extents along the box's two axes.
         float radius = 0.f;   ///< Circle radius, or the box's bounding radius (half diagonal).
+        float bottom = 0.f;   ///< World height of the bottom (`BoxShape::minY`/`CircleShape::minY`, scaled and moved).
+        float top = 0.f;      ///< World height of the top.
     };
 
     /// Result of a narrow-phase test between two shapes.
@@ -151,6 +183,25 @@ private:
      */
     static Contact BoxBox(WorldShape const& a, WorldShape const& b);
 
+    /**
+     * Clips a segment against a shape extruded from its bottom to its top.
+     *
+     * @param shape World-space shape.
+     * @param from Start of the segment (world space).
+     * @param to End of the segment (world space).
+     * @return Position along the segment where it enters the shape, in [0, 1], or nothing if it misses.
+     */
+    static std::optional<float> SegmentEntry(WorldShape const& shape, tg::pos3 from, tg::pos3 to);
+
+    /**
+     * Tests whether a point lies inside a shape on the ground plane.
+     *
+     * @param shape World-space shape.
+     * @param point Point (world x, z).
+     * @return True if inside or on the border.
+     */
+    static bool Contains(WorldShape const& shape, tg::pos2 point);
+
     /// Collects the candidate pairs of this update from the hash maps.
     void CollectPairs();
 
@@ -198,6 +249,7 @@ private:
     std::vector<std::pair<InstanceHandle, InstanceHandle>> mDynamicPairs; ///< Candidate dynamic pairs of this update (each pair once).
     std::vector<StaticPair> mStaticPairs;                                 ///< Candidate dynamic-static pairs of this update.
     std::vector<InstanceHandle> mCandidates;                              ///< Reused result buffer of hash map queries.
+    std::vector<InstanceHandle> mSegmentCandidates;                       ///< Reused result buffer of `FindSegmentHit`.
 
     Hash2D mStaticColliderHashMap;  ///< Broad phase for static colliders.
     Hash2D mDynamicColliderHashMap; ///< Broad phase for dynamic colliders (without `InTower` units).

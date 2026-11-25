@@ -10,9 +10,12 @@
 #include "factories/UnitFactory.hh"
 
 #include <array>
+#include <optional>
 
 namespace gamedev
 {
+class CollisionSystem;
+
 /**
  * All gameplay: resources, building, unit orders and AI, combat, enemy waves and reinforcements, and the fire-dependent screen effects.
  *
@@ -75,6 +78,9 @@ public:
 
     /// Sets the terrain (for waypoint heights).
     void AttachTerrain(std::shared_ptr<Terrain>& terrain);
+
+    /// Sets the collision system, which archers ask for arrow arcs that clear structures.
+    void AttachCollision(std::shared_ptr<CollisionSystem> collision);
 
     /**
      * Creates the camp: bonfire, two soldiers and a pioneer, the first fortification, two tents, the reinforcement path and the enemy spawn points.
@@ -385,26 +391,49 @@ private:
      */
     void AimWeapon(Attacker* attacker);
 
-    /**
-     * Computes the arrow trajectory to hit the (moving) target: horizontal intercept and fake arc height.
-     *
-     * The target speed is estimated from its `Physics::lastPosition`.
-     * The arc ends `Arrow::aimHeight` above the target's current position.
-     *
-     * @param attacker `Attacker` component of the soldier, with a bow and an attack target.
-     * @param start Spawn position of the arrow (world space); the arc starts at its height.
-     * @param dt Time step in seconds (for the target speed).
-     * @return The trajectory; `xMax` is 0 if there is no intercept.
-     */
-    arcEq GetArrowArc(Attacker* attacker, tg::pos3 start, float dt);
+    /// Launch of an arrow chosen by `AimArrow`.
+    struct ArrowShot
+    {
+        tg::vec3 velocity; ///< World-space launch velocity.
+        bool straight;     ///< Straight shot (sticks in structures in its way, `Arrow::hitsBlockers`) or lob (flies through them).
+    };
 
     /**
-     * Creates an arrow with a smoke trail flying along `GetArrowArc`, starting 0.2 in front of and 0.3 above the bow.
+     * Chooses the launch of an arrow that hits the target if the target keeps its course.
+     *
+     * The target is assumed to move on at its `Physics::observedVelocity`;
+     * the arrow flies a ballistic arc (`PhysicsSystem::kGravity`) to `Arrow::aimHeight` above the ground at the predicted target position.
+     * Every flight time gives one such arc: short ones are flat and fast, long ones are high lobs.
+     * The flight times from `kMinArrowFlightTime` to `kMaxArrowFlightTime` are tried in steps of `kArrowFlightTimeStep`,
+     * skipping arcs that need more than the bow's `missileSpeed`:
+     *  1. The flattest arc is a straight shot if no structure is in its way up to the aim point (`IsArrowArcClear`).
+     *  2. Otherwise the archer lobs: the lowest arc that passes over the structures except in the last `kArrowFreeApproach`,
+     *     or the highest one if none does. Lobs fly through structures.
      *
      * @param attacker `Attacker` component of the soldier, with a bow and an attack target.
-     * @param dt Time step in seconds (for `GetArrowArc`).
+     * @param start Launch position of the arrow (world space).
+     * @return The launch, or nothing if no arc reaches the target at the bow's speed.
      */
-    void ShootArrow(Attacker* attacker, float dt);
+    std::optional<ArrowShot> AimArrow(Attacker* attacker, tg::pos3 start);
+
+    /**
+     * Tests whether an arrow arc passes a static collider (`CollisionSystem::IsSegmentBlocked`) before it gets within `freeApproach` of the aim point.
+     *
+     * @param start Launch position (world space); the collider the archer stands in does not count.
+     * @param velocity Launch velocity.
+     * @param flightTime Time until the arc reaches the aim point, in seconds.
+     * @param distance Horizontal distance from `start` to the aim point.
+     * @param freeApproach Horizontal distance before the aim point in which obstacles are ignored.
+     * @return True if no static collider is in the way, or if there is no collision system.
+     */
+    bool IsArrowArcClear(tg::pos3 start, tg::vec3 velocity, float flightTime, float distance, float freeApproach);
+
+    /**
+     * Launches an arrow with a smoke trail from the center of the bow, aimed with `AimArrow`.
+     *
+     * @param attacker `Attacker` component of the soldier, with a bow and an attack target.
+     */
+    void ShootArrow(Attacker* attacker);
 
     /**
      * Deals claw damage to the target pioneer or structure; kills or destroys it at zero health.
@@ -572,7 +601,7 @@ private:
     void CollisionListener(Event& e);
 
     /**
-     * `ArrowHit` listener: damages the target, kills it at zero health, removes the arrow.
+     * `ArrowHit` listener: damages the target and kills it at zero health (the arrow stays in it, see `AnimationSystem`).
      *
      * @param e Hit event; the sender is the arrow, the subject its target.
      */
@@ -647,13 +676,20 @@ private:
     float mDesaturationIntensityTarget = 0.3; ///< Target of `mDesaturationIntensity` (set by the fire level).
 
 private:
-    EngineECS* mECS = nullptr;             ///< ECS (not owned).
-    std::shared_ptr<AudioSystem> mAS;      ///< Audio.
-    std::shared_ptr<UnitFactory> mUF;      ///< Unit factory.
-    std::shared_ptr<StructureFactory> mSF; ///< Structure factory.
-    std::shared_ptr<ItemFactory> mIF;      ///< Item factory (arrows, bows).
-    std::shared_ptr<GameObjects> mGO;      ///< Asset manager (mesh bounds).
-    std::shared_ptr<Terrain> mTerrain;     ///< Terrain.
+    static constexpr float kMinArrowFlightTime = 0.1f;  ///< Shortest flight time `AimArrow` tries, in seconds.
+    static constexpr float kMaxArrowFlightTime = 3.5f;  ///< Longest flight time `AimArrow` tries (the highest lob), in seconds.
+    static constexpr float kArrowFlightTimeStep = 1.1f; ///< Factor between the flight times `AimArrow` tries.
+    static constexpr int kArrowArcChords = 12;          ///< Straight pieces an arc is split into for the obstacle test.
+    static constexpr float kArrowFreeApproach = 0.5f; ///< Horizontal distance before the aim point in which lobs ignore obstacles (monsters at a wall).
+
+    EngineECS* mECS = nullptr;                   ///< ECS (not owned).
+    std::shared_ptr<AudioSystem> mAS;            ///< Audio.
+    std::shared_ptr<UnitFactory> mUF;            ///< Unit factory.
+    std::shared_ptr<StructureFactory> mSF;       ///< Structure factory.
+    std::shared_ptr<ItemFactory> mIF;            ///< Item factory (arrows, bows).
+    std::shared_ptr<GameObjects> mGO;            ///< Asset manager (mesh bounds).
+    std::shared_ptr<Terrain> mTerrain;           ///< Terrain.
+    std::shared_ptr<CollisionSystem> mCollision; ///< Obstacle test for arrow arcs; without it, arrows fly the flattest arc.
 
     std::set<InstanceHandle> mPeople;   ///< Pioneers without a job.
     std::set<InstanceHandle> mArtisans; ///< Artisans.

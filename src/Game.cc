@@ -199,11 +199,14 @@ void Game::init()
     mTerrain->CreateWater(tg::pos3(0), tg::size3(3));
 
     mPhysicsSys->SetTerrain(mTerrain);
+    mAnimationSys->SetTerrain(mTerrain);
+    mAnimationSys->SetCollision(mCollisionSys);
     mItemFac->AttachTerrain(mTerrain);
     mUnitFac->AttachTerrain(mTerrain);
     mStructFac->AttachTerrain(mTerrain);
     mNatureFac->AttachTerrain(mTerrain);
     mGamelogicSys->AttachTerrain(mTerrain);
+    mGamelogicSys->AttachCollision(mCollisionSys);
     mCollisionSys->Init(*mECS, mTerrain->GetSize());
 
     // Initialize GFX

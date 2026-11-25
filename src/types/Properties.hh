@@ -26,7 +26,7 @@ struct Weapon
     float damage = 0.5f;                     ///< Damage per hit.
     float range = 0.5f;                      ///< Attack range in world units.
     float cooldown = 2.f;                    ///< Seconds between attacks.
-    float missileSpeed = 0.f;                ///< Arrow speed in world units per second (bows only).
+    float missileSpeed = 0.f;                ///< Highest launch speed of arrows in world units per second (bows only).
     WeaponType type = WeaponType::Undefined; ///< Weapon kind.
 };
 }
