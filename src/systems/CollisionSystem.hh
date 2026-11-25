@@ -59,6 +59,7 @@ public:
     /**
      * Tests whether a straight segment passes through a static collider, taken as its ground-plane shape extruded from its bottom to its top.
      *
+     * Only colliders with `Collider::blocksArrows` count.
      * Archers use it to pick an arrow arc that clears structures (`GamelogicSystem::AimArrow`).
      *
      * @param from Start of the segment (world space).

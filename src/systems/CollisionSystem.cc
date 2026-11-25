@@ -390,6 +390,9 @@ bool gamedev::CollisionSystem::IsSegmentBlocked(tg::pos3 from, tg::pos3 to, tg::
 
     for (auto const body : mSegmentCandidates)
     {
+        if (!mECS->GetComponent<Collider>(body)->blocksArrows)
+            continue;
+
         auto const& shape = CachedShape(body);
         if (!Contains(shape, {exempt.x, exempt.z}) && SegmentOverlaps(shape, from, to))
             return true;

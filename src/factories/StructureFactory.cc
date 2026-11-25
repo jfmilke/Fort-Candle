@@ -188,6 +188,7 @@ void gamedev::StructureFactory::Init_StartingBonfire()
 
     // Collider
     collider->dynamic = false;
+    collider->blocksArrows = false; // Arrows fly over the campfire
 
     // Light
     light->pl.position = shape->box.center + tg::vec3(0, 1, 0); // Light above center
@@ -251,6 +252,7 @@ void gamedev::StructureFactory::Init_aLantern()
 
     // Collider
     collider->dynamic = false;
+    collider->blocksArrows = false; // Only the pole is solid; the circle also covers the lamp arm
 
     // Light
     light->pl.position = tg::pos3(0.77, 1.8, 0);
@@ -285,6 +287,7 @@ void gamedev::StructureFactory::Init_RegularBonfire()
 
     // Collider
     collider->dynamic = false;
+    collider->blocksArrows = false; // Arrows fly over the campfire
 
     // Light
     light->pl.position = shape->box.center + tg::vec3(0, 1, 0); // Light above center
