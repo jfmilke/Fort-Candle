@@ -26,6 +26,78 @@
 #include "types/AuxiliaryModel.hh"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <span>
+
+namespace
+{
+// Coverage of the directional (sun) shadow map, in world units; the play area is around y = 0 (see RenderDepthMap)
+constexpr float kDirShadowDistance = 150.f;   // farthest view depth that gets sun shadows
+constexpr float kDirShadowGroundY = -1.f;     // ground plane that clips the view rays (water is at -1.6, the base at 0)
+constexpr float kDirShadowReceiverTopY = 8.f; // receivers above the visible ground are covered up to this height
+constexpr float kDirShadowCasterTopY = 24.f;  // casters up to this height (towers) are rendered into the shadow map
+constexpr int kDirShadowRaysPerEdge = 8;      // view rays per screen edge that sample the visible ground
+
+// index of the picking target among the scene framebuffer's draw buffers (attachment order in CreateGFXResources)
+constexpr GLuint kPickingDrawBuffer = 2;
+
+struct Circle
+{
+    tg::pos2 center;
+    float radius;
+};
+
+bool Contains(Circle const& c, tg::pos2 p) { return tg::length_sqr(p - c.center) <= c.radius * c.radius * 1.0001f + 1e-6f; }
+
+Circle CircleThrough(tg::pos2 a, tg::pos2 b) { return {a + (b - a) * 0.5f, tg::length(b - a) * 0.5f}; }
+
+Circle CircleThrough(tg::pos2 a, tg::pos2 b, tg::pos2 c)
+{
+    auto const ab = b - a;
+    auto const ac = c - a;
+    float const abLen = tg::length_sqr(ab);
+    float const acLen = tg::length_sqr(ac);
+    float const d = 2.f * (ab.x * ac.y - ab.y * ac.x);
+
+    // (nearly) collinear: the circle around the two points farthest apart
+    if (std::abs(d) <= 1e-6f * (abLen + acLen))
+    {
+        auto const bc = c - b;
+        if (abLen >= acLen && abLen >= tg::length_sqr(bc))
+            return CircleThrough(a, b);
+        return acLen >= tg::length_sqr(bc) ? CircleThrough(a, c) : CircleThrough(b, c);
+    }
+
+    // circumcircle
+    tg::vec2 const offset = {(ac.y * abLen - ab.y * acLen) / d, (ab.x * acLen - ac.x * abLen) / d};
+    return {a + offset, tg::length(offset)};
+}
+
+// Smallest circle containing all points (incremental Welzl, worst case cubic: fine for a few dozen points).
+Circle SmallestEnclosingCircle(std::span<tg::pos2 const> points)
+{
+    Circle circle = {points[0], 0.f};
+    for (size_t i = 1; i < points.size(); ++i)
+    {
+        if (Contains(circle, points[i]))
+            continue;
+
+        circle = {points[i], 0.f};
+        for (size_t j = 0; j < i; ++j)
+        {
+            if (Contains(circle, points[j]))
+                continue;
+
+            circle = CircleThrough(points[i], points[j]);
+            for (size_t k = 0; k < j; ++k)
+                if (!Contains(circle, points[k]))
+                    circle = CircleThrough(points[i], points[j], points[k]);
+        }
+    }
+    return circle;
+}
+}
 
 // System Stuff
 // ============
@@ -184,10 +256,11 @@ void gamedev::RenderSystem::UpdateShadowMapTexture()
 
     glow::info() << "Creating " << mDirShadowResolution << " x " << mDirShadowResolution << " shadow map";
 
-    mDirShadowDepthMap = glow::Texture2D::createStorageImmutable(mDirShadowResolution, mDirShadowResolution, GL_DEPTH_COMPONENT32F, 0);
+    mDirShadowDepthMap = glow::Texture2D::createStorageImmutable(mDirShadowResolution, mDirShadowResolution, GL_DEPTH_COMPONENT32F, 1);
     {
         auto tex = mDirShadowDepthMap->bind();
-        tex.setFilter(GL_NEAREST, GL_NEAREST);
+        // linear filtering of a depth compare texture: each lookup is a bilinear 2x2 PCF
+        tex.setFilter(GL_LINEAR, GL_LINEAR);
         tex.setWrap(GL_CLAMP_TO_BORDER, GL_CLAMP_TO_BORDER);
         tex.setBorderColor({1.0f, 1.0f, 1.0f, 1.0f});
 
@@ -493,7 +566,7 @@ tg::pos3 gamedev::RenderSystem::MouseToWorld(int x, int y)
 void gamedev::RenderSystem::RenderDepthCubemap()
 {
     float shadowNear = 0.01f;
-    float shadowFar = 500.f;
+    float shadowFar = mShadowFarPlane;
 
     const tg::pos3& lightPos = mShadowingPointLight.position;
 
@@ -534,44 +607,84 @@ void gamedev::RenderSystem::RenderDepthCubemap()
 
 void gamedev::RenderSystem::RenderDepthMap()
 {
+    // The shadow map covers the visible ground: the footprint of the view frustum, clipped to the ground plane and the shadow distance.
+    // Its smallest enclosing circle (in xz) keeps its radius when the camera pans or turns about the y axis, and the shadow map is
+    // aligned to the sun and moved in whole texels, so shadow edges stay put while the camera moves.
+    std::array<tg::pos2, 1 + 4 * kDirShadowRaysPerEdge> footprint;
+    footprint[0] = {mCameraPos.x, mCameraPos.z};
     {
-        auto fb_shadow = mFramebufferDirShadow->bind();
+        auto const invView = tg::inverse(mView);
+        float const tanHalfX = 1.f / mProj[0][0];
+        float const tanHalfY = 1.f / mProj[1][1];
+
+        auto next = footprint.begin() + 1;
+        for (int edge = 0; edge < 4; ++edge)
+            for (int i = 0; i < kDirShadowRaysPerEdge; ++i)
+            {
+                // walk around the screen border in normalized device coordinates
+                float const s = -1.f + 2.f * float(i) / kDirShadowRaysPerEdge;
+                tg::vec2 const ndc = edge == 0   ? tg::vec2(s, -1.f)
+                                     : edge == 1 ? tg::vec2(1.f, s)
+                                     : edge == 2 ? tg::vec2(-s, 1.f)
+                                                 : tg::vec2(-1.f, -s);
+
+                // world-space ray direction per unit of view depth
+                auto const dir = tg::vec3(invView * tg::vec4(ndc.x * tanHalfX, ndc.y * tanHalfY, -1.f, 0.f));
+                float depth = kDirShadowDistance;
+                if (dir.y < 0.f)
+                    depth = std::min(depth, (kDirShadowGroundY - mCameraPos.y) / dir.y);
+                auto const p = mCameraPos + std::max(depth, 0.f) * dir;
+                *next++ = {p.x, p.z};
+            }
+    }
+    auto const circle = SmallestEnclosingCircle(footprint);
+
+    // quantize the radius in 5% steps, so that the texel size (and with it the shadow edges) only changes in steps while zooming
+    float const radius = std::pow(1.05f, std::ceil(std::log(std::max(circle.radius, 1.f)) / std::log(1.05f)));
+
+    // sun view: a rotation only (the eye is at the origin), so moving the orthographic box by whole texels keeps the texel grid
+    auto const L = tg::normalize(mDirLight.direction); // towards the sun
+    auto const lightView = tg::look_at_opengl(tg::pos3::zero, -L, std::abs(L.y) < 0.99f ? tg::vec3::unit_y : tg::vec3::unit_z);
+
+    // light-space half extents of the receiver cylinder (the circle extruded from the ground plane to the receiver top),
+    // x and y padded by a texel on each side for the snapping below
+    float const halfHeight = (kDirShadowReceiverTopY - kDirShadowGroundY) / 2.f;
+    auto const halfExtent = [&](int axis)
+    {
+        tg::vec3 const a = {lightView[0][axis], lightView[1][axis], lightView[2][axis]};
+        return radius * std::hypot(a.x, a.z) + halfHeight * std::abs(a.y);
+    };
+    float const resolution = float(mDirShadowResolution);
+    float const halfX = halfExtent(0) * resolution / (resolution - 2.f);
+    float const halfY = halfExtent(1) * resolution / (resolution - 2.f);
+    float const halfZ = halfExtent(2);
+    float const texelX = 2.f * halfX / resolution;
+    float const texelY = 2.f * halfY / resolution;
+
+    auto center = lightView * tg::pos3(circle.center.x, kDirShadowGroundY + halfHeight, circle.center.y);
+    center.x = std::floor(center.x / texelX) * texelX;
+    center.y = std::floor(center.y / texelY) * texelY;
+
+    // depth range: the cylinder, extended towards the sun so that casters up to kDirShadowCasterTopY are not clipped
+    float const casterReach = (kDirShadowCasterTopY - kDirShadowGroundY) / std::max(L.y, 0.1f);
+    auto const lightProj
+        = tg::orthographic(center.x - halfX, center.x + halfX, center.y - halfY, center.y + halfY, -center.z - halfZ - casterReach, -center.z + halfZ);
+
+    mDirShadowViewProj = lightProj * lightView;
+    mDirShadowTexelSize = std::max(texelX, texelY);
+
+    {
+        auto fb = mFramebufferDirShadow->bind();
         glClear(GL_DEPTH_BUFFER_BIT);
 
-        auto shader = mShaderPoly->use();
-        SetupSceneShader(shader);
+        auto shader = mShaderDepthDir->use();
+        shader["uProj"] = lightProj;
+        shader["uView"] = lightView;
 
-        // set up shadow camera
-        auto shadowCamDis = 12 * mCameraPos.y; // render far enough
-        auto shadowSize = 6 * mCameraPos.y;    // render wide enough
-
-        // calculate center of camera rotation
-        auto angle = tg::angle_between(mCameraForward, tg::vec3(0, -1, 0));
-        auto distance = tan(angle) * mCameraPos.y;
-
-        auto focus = mCameraPos + normalize(mCameraForward) * hypot(mCameraPos.y, distance);
-
-        // place shadowmap more or less in center of visible area
-        auto sun = mDirLight;
-        auto shadowDir = focus + 4 * length(mCameraPos - focus) * sun.direction;
-        auto shadowPos = shadowDir + sun.direction;
-
-        auto shadowview = tg::look_at_opengl(shadowPos, shadowDir, {0, 1, 0});
-        auto shadowproj = tg::orthographic(-shadowSize, shadowSize, -shadowSize, shadowSize, 0.1f, shadowCamDis);
-
-        shader["uProj"] = shadowproj;
-        shader["uView"] = shadowview;
-        shader["uShadowViewProj"] = shadowproj * shadowview;
-        shader["uShadowsPass"] = true;
-
-        shader["uFar"] = mShadowFarPlane;
-
-        shader.setTexture("uDirShadowMap", mDirShadowDepthMap);
-        shader.setTexture("uPointShadowMap", mPointShadowDepthMap);
-
+        // back faces only: lit surfaces never shadow themselves (no acne), and the ground does not need to cast
         GLOW_SCOPED(cullFace, GL_FRONT);
 
-        RenderInstances(shader);
+        RenderDepth(shader);
     }
 }
 
@@ -584,7 +697,8 @@ void gamedev::RenderSystem::RenderScene()
 
     shader["uProj"] = mProj;
     shader["uView"] = mView;
-    shader["uShadowsPass"] = false;
+    shader["uShadowViewProj"] = mDirShadowViewProj;
+    shader["uDirShadowTexel"] = mDirShadowTexelSize;
 
     shader.setTexture("uDirShadowMap", mDirShadowDepthMap);
     shader.setTexture("uPointShadowMap", mPointShadowDepthMap);
@@ -632,7 +746,10 @@ void gamedev::RenderSystem::RenderParticles()
     shader["uProj"] = mProj;
     shader["uView"] = mView;
 
+    // the particle shader writes no picking ID: keep the one of whatever is behind (otherwise the value would be undefined)
+    glColorMaski(kPickingDrawBuffer, GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
     mVaoParticle->bind().draw(mParticleCount);
+    glColorMaski(kPickingDrawBuffer, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
     mDrawCalls++;
 }
@@ -675,6 +792,8 @@ void gamedev::RenderSystem::SetupSceneShader(glow::UsedProgram& shader)
     shader["uEnablePointL"] = mEnablePointLight;
 
     // Shadows
+    // -> Point light shadows: the cube map stores distance / far
+    shader["uFar"] = mShadowFarPlane;
     // -> Sunlight Shadows
     shader["uDirShadowMap"] = mDirShadowDepthMap;
 
@@ -778,6 +897,7 @@ void gamedev::RenderSystem::LoadGFXResources()
 
         // mShaderDepth = glow::Program::createFromFiles({"../data/shaders/depth.vsh", "../data/shaders/depth.fsh", "../data/shaders/depth.gsh"});
         mShaderDepth = glow::Program::createFromFiles({"../data/shaders/depth.vsh", "../data/shaders/depth.fsh"});
+        mShaderDepthDir = glow::Program::createFromFile("../data/shaders/depth_dir");
 
         // Light UBO
         mPointLightUBO = glow::UniformBuffer::create();

@@ -50,7 +50,6 @@ uniform uint uAlbedoBiasPacked;
 
 // Render Parameters
 uniform bool uRenderNormals;
-uniform bool uShadowsPass;
 uniform bool uPointShadows;
 uniform bool uDirShadows;
 
@@ -62,7 +61,8 @@ in vec3 vTangent;
 in vec2 vTexCoord;
 
 // Transformations
-uniform mat4 uShadowViewProj;
+uniform mat4 uShadowViewProj;   // world -> sun shadow map clip space
+uniform float uDirShadowTexel;  // edge length of a sun shadow map texel in world units
 
 // Fog of War
 uniform bool uFogOfWar;
@@ -154,32 +154,6 @@ vec3 gridSamplingDisk[20] = vec3[]
    vec3(0, 1,  1), vec3( 0, -1,  1), vec3( 0, -1, -1), vec3( 0, 1, -1)
 );
 
-// Returns a random number based on a vec3 and an int.
-float random(vec3 seed, int i){
-	vec4 seed4 = vec4(seed,i);
-	float dot_product = dot(seed4, vec4(12.9898,78.233,45.164,94.673));
-	return fract(sin(dot_product) * 43758.5453);
-}
-
-vec2 poissonDisk[16] = vec2[]( 
-   vec2( -0.94201624, -0.39906216 ), 
-   vec2( 0.94558609, -0.76890725 ), 
-   vec2( -0.094184101, -0.92938870 ), 
-   vec2( 0.34495938, 0.29387760 ), 
-   vec2( -0.91588581, 0.45771432 ), 
-   vec2( -0.81544232, -0.87912464 ), 
-   vec2( -0.38277543, 0.27676845 ), 
-   vec2( 0.97484398, 0.75648379 ), 
-   vec2( 0.44323325, -0.97511554 ), 
-   vec2( 0.53742981, -0.47373420 ), 
-   vec2( -0.26496911, -0.41893023 ), 
-   vec2( 0.79197514, 0.19090188 ), 
-   vec2( -0.24188840, 0.99706507 ), 
-   vec2( -0.81409955, 0.91437590 ), 
-   vec2( 0.19984126, 0.78641367 ), 
-   vec2( 0.14383161, -0.14100790 ) 
-);
-
 float PointShadow(vec3 fragPos)
 {
     vec3 fragToLight = fragPos - uLightPos;
@@ -205,71 +179,42 @@ float PointShadow(vec3 fragPos)
     return 1-shadow;
 }
 
+// Fraction of sunlight that reaches worldPos (1 = lit); N is the surface normal, L the direction towards the sun.
 float DirShadow(vec3 worldPos, vec3 N, vec3 L)
 {
-    vec3 offset = L * 0.01; // to prevent shadow acne
-    vec4 shadowPos = uShadowViewProj * vec4(worldPos, 1.0f);
-    shadowPos /= shadowPos.w;
+    float cosNL = dot(N, L);
+    if (cosNL <= 0.0)
+        return 1.0; // turned away from the sun: gets no sunlight anyway
 
-    //if (any(greaterThan(abs(shadowPos.xyz), vec3(0.99f))))
-    //    return 1.0f; // no shadow outside
+    // look up slightly off the surface (along the normal, more at grazing angles, and towards the sun) against acne at silhouettes
+    vec3 offsetPos = worldPos + (N * (1.0 - cosNL) + L * 0.5) * uDirShadowTexel;
 
-    bvec3 gr = greaterThan(abs(shadowPos.xyz), vec3(0.99f));
-    if (gr.x || gr.y || gr.z)
-        return 1.0f; // no shadow outside
+    vec4 shadowPos = uShadowViewProj * vec4(offsetPos, 1.0);
+    vec3 p = shadowPos.xyz / shadowPos.w * 0.5 + 0.5;
 
-    float dotNL = dot(N, L);
-    float bias = max(0.05 * (1.0 - dotNL), 0.005);
-    
-    shadowPos.xyz = shadowPos.xyz * 0.5 + 0.5;
-    
-    float closestDepth = texture(uDirShadowMap, shadowPos.xyz); 
-    float currentDepth = shadowPos.z;
+    // outside the shadow map's depth range: nothing in the map can shade it
+    if (p.z <= 0.0 || p.z >= 1.0)
+        return 1.0;
 
-    // Random Poisson Sampling 
-    float shadow = 0.0;
-    for (int i = 0; i < 4; i++) {
-        int index = int(16.0*random(gl_FragCoord.xyy, i))%16;
-        if (texture(uDirShadowMap, shadowPos.xyz + vec3(poissonDisk[index]/700.0, 0))  >  shadowPos.z )
-        {
-            shadow+=0.3;
-        }
-    }
-    shadow = clamp(shadow, 0, 1);
+    vec2 border = abs(p.xy * 2.0 - 1.0);
+    float borderDist = max(border.x, border.y);
+    if (borderDist >= 1.0)
+        return 1.0;
 
-    // // Grid based Poisson Sampling
-    // float shadow = 0.0;
-    // float bias = 0.05;
-    // int samples = 20;
-    // float viewDistance = length(uCamPos - worldPos);
-    // float diskRadius = (1.0 + (viewDistance / uFar)*25) / 50.0;
-    // for(int i = 0; i < samples; ++i)
-    // {
-    //     float closestDepth = texture(uDirShadowMap, shadowPos.xyz + gridSamplingDisk[i]/2000);
-    //     //closestDepth *= uFar;   // undo mapping [0;1]
-    //     if(currentDepth > closestDepth)
-    //         shadow += 1.0;
-    // }
-    // shadow /= float(samples);
-    // shadow = 1-shadow;
+    // 3x3 PCF; the depth compare texture is filtered linearly, so each lookup is itself a bilinear 2x2 PCF
+    vec2 texel = 1.0 / vec2(textureSize(uDirShadowMap, 0));
+    float lit = 0.0;
+    for (int y = -1; y <= 1; ++y)
+        for (int x = -1; x <= 1; ++x)
+            lit += texture(uDirShadowMap, vec3(p.xy + vec2(x, y) * texel, p.z));
+    lit /= 9.0;
 
-
-    //float shadow = currentDepth > closestDepth  ? 1.0 : 0.0;
-
-    if(shadowPos.z > 1.0) // check far plane
-        shadow = 0.0;
-
-    return shadow;
+    // fade out towards the border of the shadow map instead of ending in a hard line
+    return mix(lit, 1.0, smoothstep(0.9, 1.0, borderDist));
 }
 
 void main()
 {
-    if (uShadowsPass)
-    {
-        fColor = vec3(1.0);
-        return;
-    }
-
     // "Globals"
     const float viewDist = 25;
     const vec2 uv = vTexCoord;
@@ -318,14 +263,11 @@ void main()
     if (uEnableAmbientL)
         resultColor += calculateIndirectDiffuseLight(uAmbientLight, F0, dotNV, N, V, metalness, 1.0, albedo);
 
-    vec3 Lsun = normalize(vec3(-1, 1, 1));
-    vec3 radianceSun = vec3(1.0, 0.9, 0.75) * 0.5;
-
     // Sun
     if (uEnableDirectionalL)
-        if (uDirShadows) 
+        if (uDirShadows)
         {
-            resultColor += calculateDirectLight(DL, V, dotNV, uSunLight.color, N, F0, matAO, roughness, metalness, albedo) * DirShadow(vWorldPos, N, Lsun);
+            resultColor += calculateDirectLight(DL, V, dotNV, uSunLight.color, N, F0, matAO, roughness, metalness, albedo) * DirShadow(vWorldPos, N, DL);
         } 
         else 
         {

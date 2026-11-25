@@ -93,14 +93,14 @@ void gamedev::ParticleSystem::Update(float elapsed_time)
     {
         auto& p = mParticlePool[id];
 
+        p.lifeRemaining -= elapsed_time;
         if (p.lifeRemaining <= 0.0f)
         {
             KillParticle(id);
-            id--; // the last living particle was swapped into this slot
+            id--; // the last living particle was swapped into this slot (and is not updated yet)
             continue;
         }
 
-        p.lifeRemaining -= elapsed_time;
         p.position += p.velocity * elapsed_time;
         p.rotation_y += 0.01f * elapsed_time;
         float life = p.lifeRemaining / p.lifeTime;
@@ -120,7 +120,7 @@ void gamedev::ParticleSystem::RenderInstanced(const glow::UsedProgram& shader, c
     mVaoCube->bind().draw(mAlive);
 }
 
-long int gamedev::ParticleSystem::GetParticleCount() { return mAlive; }
+long int gamedev::ParticleSystem::GetParticleCount() { return long(mParticleAttributes.size()); }
 
 glow::SharedVertexArray& gamedev::ParticleSystem::GetParticleVAO() { return mVaoCube; }
 

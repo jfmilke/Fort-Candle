@@ -14,7 +14,7 @@ namespace gamedev
  * through the `Update*` / `Switch*` functions and then calls `Update`, which renders one frame:
  *
  *  1. Shadows: point-light shadow cube map (`depth` shader) and directional shadow map
- *     (`poly` shader, orthographic, centered on the point the camera looks at).
+ *     (`depth_dir` shader, orthographic, fitted to the visible ground, see `RenderDepthMap`).
  *  2. Scene: skybox (`background`) and all instances (`poly`) into the HDR scene framebuffer (color, bright parts, picking IDs, depth).
  *  3. Particles (`particles`) and outlines of the selected/highlighted instances (`outline_forward`).
  *  4. Bloom (5 ping-pong `blur` passes).
@@ -170,7 +170,15 @@ public:
     /// Combines scene, bloom and effects into the default framebuffer (`output` shader).
     void RenderPostProcessing();
 
-    /// Renders the directional shadow map.
+    /**
+     * Fits the sun's orthographic shadow camera to the visible ground and renders the directional shadow map.
+     *
+     * The map covers the smallest circle around the ground the camera sees (view rays clipped to the ground plane y = -1
+     * and 150 units of view depth), extruded up to y = 8 for receivers; casters up to y = 24 are rendered.
+     * The circle is stable when the camera pans or turns, its radius is quantized, and the map is moved in whole texels,
+     * so shadow edges do not flicker while the camera moves.
+     * Assumes that the play area is around y = 0.
+     */
     void RenderDepthMap();
 
     /// Renders the six faces of the point shadow cube map around the shadow-casting light.
@@ -301,7 +309,10 @@ private:
     int mDirShadowResolution;   ///< Edge length of the directional shadow map.
 
     float mShadowNearPlane; ///< Unused.
-    float mShadowFarPlane;  ///< Far plane passed to the shadow pass as `uFar`.
+    float mShadowFarPlane;  ///< Far plane of the point shadow cube map, which stores distance / far (`uFar` in the shaders).
+
+    tg::mat4 mDirShadowViewProj;     ///< World to clip space of the directional shadow map (`uShadowViewProj`).
+    float mDirShadowTexelSize = 0.f; ///< Edge length of a directional shadow map texel in world units (`uDirShadowTexel`).
 
     // Lighting
     AmbientLight mAmbLight;               ///< Ambient light.
@@ -343,11 +354,12 @@ private:
     glow::SharedProgram mShaderOutlineResolve; ///< Composites the outlines.
 
     // Custom Low-Poly Shader
-    glow::SharedProgram mShaderPoly;       ///< Scene and directional shadow pass.
+    glow::SharedProgram mShaderPoly;       ///< Scene.
     glow::SharedProgram mShaderBackground; ///< Skybox.
     glow::SharedProgram mShaderParticle;   ///< Instanced particles.
     glow::SharedProgram mShaderBlur;       ///< Bloom blur.
     glow::SharedProgram mShaderDepth;      ///< Point shadow cube map.
+    glow::SharedProgram mShaderDepthDir;   ///< Directional shadow map.
 
     // Render Targets
 private:

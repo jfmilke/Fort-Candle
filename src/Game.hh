@@ -130,7 +130,7 @@ private:
 private:
     // Shadows
     int mPointShadowResolution = 1024; ///< Edge length of the point shadow cube map faces.
-    int mDirShadowResolution = 1024;   ///< Edge length of the sun shadow map.
+    int mDirShadowResolution = 4096;   ///< Edge length of the sun shadow map, which covers all visible ground.
 
     // Lighting
     tg::vec3 mAmbientColor = {0.75, 1.0, 0.9}; ///< Ambient light color.

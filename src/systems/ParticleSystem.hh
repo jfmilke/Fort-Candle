@@ -84,7 +84,11 @@ public:
      */
     void KillParticle(int id);
 
-    /// Number of living particles.
+    /**
+     * Number of particle instances that `UploadParticleData` uploads: the living particles as of the last `Update`.
+     *
+     * Bursts emitted by events after that `Update` are only drawn after the next one.
+     */
     long int GetParticleCount();
 
 private:
