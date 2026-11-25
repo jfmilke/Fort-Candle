@@ -199,6 +199,7 @@ void Game::init()
     mTerrain->CreateWater(tg::pos3(0), tg::size3(3));
 
     mPhysicsSys->SetTerrain(mTerrain);
+    mAnimationSys->SetTerrain(mTerrain);
     mItemFac->AttachTerrain(mTerrain);
     mUnitFac->AttachTerrain(mTerrain);
     mStructFac->AttachTerrain(mTerrain);

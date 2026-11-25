@@ -10,6 +10,7 @@
 #include "factories/UnitFactory.hh"
 
 #include <array>
+#include <optional>
 
 namespace gamedev
 {
@@ -386,25 +387,25 @@ private:
     void AimWeapon(Attacker* attacker);
 
     /**
-     * Computes the arrow trajectory to hit the (moving) target: horizontal intercept and fake arc height.
+     * Computes the launch velocity of an arrow that hits the target if the target keeps its course.
      *
-     * The target speed is estimated from its `Physics::lastPosition`.
-     * The arc ends `Arrow::aimHeight` above the target's current position.
+     * The target is assumed to move on at its `Physics::observedVelocity`.
+     * The arrow flies at the bow's `missileSpeed` horizontally and on a ballistic arc (`PhysicsSystem::kGravity`) vertically,
+     * so the flight time follows from the horizontal interception, and the vertical launch speed from the time and the height difference.
+     * It aims at `Arrow::aimHeight` above the ground at the predicted target position.
      *
      * @param attacker `Attacker` component of the soldier, with a bow and an attack target.
-     * @param start Spawn position of the arrow (world space); the arc starts at its height.
-     * @param dt Time step in seconds (for the target speed).
-     * @return The trajectory; `xMax` is 0 if there is no intercept.
+     * @param start Launch position of the arrow (world space).
+     * @return World-space launch velocity, or nothing if the target outruns the arrow.
      */
-    arcEq GetArrowArc(Attacker* attacker, tg::pos3 start, float dt);
+    std::optional<tg::vec3> AimArrow(Attacker* attacker, tg::pos3 start);
 
     /**
-     * Creates an arrow with a smoke trail flying along `GetArrowArc`, starting 0.2 in front of and 0.3 above the bow.
+     * Launches an arrow with a smoke trail from the center of the bow, aimed with `AimArrow`.
      *
      * @param attacker `Attacker` component of the soldier, with a bow and an attack target.
-     * @param dt Time step in seconds (for `GetArrowArc`).
      */
-    void ShootArrow(Attacker* attacker, float dt);
+    void ShootArrow(Attacker* attacker);
 
     /**
      * Deals claw damage to the target pioneer or structure; kills or destroys it at zero health.
@@ -572,7 +573,7 @@ private:
     void CollisionListener(Event& e);
 
     /**
-     * `ArrowHit` listener: damages the target, kills it at zero health, removes the arrow.
+     * `ArrowHit` listener: damages the target and kills it at zero health (the arrow stays in it, see `AnimationSystem`).
      *
      * @param e Hit event; the sender is the arrow, the subject its target.
      */
@@ -647,6 +648,8 @@ private:
     float mDesaturationIntensityTarget = 0.3; ///< Target of `mDesaturationIntensity` (set by the fire level).
 
 private:
+    static constexpr float kMinArrowFlightTime = 0.1f; ///< Shortest flight time `AimArrow` plans with, in seconds (targets right at the bow).
+
     EngineECS* mECS = nullptr;             ///< ECS (not owned).
     std::shared_ptr<AudioSystem> mAS;      ///< Audio.
     std::shared_ptr<UnitFactory> mUF;      ///< Unit factory.
