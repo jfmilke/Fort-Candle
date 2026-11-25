@@ -146,6 +146,7 @@ std::string ToJson(Report const& report)
     add(std::format("  \"format\": \"fort-candle-benchmark\",\n  \"version\": {},\n", kReportVersion));
     add(std::format("  \"scenario\": {},\n", JsonString(report.scenario)));
     add(std::format("  \"seed\": {},\n  \"warmup_ticks\": {},\n  \"ticks\": {},\n", report.seed, report.warmupTicks, report.ticks));
+    add(std::format("  \"tick_rate\": {},\n", report.tickRate));
     add(std::format("  \"timestamp\": \"{:%Y-%m-%dT%H:%M:%SZ}\",\n", report.timestamp));
     add(std::format("  \"build\": {{\"time\": {}, \"config\": {}, \"compiler\": {}, \"platform\": {}}},\n", JsonString(report.build.time),
                     JsonString(report.build.config), JsonString(report.build.compiler), JsonString(report.build.platform)));
@@ -185,8 +186,8 @@ std::vector<std::string> FormatSummary(Report const& report)
         startupTotal += phase.ms;
 
     std::vector<std::string> lines;
-    lines.push_back(std::format("Benchmark '{}': {} ticks after {} warm-up, seed {}, {} {}, built {}", report.scenario, report.ticks,
-                                report.warmupTicks, report.seed, report.build.compiler, report.build.config, report.build.time));
+    lines.push_back(std::format("Benchmark '{}': {} ticks after {} warm-up at {} ticks/s, seed {}, {} {}, built {}", report.scenario, report.ticks,
+                                report.warmupTicks, report.tickRate, report.seed, report.build.compiler, report.build.config, report.build.time));
     lines.push_back(std::format("  startup {:.0f} ms, instances {} -> {} (max {}), outcome {}", startupTotal, report.instances.start,
                                 report.instances.end, report.instances.max, OutcomeName(report.outcome)));
     lines.push_back(std::format("  {:<12} {:>8} {:>10} {:>10} {:>10} {:>10}", "ms", "samples", "mean", "median", "p95", "max"));

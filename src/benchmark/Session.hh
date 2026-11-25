@@ -9,8 +9,9 @@
 /**
  * Reproducible performance measurements of the running game (`GameDevSS21 --benchmark <scenario>`).
  *
- * A benchmark run starts straight into play with a fixed RNG seed and without input, plays a scripted scenario
- * for a fixed number of 60 Hz ticks, writes the timings to a JSON file and closes the game.
+ * A benchmark run starts straight into play with a fixed RNG seed, without input, dialogs or audible sound, plays a scripted scenario
+ * for a fixed number of ticks, writes the timings to a JSON file and closes the game.
+ * Every tick advances the game by 1/60 s, but by default the ticks run twice as fast as in a normal game (`Options::speed`).
  * `tools/compare_benchmarks.py` compares result files.
  *
  * The timings come from the game's `profiling::Profiler`, captured after a warm-up:
@@ -47,7 +48,10 @@ public:
      */
     explicit Session(Options options);
 
-    /// How the game must run for this benchmark: seed, no vsync, no input, straight into play, the scenario's daily waves.
+    /**
+     * How the game must run for this benchmark: seed, no vsync, no input, straight into play, the scenario's daily waves,
+     * no dialogs, muted, at the speed of the options.
+     */
     [[nodiscard]] GameSettings Settings() const;
 
     /// Where the run stands.

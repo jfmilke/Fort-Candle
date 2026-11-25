@@ -3,6 +3,7 @@
 #include "benchmark/Scenarios.hh"
 
 #include <charconv>
+#include <cmath>
 #include <format>
 #include <ostream>
 #include <string_view>
@@ -12,7 +13,7 @@ namespace gamedev::app
 {
 namespace
 {
-/// Parses a non-negative integer that fits `T`.
+/// Parses the whole text as a non-negative number of type `T`.
 template <class T>
 std::optional<T> ParseNumber(std::string_view text)
 {
@@ -82,6 +83,18 @@ std::expected<LaunchOptions, std::string> ParseCommandLine(std::span<char const*
             }
             benchmarkSettings = true;
         }
+        else if (arg == "--speed")
+        {
+            auto const text = value();
+            if (!text)
+                return std::unexpected(text.error());
+
+            auto const speed = ParseNumber<double>(*text);
+            if (!speed || !std::isfinite(*speed) || *speed <= 0)
+                return std::unexpected(std::format("--speed needs a positive number, not '{}'", *text));
+            options.speed = *speed;
+            benchmarkSettings = true;
+        }
         else if (arg == "--output")
         {
             auto const path = value();
@@ -97,7 +110,7 @@ std::expected<LaunchOptions, std::string> ParseCommandLine(std::span<char const*
     }
 
     if (benchmarkSettings && !options.scenario)
-        return std::unexpected("--ticks, --warmup, --seed and --output need --benchmark <scenario>");
+        return std::unexpected("--ticks, --warmup, --speed, --seed and --output need --benchmark <scenario>");
 
     if (options.scenario)
         launch.benchmark = std::move(options);
@@ -110,10 +123,11 @@ void PrintUsage(std::ostream& out)
     out << "Usage: GameDevSS21 [--benchmark <scenario> [options]]\n"
            "Run from a direct subfolder of the repository root (e.g. bin/), so that ../data exists.\n\n"
            "Without arguments, the game starts normally.\n\n"
-           "Benchmark (plays the scenario without input, writes the timings as JSON and exits):\n"
+           "Benchmark (plays the scenario without input, dialogs or audible sound, writes the timings as JSON and exits):\n"
            "  --benchmark <scenario>  Scenario to play (see below)\n"
-        << std::format("  --ticks <n>             Measured 60 Hz ticks (default {})\n", defaults.ticks)
+        << std::format("  --ticks <n>             Measured ticks of 1/60 s game time (default {})\n", defaults.ticks)
         << std::format("  --warmup <n>            Ticks played before measuring (default {})\n", defaults.warmupTicks)
+        << std::format("  --speed <x>             Ticks per real second as a multiple of 60 (default {}); the game plays the same\n", defaults.speed)
         << std::format("  --seed <n>              Random seed (default {})\n", defaults.seed)
         << "  --output <file>         Result file (default benchmarks/<scenario>-<UTC time>.json)\n"
            "  --help                  Show this text\n\n"

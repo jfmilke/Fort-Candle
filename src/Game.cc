@@ -88,6 +88,9 @@ void Game::init()
     // vertical synchronization limits the frame rate to the monitor refresh rate
     setVSync(mSettings.vsync);
 
+    // calls of update() per second; each one advances the game by kTickSeconds
+    setUpdateRate(gamedev::kTickRate * mSettings.speed);
+
     // disable built-in camera
     setUseDefaultCamera(false);
 
@@ -284,12 +287,12 @@ void Game::onFrameStart()
     mLastFrameStart = now;
 }
 
-// update game in 60 Hz fixed timestep
-void Game::update(float elapsedSeconds)
+// update game in fixed ticks of kTickSeconds; GameSettings::speed only changes how many run per real second
+void Game::update(float /*realSeconds*/)
 {
     bool const playing = state == PLAY;
 
-    mProfiler.Measure(mZones.update, [&] { updateSystems(elapsedSeconds); });
+    mProfiler.Measure(mZones.update, [&] { updateSystems(kTickSeconds); });
 
     if (playing && mHooks)
     {
@@ -303,7 +306,7 @@ void Game::updateSystems(float elapsedSeconds)
 {
     *mAdvancedFeatures.mStatNumUpdates += 1.f;
 
-    mAudioSys->SetMasterVolume(mMasterVolume / 100.f);
+    mAudioSys->SetMasterVolume(mSettings.muted ? 0.f : mMasterVolume / 100.f); // muted: the sources still play
     mAudioSys->SetVolume(0, mEffectVolume / 100.f);
     mAudioSys->SetVolume(1, mAmbientVolume / 100.f);
     mAudioSys->SetVolume(2, mMusicVolume / 100.f);
@@ -375,7 +378,8 @@ void Game::render(float elapsedSeconds)
 
     // ToDo: Put Animation Update here (see "mAdvancedFeatures.updateAnimationsInWorld(..)")
 
-    auto runtime = getCurrentTime();
+    // ticked time in game seconds (GlfwApp counts real seconds), so that shader animations keep pace with the game
+    auto runtime = float(getCurrentTimeD() * mSettings.speed);
 
     mRenderSys->UpdateTime(runtime, mEnvironmentSys->getGameTime());
     mRenderSys->UpdateWindowResolution(getWindowSize());
@@ -1177,7 +1181,14 @@ void Game::gameUI()
     if (mGamelogicSys->GetSupplyLevel() >= 3)
         mGameWon = true;
 
-    if (mNewGame)
+    // the defeat sound plays with or without the dialog
+    if (mGameLost && !mNewGame && !mPlayedTrack)
+    {
+        mAudioSys->PlayGlobalSound("lost.wav", gamedev::SoundType::effect, 0.5, false, gamedev::SoundPriority::high);
+        mPlayedTrack = true;
+    }
+
+    if (mSettings.dialogs && mNewGame)
     {
         ImGui::SetNextWindowPos({(float)getWindowWidth() / 2, (float)getWindowHeight() / 2}, 0, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize({350, 400});
@@ -1198,7 +1209,7 @@ void Game::gameUI()
         }
         ImGui::End();
     }
-    else if (mGameLost)
+    else if (mSettings.dialogs && mGameLost)
     {
         ImGui::SetNextWindowPos({(float)getWindowWidth() / 2, (float)getWindowHeight() / 2}, 0, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize({350, 400});
@@ -1216,16 +1227,10 @@ void Game::gameUI()
                 mGameLost = false;
                 toggleMenu();
             }
-
-            if (!mPlayedTrack)
-            {
-                mAudioSys->PlayGlobalSound("lost.wav", gamedev::SoundType::effect, 0.5, false, gamedev::SoundPriority::high);
-                mPlayedTrack = true;
-            }
         }
         ImGui::End();
     }
-    else if (mGameWon)
+    else if (mSettings.dialogs && mGameWon)
     {
         ImGui::SetNextWindowPos({(float)getWindowWidth() / 2, (float)getWindowHeight() / 2}, 0, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize({350, 400});

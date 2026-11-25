@@ -18,7 +18,7 @@ struct LaunchOptions
 };
 
 /**
- * Parses the command line: `[--benchmark <scenario> [--ticks n] [--warmup n] [--seed n] [--output file]] [--help]`.
+ * Parses the command line: `[--benchmark <scenario> [--ticks n] [--warmup n] [--speed x] [--seed n] [--output file]] [--help]`.
  *
  * Options take their value as the next argument.
  *

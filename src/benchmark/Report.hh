@@ -74,6 +74,7 @@ struct Report
     std::uint32_t seed = 0;               ///< RNG seed.
     int warmupTicks = 0;                  ///< Ticks before the measurement.
     int ticks = 0;                        ///< Measured ticks.
+    double tickRate = 0;                  ///< Ticks per real second (60 * `Options::speed`); the per-frame zones depend on it.
     std::chrono::sys_seconds timestamp{}; ///< When the run ended (UTC).
     BuildInfo build;                      ///< Build that ran.
     RunEnvironment environment;           ///< Renderer and window size.

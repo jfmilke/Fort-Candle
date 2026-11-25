@@ -55,8 +55,9 @@ def check_setup(baseline, candidate):
         values = {d[key] for _, d in baseline + candidate}
         if len(values) > 1:
             warnings.append(f"runs differ in {key}: {sorted(values, key=str)}")
-    for key in ("renderer", "window"):
-        values = {json.dumps(d[key]) for _, d in baseline + candidate}
+    for key in ("renderer", "window", "tick_rate"):
+        # results without a tick rate ran at the 60 ticks/s of a normal game
+        values = {json.dumps(d.get(key, 60)) for _, d in baseline + candidate}
         if len(values) > 1:
             warnings.append(f"runs differ in {key}: {sorted(values)} (frame and render times are not comparable)")
     configs = {d["build"]["config"] for _, d in baseline + candidate}

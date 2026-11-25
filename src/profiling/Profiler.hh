@@ -21,7 +21,7 @@ using Milliseconds = std::chrono::duration<double, std::milli>; ///< Unit of all
 enum class Cadence : std::uint8_t
 {
     Once,  ///< Once per run, e.g. a startup phase.
-    Tick,  ///< Once per 60 Hz simulation tick.
+    Tick,  ///< Once per simulation tick (1/60 s of game time).
     Frame, ///< Once per rendered frame.
 };
 

@@ -24,7 +24,10 @@ GameSettings Session::Settings() const
     settings.vsync = false;        // measure the frame rate the game reaches
     settings.inputEnabled = false; // the mouse over the window must not change what is measured
     settings.startPlaying = true;  // the intro dialog would pause the game
+    settings.dialogs = false;      // the HUD stays, also after a defeat or victory
+    settings.muted = true;         // sounds still play, only silently
     settings.dailyWaves = mOptions.scenario->dailyWaves;
+    settings.speed = mOptions.speed;
     settings.title = std::format("Fort Candle - benchmark {}", mOptions.scenario->name);
     return settings;
 }
@@ -97,6 +100,7 @@ Report Session::BuildReport(ClosingContext const& context) const
     report.seed = mOptions.seed;
     report.warmupTicks = mOptions.warmupTicks;
     report.ticks = mOptions.ticks;
+    report.tickRate = kTickRate * mOptions.speed;
     report.timestamp = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
     report.build = DescribeBuild(mOptions.executable);
     report.environment = context.environment;

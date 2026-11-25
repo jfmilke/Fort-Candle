@@ -51,7 +51,9 @@ enum GameState
  * Owns the ECS, all systems and factories, the terrain, the camera and the settings, and drives them from the glow-extras `GlfwApp` main loop:
  *
  *  - `init()` wires everything up (component and system registration, asset scan, preset setup, start layout).
- *  - `update()` runs the systems at a fixed 60 Hz: audio always, particles and lights except while paused, all other systems only while playing.
+ *  - `update()` runs the systems in ticks of 1/60 s (`kTickSeconds`): audio always, particles and lights except while paused,
+ *    all other systems only while playing.
+ *    60 ticks run per real second, times `GameSettings::speed`, which changes the rate, not the time step.
  *  - `render()` handles mouse/keyboard input, passes the per-frame state to the `RenderSystem` and renders.
  *  - `onGui()` builds the menus, the in-game HUD and, in editor mode (key F1), the debug, editor and spawn windows.
  *
@@ -59,7 +61,7 @@ enum GameState
  * the debug UI shows the latest values.
  *
  * Outside code controls a run through two seams, both set at construction:
- *  - `GameSettings`: how the game starts (seed, vsync, input, straight into play, daily waves).
+ *  - `GameSettings`: how the game starts and runs (seed, vsync, input, straight into play, daily waves, dialogs, sound, speed).
  *  - `GameHooks` (optional, not owned): notified at startup, after every played tick and at shutdown.
  *    It gets the profiler and the `GamelogicSystem`; `benchmark::Session` uses this to play scripted scenarios.
  */
@@ -165,7 +167,7 @@ private:
     float* f;                 ///< Unused.
     bool mFullscreen = false; ///< Requested fullscreen state (F11); applied in `render()`.
 
-    bool mNewGame = true;   ///< Show the intro window (and "New Game" instead of "Continue").
+    bool mNewGame = true;   ///< Show the intro window (if `GameSettings::dialogs`) and "New Game" instead of "Continue".
     bool mGameLost = false; ///< Defeat: the firewood dropped below 0 (checked by `gameUI`).
     bool mGameWon = false;  ///< Victory: all supply route upgrades were built (checked by `gameUI`).
 
@@ -260,6 +262,10 @@ private:
     std::optional<gamedev::profiling::Clock::time_point> mLastFrameStart; ///< Start of the previous frame.
 
 
+public:
+    /// Game time per tick in seconds, 1 / `gamedev::kTickRate` (rounded like the time step of `GlfwApp`).
+    static constexpr float kTickSeconds = float(1.0 / gamedev::kTickRate);
+
     // ctor
 public:
     /**
@@ -280,7 +286,8 @@ public:
      *  - creates and connects all systems, factories and assets,
      *  - creates the camp (`GamelogicSystem::SpawnPlayer`),
      *  - loads the start layout (`nature.fac`, `startStructs.fac`, `items.fac`),
-     *  - sets a day length of 0.5 real minutes.
+     *  - sets a day length of 0.5 minutes of game time (1800 ticks),
+     *  - sets the tick rate to `gamedev::kTickRate` * `GameSettings::speed`.
      */
     void init() override;
 
@@ -295,7 +302,8 @@ public:
     void onFrameStart() override;
 
     /**
-     * Called at a fixed 60 Hz. Updates:
+     * Called `gamedev::kTickRate` * `GameSettings::speed` times per real second; each call is one tick of `kTickSeconds` game time.
+     * Updates:
      *  - audio (always),
      *  - particles and lights (except while paused),
      *  - while playing: all other simulation systems, the daily enemy waves (day + 3 monsters) and reinforcements (day / 2 + 2 pioneers),
@@ -303,9 +311,9 @@ public:
      *
      * Then, if a tick was played, notifies `GameHooks::OnTickEnd` and closes the window if it asks to.
      *
-     * @param elapsedSeconds Fixed time step in seconds (1/60).
+     * @param realSeconds Real time per tick in seconds; unused, the systems advance by `kTickSeconds`.
      */
-    void update(float elapsedSeconds) override;
+    void update(float realSeconds) override;
 
     /**
      * Called once per frame (variable timestep):
@@ -377,9 +385,9 @@ public:
     static ProfileZones registerProfileZones(gamedev::profiling::Profiler& profiler);
 
     /**
-     * Runs the systems and the wave logic of one 60 Hz tick (see `update`).
+     * Runs the systems and the wave logic of one tick (see `update`).
      *
-     * @param elapsedSeconds Fixed time step in seconds (1/60).
+     * @param elapsedSeconds Game time step in seconds (`kTickSeconds`).
      */
     void updateSystems(float elapsedSeconds);
 
@@ -405,6 +413,7 @@ public:
      * In-game HUD: resources, prices and action buttons; intro, defeat and victory dialogs.
      *
      * Also sets `mGameLost` and `mGameWon` from the game state, so defeat and victory are only detected while the HUD is shown (not in editor mode).
+     * A dialog replaces the HUD while it is open; without `GameSettings::dialogs`, the HUD stays and the defeat sound still plays.
      */
     void gameUI();
 
