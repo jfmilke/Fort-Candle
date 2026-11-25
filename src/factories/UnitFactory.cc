@@ -303,7 +303,7 @@ void gamedev::UnitFactory::Init_Soldier()
     attacker->weapon.damage = 2;
     attacker->weapon.range = 8;
     attacker->weapon.type = WeaponType::Bow;
-    attacker->weapon.missileSpeed = 3.f;
+    attacker->weapon.missileSpeed = 8.f;
 
     // mortal
     mortal->armor = 0;

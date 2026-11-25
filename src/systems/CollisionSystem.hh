@@ -56,6 +56,18 @@ public:
      */
     void Update(float dt);
 
+    /**
+     * Tests whether a straight segment passes through a static collider, taken as its ground-plane shape extruded from its bottom to its top.
+     *
+     * Archers use it to pick an arrow arc that clears structures (`GamelogicSystem::AimArrow`).
+     *
+     * @param from Start of the segment (world space).
+     * @param to End of the segment (world space).
+     * @param exempt Colliders whose ground-plane shape contains this point (x/z) are ignored, e.g. the tower an archer stands in.
+     * @return True if the segment overlaps a static collider.
+     */
+    bool IsSegmentBlocked(tg::pos3 from, tg::pos3 to, tg::pos3 exempt);
+
 private:
     static constexpr int kIterations = 3;            ///< Resolution rounds per update.
     static constexpr float kSkin = 1e-3f;            ///< Gap left between shapes after a push, in world units.
@@ -73,6 +85,8 @@ private:
         tg::pos2 center;      ///< Center of the shape.
         tg::vec2 halfAxes[2]; ///< Box only: half extents along the box's two axes.
         float radius = 0.f;   ///< Circle radius, or the box's bounding radius (half diagonal).
+        float bottom = 0.f;   ///< World height of the bottom (`BoxShape::minY`/`CircleShape::minY`, scaled and moved).
+        float top = 0.f;      ///< World height of the top.
     };
 
     /// Result of a narrow-phase test between two shapes.
@@ -151,6 +165,25 @@ private:
      */
     static Contact BoxBox(WorldShape const& a, WorldShape const& b);
 
+    /**
+     * Clips a segment against a shape extruded from its bottom to its top.
+     *
+     * @param shape World-space shape.
+     * @param from Start of the segment (world space).
+     * @param to End of the segment (world space).
+     * @return True if a part of the segment lies inside.
+     */
+    static bool SegmentOverlaps(WorldShape const& shape, tg::pos3 from, tg::pos3 to);
+
+    /**
+     * Tests whether a point lies inside a shape on the ground plane.
+     *
+     * @param shape World-space shape.
+     * @param point Point (world x, z).
+     * @return True if inside or on the border.
+     */
+    static bool Contains(WorldShape const& shape, tg::pos2 point);
+
     /// Collects the candidate pairs of this update from the hash maps.
     void CollectPairs();
 
@@ -198,6 +231,7 @@ private:
     std::vector<std::pair<InstanceHandle, InstanceHandle>> mDynamicPairs; ///< Candidate dynamic pairs of this update (each pair once).
     std::vector<StaticPair> mStaticPairs;                                 ///< Candidate dynamic-static pairs of this update.
     std::vector<InstanceHandle> mCandidates;                              ///< Reused result buffer of hash map queries.
+    std::vector<InstanceHandle> mSegmentCandidates;                       ///< Reused result buffer of `IsSegmentBlocked`.
 
     Hash2D mStaticColliderHashMap;  ///< Broad phase for static colliders.
     Hash2D mDynamicColliderHashMap; ///< Broad phase for dynamic colliders (without `InTower` units).

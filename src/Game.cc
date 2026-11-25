@@ -205,6 +205,7 @@ void Game::init()
     mStructFac->AttachTerrain(mTerrain);
     mNatureFac->AttachTerrain(mTerrain);
     mGamelogicSys->AttachTerrain(mTerrain);
+    mGamelogicSys->AttachCollision(mCollisionSys);
     mCollisionSys->Init(*mECS, mTerrain->GetSize());
 
     // Initialize GFX

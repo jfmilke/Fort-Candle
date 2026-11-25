@@ -2,6 +2,7 @@
 #include <typed-geometry/tg.hh>
 #include "advanced/transform.hh"
 #include "glow/common/log.hh"
+#include "systems/CollisionSystem.hh"
 #include "systems/PhysicsSystem.hh"
 #include "utility/Random.hh"
 #include "utility/misc.hh"
@@ -84,6 +85,8 @@ void gamedev::GamelogicSystem::Init(EngineECS& ecs,
 }
 
 void gamedev::GamelogicSystem::AttachTerrain(std::shared_ptr<Terrain>& terrain) { mTerrain = terrain; }
+
+void gamedev::GamelogicSystem::AttachCollision(std::shared_ptr<CollisionSystem> collision) { mCollision = std::move(collision); }
 
 void gamedev::GamelogicSystem::Update(float dt)
 {
@@ -593,44 +596,57 @@ std::optional<tg::vec3> gamedev::GamelogicSystem::AimArrow(Attacker* attacker, t
     if (auto const targetPhysics = mECS->TryGetComponent<Physics>(attacker->attackOrder))
         targetVelocity = {targetPhysics->observedVelocity.x, targetPhysics->observedVelocity.z};
 
-    auto const speed = attacker->weapon.missileSpeed;
+    auto const maxSpeed = attacker->weapon.missileSpeed;
     auto const toTarget = tg::vec2(target.xform.translation.x - start.x, target.xform.translation.z - start.z);
 
-    // Flight time t: the arrow covers the horizontal distance to the moved target at its horizontal speed,
-    // |toTarget + targetVelocity t| = speed t, i.e. a t² + b t + c = 0
-    auto const a = tg::dot(targetVelocity, targetVelocity) - speed * speed;
-    auto const b = 2.f * tg::dot(targetVelocity, toTarget);
-    auto const c = tg::dot(toTarget, toTarget);
-
-    auto t = -1.f;
-    if (tg::abs(a) < 1e-6f)
+    // From the flattest arc the bow can shoot to the highest lob
+    std::optional<tg::vec3> highest;
+    for (auto t = kMinArrowFlightTime; t <= kMaxArrowFlightTime; t *= kArrowFlightTimeStep)
     {
-        if (b < 0.f)
-            t = -c / b;
+        // Aim point: body center above the ground where the target will be after t
+        auto const offset = toTarget + targetVelocity * t;
+        auto const predicted = tg::pos3(start.x + offset.x, 0.f, start.z + offset.y);
+        auto const ground = mTerrain ? mTerrain->heightAt(predicted) : target.xform.translation.y;
+        auto const rise = ground + Arrow::aimHeight - start.y;
+
+        // Ballistic launch velocity that reaches the aim point after t: rise = vy t - g t^2 / 2
+        auto const velocity = tg::vec3(offset.x / t, rise / t + 0.5f * PhysicsSystem::kGravity * t, offset.y / t);
+
+        // Too fast for the bow: before the reachable flight times (flat side) or past them (too high)
+        if (tg::length(velocity) > maxSpeed)
+        {
+            if (highest)
+                break;
+            continue;
+        }
+
+        highest = velocity;
+        if (IsArrowArcClear(start, velocity, t, tg::length(offset)))
+            return velocity;
     }
-    else if (auto const discriminant = b * b - 4.f * a * c; discriminant >= 0.f)
+
+    return highest;
+}
+
+bool gamedev::GamelogicSystem::IsArrowArcClear(tg::pos3 start, tg::vec3 velocity, float flightTime, float distance)
+{
+    if (!mCollision || distance <= kArrowFreeApproach)
+        return true;
+
+    // Straight pieces of the arc up to the free approach (the horizontal speed is constant)
+    auto const checkedTime = flightTime * (1.f - kArrowFreeApproach / distance);
+    auto const pointAt = [&](float time) { return start + velocity * time - tg::vec3(0.f, 0.5f * PhysicsSystem::kGravity * time * time, 0.f); };
+
+    auto previous = start;
+    for (int i = 1; i <= kArrowArcChords; ++i)
     {
-        // Earliest interception in the future
-        auto const root = tg::sqrt(discriminant);
-        auto const t1 = (-b - root) / (2.f * a);
-        auto const t2 = (-b + root) / (2.f * a);
-        auto const earliest = tg::min(t1, t2);
-        t = earliest > 0.f ? earliest : tg::max(t1, t2);
+        auto const next = pointAt(checkedTime * float(i) / float(kArrowArcChords));
+        if (mCollision->IsSegmentBlocked(previous, next, start))
+            return false;
+        previous = next;
     }
 
-    // Unreachable (the target outruns the arrow)
-    if (t <= 0.f)
-        return std::nullopt;
-    t = tg::max(t, kMinArrowFlightTime);
-
-    // Predicted aim point: body center above the ground at the predicted position
-    auto const offset = toTarget + targetVelocity * t;
-    auto const predicted = tg::pos3(start.x + offset.x, 0.f, start.z + offset.y);
-    auto const ground = mTerrain ? mTerrain->heightAt(predicted) : target.xform.translation.y;
-    auto const rise = ground + Arrow::aimHeight - start.y;
-
-    // Ballistic launch velocity that reaches the aim point after t: rise = vy t - g t² / 2
-    return tg::vec3(offset.x / t, rise / t + 0.5f * PhysicsSystem::kGravity * t, offset.y / t);
+    return true;
 }
 
 bool gamedev::GamelogicSystem::LookForProduction(InstanceHandle handle)

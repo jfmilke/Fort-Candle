@@ -127,7 +127,7 @@ struct Arrow : public Component
     using Component::Component;
 
     float damage = 1.0;                          ///< Damage on hit.
-    float lifetime = 4.0;                        ///< Seconds of flight until the arrow is removed (if it never lands).
+    float lifetime = 5.0;                        ///< Seconds of flight until the arrow is removed (if it never lands).
     float velocity = 0.0;                        ///< Unused: `Physics::velocity` moves the arrow.
     tg::angle32 angle = 0_deg;                   ///< Unused.
     InstanceHandle shotBy = {std::uint32_t(-1)}; ///< Shooter (credited for kills).

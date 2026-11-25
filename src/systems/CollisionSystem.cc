@@ -380,6 +380,99 @@ void gamedev::CollisionSystem::PositionListener(Event& e)
         mStaticColliderHashMap.UpdateInstance(e.mSubject, translation, bounds);
 }
 
+bool gamedev::CollisionSystem::IsSegmentBlocked(tg::pos3 from, tg::pos3 to, tg::pos3 exempt)
+{
+    // Rectangle covered by the segment, relative to its start
+    tg::aabb3 bounds;
+    bounds.min = tg::pos3(tg::min(0.f, to.x - from.x), 0.f, tg::min(0.f, to.z - from.z));
+    bounds.max = tg::pos3(tg::max(0.f, to.x - from.x), 0.f, tg::max(0.f, to.z - from.z));
+    mStaticColliderHashMap.FindNear(from - tg::pos3::zero, bounds, mSegmentCandidates);
+
+    for (auto const body : mSegmentCandidates)
+    {
+        auto const& shape = CachedShape(body);
+        if (!Contains(shape, {exempt.x, exempt.z}) && SegmentOverlaps(shape, from, to))
+            return true;
+    }
+
+    return false;
+}
+
+bool gamedev::CollisionSystem::Contains(WorldShape const& shape, tg::pos2 point)
+{
+    auto const d = point - shape.center;
+    if (!shape.box)
+        return tg::dot(d, d) <= shape.radius * shape.radius;
+
+    for (auto const& axis : shape.halfAxes)
+    {
+        auto const lengthSqr = tg::dot(axis, axis);
+        if (lengthSqr <= 0.f || tg::abs(tg::dot(d, axis)) > lengthSqr)
+            return false;
+    }
+    return true;
+}
+
+bool gamedev::CollisionSystem::SegmentOverlaps(WorldShape const& shape, tg::pos3 from, tg::pos3 to)
+{
+    // Parameter interval [enter, leave] of the segment inside all constraints so far
+    auto enter = 0.f;
+    auto leave = 1.f;
+
+    // Keeps the part where low <= start + s * delta <= high
+    auto const clip = [&](float start, float delta, float low, float high)
+    {
+        if (tg::abs(delta) < 1e-9f)
+            return start >= low && start <= high;
+
+        auto s0 = (low - start) / delta;
+        auto s1 = (high - start) / delta;
+        if (s0 > s1)
+            std::swap(s0, s1);
+
+        enter = tg::max(enter, s0);
+        leave = tg::min(leave, s1);
+        return enter <= leave;
+    };
+
+    // Height
+    if (!clip(from.y, to.y - from.y, shape.bottom, shape.top))
+        return false;
+
+    auto const start = tg::pos2(from.x, from.z) - shape.center;
+    auto const delta = tg::vec2(to.x - from.x, to.z - from.z);
+
+    if (shape.box)
+    {
+        // Slabs along both box axes, in units of the half extent
+        for (auto const& axis : shape.halfAxes)
+        {
+            auto const lengthSqr = tg::dot(axis, axis);
+            if (lengthSqr <= 0.f)
+                return false;
+            if (!clip(tg::dot(start, axis) / lengthSqr, tg::dot(delta, axis) / lengthSqr, -1.f, 1.f))
+                return false;
+        }
+        return true;
+    }
+
+    // Circle: |start + s * delta|² <= radius²
+    auto const a = tg::dot(delta, delta);
+    auto const b = 2.f * tg::dot(start, delta);
+    auto const c = tg::dot(start, start) - shape.radius * shape.radius;
+    if (a < 1e-12f)
+        return c <= 0.f;
+
+    auto const discriminant = b * b - 4.f * a * c;
+    if (discriminant < 0.f)
+        return false;
+
+    auto const root = tg::sqrt(discriminant);
+    enter = tg::max(enter, (-b - root) / (2.f * a));
+    leave = tg::min(leave, (-b + root) / (2.f * a));
+    return enter <= leave;
+}
+
 gamedev::CollisionSystem::WorldShape gamedev::CollisionSystem::ComputeWorldShape(InstanceHandle handle)
 {
     auto const& xform = mECS->GetInstanceTransform(handle);
@@ -398,6 +491,8 @@ gamedev::CollisionSystem::WorldShape gamedev::CollisionSystem::ComputeWorldShape
         shape.halfAxes[0] = {axis0.x, axis0.z};
         shape.halfAxes[1] = {axis1.x, axis1.z};
         shape.radius = tg::length(shape.halfAxes[0] + shape.halfAxes[1]);
+        shape.bottom = xform.translation.y + xform.scaling.height * box->minY;
+        shape.top = xform.translation.y + xform.scaling.height * box->maxY;
     }
     else if (auto const circle = mECS->TryGetComponent<CircleShape>(handle))
     {
@@ -405,6 +500,8 @@ gamedev::CollisionSystem::WorldShape gamedev::CollisionSystem::ComputeWorldShape
 
         shape.center = {center.x, center.z};
         shape.radius = circle->circle.radius * tg::max(xform.scaling.width, xform.scaling.depth);
+        shape.bottom = xform.translation.y + xform.scaling.height * circle->minY;
+        shape.top = xform.translation.y + xform.scaling.height * circle->maxY;
     }
     else
     {
