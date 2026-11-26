@@ -8,6 +8,8 @@ Fort Candle is a small low-poly strategy game (RWTH Aachen GameDev practical 202
 
 There are no tests, linters, or CI. "Verifying" a change means building and, where relevant, running the game. For performance work, use the built-in benchmark (see [Benchmarks](#benchmarks)).
 
+This file is the same on every machine. Machine-specific setup (installed toolchains, WSL, how to call it from the agent shells) belongs in `CLAUDE.local.md` in the repo root, which is gitignored and also loaded by Claude Code.
+
 ## Build & run
 
 ```powershell
@@ -26,7 +28,8 @@ cmake --build build --config RelWithDebInfo --parallel
   - Packages: `libgl-dev`, `libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev`, and `libpulse-dev` and/or `libasound2-dev` (without one of them OpenAL has no audio backend). GLFW is built X11-only (`GLFW_BUILD_WAYLAND=OFF`); Wayland sessions use XWayland.
   - The top-level `CMakeLists.txt` sets `CC_LINKER_MOLD=OFF` and `GLOW_USE_MOLD_LINKER=OFF`: clean-core (which also configures typed-geometry and polymesh) and glow link with `-fuse-ld=mold` by default. It also sets `GLOW_ENABLE_MARCH_NATIVE=OFF` (portable binaries).
   - The game links `OpenGL::GL` with `--no-as-needed`. Without that, libGL is only loaded by GLFW's `dlopen`, `glfwTerminate()` unloads it, and `~Game()` then crashes (SIGSEGV) while deleting GL objects. glow still links the empty `${OpenGL_LIBRARIES}`, and glow-extras' `GlfwApp` still terminates GLFW before the app object is destroyed.
-  - `glow`, `glow-extras` and `glad` are shared libraries on Linux; they land next to the executable in `bin/<Config>/` and are found via RPATH.
+  - `glow`, `glow-extras` and `glad` are shared libraries on Linux; they land next to the executable in `bin/<Config>/` and are found via an absolute RUNPATH to that folder, so a copied executable still loads the libraries of the checkout it was built in.
+  - `bin/<Config>/` is inside the source tree, so two build directories of one checkout (e.g. GCC and Clang) write to the same `bin/RelWithDebInfo/`. Use one clone per compiler.
   - The OpenAL JACK backend is off (`ALSOFT_BACKEND_JACK=OFF`); the game does not need it. With OpenAL 1.21.1 it failed to link (`undefined symbol: jack_error_callback`) because the vendored copy defaulted to `ALSOFT_DLOPEN=OFF`. The current version uses the upstream default (ON), which should fix that, but JACK was not tested.
   - The 2021 `extern/` snapshots (replaced in 2026, see below) needed six small fixes for GCC ≥ 14 and binutils ≥ 2.44. The current versions compile unpatched with GCC 15, Clang 21 and MSVC 19.52.
 
@@ -34,25 +37,52 @@ cmake --build build --config RelWithDebInfo --parallel
 
 ### Benchmarks
 
-`GameDevSS21 --benchmark <scenario>` plays a scripted scenario without input and exits; `--help` lists the scenarios and options. Run it from `bin/` like the game:
+`GameDevSS21 --benchmark <scenario>` plays a scripted scenario without input, writes the timings as JSON and exits; `--help` lists the scenarios and options. Run it from `bin/` like the game:
 
 ```powershell
-./RelWithDebInfo/GameDevSS21 --benchmark stress
-python ../tools/compare_benchmarks.py benchmarks/baseline benchmarks/candidate
+./RelWithDebInfo/GameDevSS21 --benchmark waves
 ```
 
-- Scenarios (`src/benchmark/Scenarios.cc`, calling the `GamelogicSystem`): `idle` (start camp, no waves), `waves` (normal play), `stress` (60 monsters + 30 reinforcements at once), `exercise` (building, recruiting, wall upgrades and repairs, supply routes, an 80-monster wave).
+- Scenarios (`src/benchmark/Scenarios.cc`, calling the `GamelogicSystem`): `idle` (start camp, no waves: the baseline cost of the world and the renderer), `waves` (normal play), `stress` (60 monsters + 30 reinforcements at once: unit AI, collision and combat under load), `exercise` (building, recruiting, wall upgrades and repairs, supply routes, an 80-monster wave: the paths that create, re-parent and destroy entities).
 - A run is reproducible: fixed RNG seed (`--seed`), straight into play, vsync off, no input, and a fixed time step per tick. It shows no dialogs (the HUD stays after a defeat or victory) and is muted (listener gain 0: sounds still play, nobody hears them). The same seed only reproduces a run with the same standard library (`std::uniform_real_distribution` is implementation-defined, so MSVC and libstdc++ differ). Win/lose is detected in `Game::gameUI` (UI code).
 - Ticks run twice as fast as in a normal game (`--speed`, default 2: 120 ticks per real second). Each tick still advances the game by 1/60 s (`Game::kTickSeconds`), so a run plays the same game in half the time. If a machine cannot keep up, `GlfwApp` skips time (logged as a frame skip) and the run only takes longer. The per-frame zones (`render`, `gpu`, `frame`) depend on the tick rate (more ticks per frame), so results record `tick_rate`, and the comparison script warns when it differs (older results without it ran at 60).
-- It records the profiler zones (see [Profiling](#profiling)) for `--ticks` ticks (default 3600) after `--warmup` ticks (default 120), plus the startup phases. Tick indices count from the first played tick, so `--warmup` shifts which part of a scenario is measured.
-- Results go to `benchmarks/<scenario>-<UTC time>.json` in the working directory (`--output` overrides). `tools/compare_benchmarks.py` (Python 3, standard library only) compares two files or folders of repeated runs: the median over runs, with their spread as noise estimate.
-- Measure RelWithDebInfo builds, run each side several times, and leave the window alone (minimizing or covering it can throttle rendering). Exit codes: 0 done, 1 bad command line or working directory, 2 window closed early, 3 result file not written.
+- It records the profiler zones (see [Profiling](#profiling)) for `--ticks` ticks (default 3600) after `--warmup` ticks (default 120), plus the startup phases. Tick indices count from the first played tick, so `--warmup` shifts which part of a scenario is measured. With the defaults, a run takes about 35 s.
+- Results go to `benchmarks/<scenario>-<UTC time>.json` in the working directory (`--output` overrides). Besides the zone statistics they record the setup (scenario, seed, ticks, warm-up, tick rate), the build (executable time, compiler, config), the renderer and window size, the game outcome and the instance counts. `tools/compare_benchmarks.py` (Python 3, standard library only) compares two files or folders of repeated runs: the median over runs, with their spread as noise estimate.
+- Exit codes: 0 done, 1 bad command line or working directory, 2 window closed early, 3 result file not written.
+
+#### Comparing two builds
+
+A performance claim compares a baseline build against a candidate build, measured the same way:
+
+1. Pick the scenarios the change affects: rendering `idle` and `waves`; unit AI, collision and combat `stress`; entity creation and destruction `exercise`. When unsure, run all four.
+2. Build the baseline (the base commit, e.g. with the change stashed) as RelWithDebInfo and keep its binaries. On Windows, copy them in `bin/` with `Copy-Item RelWithDebInfo baseline -Recurse` (delete an old `baseline` first: into an existing folder, the copy nests). The copy keeps the executable's last-write time, which the results record as its build time. On Linux, the executable loads glow, glad and OpenAL through an absolute RUNPATH into its own `bin/<Config>/`, so a copy would load the candidate's libraries: build the baseline in a separate clone.
+3. Build the candidate the same way: same machine, compiler and config.
+4. Run each side at least 3 times, alternating baseline and candidate, with the same options. Write each side into its own new folder with `--output`: the script reads every `.json` in a folder, so older results would mix in.
+   ```powershell
+   foreach ($i in 1..3) {
+       ./baseline/GameDevSS21 --benchmark waves --output benchmarks/my-change/baseline/waves-$i.json
+       ./RelWithDebInfo/GameDevSS21 --benchmark waves --output benchmarks/my-change/candidate/waves-$i.json
+   }
+   python ../tools/compare_benchmarks.py benchmarks/my-change/baseline benchmarks/my-change/candidate
+   ```
+5. Resolve every `WARNING` the script prints (different setup, tick rate, renderer, window size or config, or a Debug build) instead of reading the numbers. A change smaller than its `spread` is noise. If the change should not alter gameplay, `outcome` and `instances` must match between the sides; otherwise the runs played different games.
+6. Report the scenario, the runs per side and the zones that changed, with their spread, e.g. in the commit message ("3 runs of waves each: render -17%, gpu -6%"). Result files stay in `bin/benchmarks/` (gitignored).
+
+Rules:
+- **Benchmark at double speed.** Keep the default `--speed 2`: the game plays the same, and results come in half the time. Run at `--speed 1` (the 60 ticks per real second of a normal game) only with a reason, and state the reason with the results, e.g. to see the per-frame zones (`render`, `gpu`, `frame`) as a player sees them, or to check that a result does not depend on the speed. Never compare runs of different speeds.
+- Keep `--seed`, `--ticks` and `--warmup` at their defaults unless the change needs other values, and use the same values on both sides.
+- Measure RelWithDebInfo builds on an otherwise idle machine: no build (also not in WSL) and no second benchmark at the same time. Leave the window alone; minimizing or covering it can throttle rendering.
+- Compare only results from the same machine, compiler and renderer. Results from different standard libraries play different games for the same seed, and a WSL renderer is not the Windows GPU driver.
 
 ### Profiling
 
 `Game` owns a `profiling::Profiler` (`src/profiling/`) in every mode; the debug UI ("Performance (ms)") shows the latest value per zone, and benchmarks capture every sample. Systems do not time themselves: `Game` wraps each `Update` call in a zone. A new system gets a zone in `Game::ProfileZones`; the zone name is the key in benchmark results.
 
+## Code style and documentation
+
 Code style: `.clang-format` (Google-based, Allman braces, 4-space indent, 150 column limit). Engine code lives in `namespace gamedev`; members use an `m` prefix.
+
+Library choice: C++23 `std` by default, hot paths included. Use clean-core (`cc::`) only where a library interface uses it or for what `std` lacks, such as `CC_ASSERT`/`CC_ASSERT_MSG`, which stay on in RelWithDebInfo while `assert()` does not (`NDEBUG`). Don't migrate `std` code to `cc`.
 
 Documentation: Doxygen comments, written to be read in the code first (the generated docs come second). The top-level `Doxyfile` covers `src/` (without `dr_wav`) and lists only non-default settings. `cmake --build build --target docs` (defined only if CMake finds Doxygen) writes HTML to `build/docs/html`, as does `doxygen Doxyfile` from the repo root. Check that a docs change still builds without Doxygen warnings.
 - Multi-line docs use `/** ... */` blocks with a ` * ` prefix per line; single-line docs use `///`, data members and enumerators a trailing `///<` (or `///` above the member if the line would exceed 150 columns). Align consecutive `///<` like clang-format's `AlignTrailingComments`.
@@ -127,9 +157,9 @@ Notes:
 
 ### Systems
 
-- `GamelogicSystem` is by far the largest file (~2.5k lines). It holds all gameplay: resources, building, unit AI and combat, enemy waves, and win/lose state. It also drives some render parameters (desaturation and vignette radius come from game state). It is initialized with references to the audio system and the unit, structure, and item factories.
+- `GamelogicSystem` is by far the largest file (~2.3k lines). It holds all gameplay: resources, building, unit AI and combat, enemy waves, and win/lose state. It also drives some render parameters (desaturation and vignette radius come from game state). It is initialized with references to the audio system and the unit, structure, and item factories.
 - `CollisionSystem` handles 2D-only collision on the ground plane: oriented boxes (structures) and circles (units, some structures). It uses two `Hash2D`s (static and dynamic colliders) as broad phase and caches world-space shapes. Overlaps are resolved by moving positions only, in a few rounds per update: dynamic pairs share the push, static colliders win. It never changes velocities; units slide along obstacles because they are pushed back along the contact normal. It also answers segment queries against static colliders with `Collider::blocksArrows` (all but the campfires and the street lantern; extruded from their mesh bottom to top), which archers use to choose between a straight shot (when nothing is in the way; it sticks in the first structure it hits) and a lob (which flies through structures).
-- `RenderSystem` (`AdvancedRenderSystem.cc`) is a forward renderer. Pass order: point-light shadow cube map → directional shadow map → skybox → scene (`poly` shader) → particles → outlines → bloom → post-processing (tonemap, gamma, sepia, vignette, desaturation, distance fade) → outline resolve. Shaders are loaded from `data/shaders/` by base name: `Program::createFromFile("../data/shaders/poly")` picks up `poly.vsh` + `poly.fsh`. Shader includes use `.glsli`. The `object`/`object_simple` shaders and the test meshes/textures are loaded but unused.
+- `RenderSystem` (`AdvancedRenderSystem.cc`) is a forward renderer. Pass order: point-light shadow cube map → directional shadow map (depth-only `depth_dir` program, fitted to the visible ground, see `RenderSystem::RenderDepthMap`) → skybox → scene (`poly` shader) → particles → outlines → bloom → post-processing (tonemap, gamma, sepia, vignette, desaturation, distance fade) → outline resolve. Shaders are loaded from `data/shaders/` by base name: `Program::createFromFile("../data/shaders/poly")` picks up `poly.vsh` + `poly.fsh`. Shader includes use `.glsli`. The `object`/`object_simple` shaders and the test meshes/textures are loaded but unused.
 - The other systems are `PhysicsSystem`, `LightSystem`, `ParticleSystem` (CPU-simulated, drawn instanced; `compute_particles.csh` belongs to an unfinished, commented-out GPU variant), `AnimationSystem` (non-skeletal; also points flying arrows along their ballistic flight, detects hits and landings, and keeps arrows stuck in units or the ground), `AudioSystem` (OpenAL 3D audio; sound files in `data/audio/`), and `CleanupSystem` (runs last). `EnvironmentSystem` (game clock and day counter, which triggers the daily enemy waves) is not ECS-registered; `Game` creates and updates it directly. `InputSystem` and `AISystem` exist but are not registered (unused).
 
 ### Assets and factories

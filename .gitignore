@@ -2,6 +2,7 @@ bin/
 build/
 build_vs/
 CMakeLists.txt.user
+CLAUDE.local.md
 
 docs/nosync/**
 !docs/nosync/.kee
